@@ -47,6 +47,7 @@ owner: pm
 - 2026-09-28: 구현 재개·완료. backend 1~3차(83fad79, a1db114, cf02f65), 추천 공지 API 보충(d8d967c — dev-task 목록 누락분), 프로필 null 허용 구현 수정(b0085a4), frontend A·B(e1f0e0c, 8d4dff9). code-review 차단 1건(선호 수정 가림 누락 [[anyang-preferences-put-missing-mask-pii]]) → backend 수정 622962b → 재검수 통과. npm test 103개·build 통과(외부 자원은 모킹, 실제 DB·브라우저 확인은 못 함). 설계 변경 필요 2건(확인 항목 22·23)으로 [[anyang-backend-api]]를 승인된 설계에서 뺌.
 - 2026-09-28: 재개. backend가 수집기 셀렉터를 실제 게시판 구조로 수정(766ea20). 사용자 결정 22·23·OCR·taste-skill 기록. 22·23 설계(backend → frontend) draft 완료 — backend-api 3-2절 인용 공지 SSE(`event: citations`)·13-1절 `GET /api/admin/notices`, frontend-screens 3절 인용 카드·11절 공지 목록 탭, tasks 두 문서에 작업 추가. code-review 지적으로 backend-api 5절·backend-tasks 5번 수집기 서술을 확인 사실로 갱신. frontend가 taste-skill(`design-taste-frontend`)로 시각 개선(1b27f0e, 공통 토큰·로그인·온보딩·동의·채팅·공지 피드, 관리자 화면은 토큰 반영만). code-review 통과(경미 1건: consent-form 인라인 style 잔존), npm test 104개·build 통과. errors 문서 status active로(code-review). 설계 문서 4종 재승인 대기, 22·23 구현은 재승인 뒤.
 - 2026-09-28: 사용자가 22·23 설계 4종 재승인(기준 커밋 `f525792`). 구현: backend ccd6042(인용 공지 SSE, `GET /api/admin/notices`), frontend ed7c751(taste-skill 호출, 인용 카드, 관리자 공지 목록 탭, consent-form 인라인 style 정리). code-review 통과(차단 없음), npm test 120개·build 통과(실제 DB·브라우저 확인은 못 함). 경미 문서 결함 1건은 설계 잠금 대상이라 확인 항목 26으로 올림.
+- 2026-09-28: 메인 세션 최종 검토(HEAD a8083ee) 반영. 구현 수정: database 65043e5(collect_runs.triggered_by on delete set null, 0016), backend d3a3a21(수집 잡 끝에서 임베딩 호출, 공지별 예외 처리·제목+본문 임베딩, chat 저장 after(), .env.example, vercel.json icn1, 410 구독 삭제, 공지 변경 시 재임베딩, 풀 max 3, 유선전화 가림), frontend 37c0d30(sw.js payload 정합). code-review 재위임 1회: backend 992e01e(maxDuration 300 — [[anyang-jobs-collect-missing-maxduration]]), frontend b5c575a(sw.js 실제 소스 테스트). 재검수 통과, npm test 132개·build 통과. Gemini 재시도·백오프와 선호 누적은 이미 설계대로라 수정 없음. 설계 변경 필요 28·29, 확인 30·31, 추천·알림 프로필 미사용은 27 보류.
 
 ### 설계 문서
 
@@ -88,6 +89,11 @@ owner: pm
 24. 포스터 이미지 OCR — 나중에 결정(2026-09-28, user). 1차는 공지 제목+본문만 임베딩, 실제 수집 데이터로 매칭 품질 확인 후 재검토.
 25. frontend UI 개발에 taste-skill(`design-taste-frontend`) 사용 — 해결(2026-09-28, user). 적용 범위는 랜딩·첫 화면·시각 톤, 관리자 표 화면은 가독성·일관성만.
 26. **사용자 결정 필요(2026-09-28, code-review 지적)**: 재승인 뒤 backend가 [[anyang-backend-api]]의 `(미확정)`을 기계적으로 지우면서 문장 1곳이 비문이 되고(940행 "제안값이며이다"), 원래 줄바꿈에 걸려 있던 위키링크 앵커 몇 곳(409·500·541행 등)에 공백만 남았다. 의미·계약 변경은 없다. 고치려면 승인된 설계 내용 수정이라 설계 잠금 대상이다. 선택지: (a) 그대로 둔다, (b) 문구·앵커만 고치는 수정을 허용(문서를 승인된 설계에서 잠시 빼고 수정 후 재승인). 권장 (b), 확인 항목의 "(미확정) 표기 잔존 → 훅을 좁게 수정" 결정과 함께 처리. [[anyang-backend-api-mihwakjeong-removal-corruption]]
+27. **보류(2026-09-28, user)**: 추천·알림이 프로필을 쓰지 않는다([[anyang-backend-api]] 7절 알림 매칭은 선호 벡터 유사도만). 그래서 채팅 전 사용자는 추천 피드가 최신순뿐이고 알림은 0건이다 — 원 요청("프로필·대화 이력에 맞는 것만")과 어긋난다(메인 세션 최종 검토 지적). 해결 제안: 프로필 조건 × 공지 해당 여부를 Jev Noul로 판정(설계 변경). 사용자 지시로 보류, 구현하지 않는다.
+28. **설계 변경 필요(2026-09-28, 최종 검토 수정 중 backend 분류)**: 채팅 DeepSeek 프롬프트에 출생연도 원값이 간다. [[anyang-backend-api]] 3절 확정 원칙은 "나이대"인데 나이대 구간 정의가 설계·코드에 없다(관리자 통계의 10년 단위 예시는 "구간 폭 미확정"). 구간(예: 5년/10년) 결정 필요. 현재 원값 전송 유지.
+29. **설계 변경 필요(2026-09-28, 동일)**: 비밀번호 최소 길이, 로그인·가입 시도 횟수 제한 값이 설계에 없다. 값 결정 필요. 현재 미적용.
+30. **설계 확인(2026-09-28, 동일, 차단 아님)**: 한 사용자가 기기 여러 대를 등록했을 때 일부 기기만 푸시 성공하면 `notify_logs`를 success/failed 중 무엇으로 볼지 설계 7절에 없다. 현재 "모든 기기 성공해야 success" 유지(410/404 만료 구독은 삭제하고 실패로 세지 않음).
+31. **문서 보완 필요(2026-09-28, 차단 아님)**: [[anyang-backend-api]]에 없는 구현 사실 2건 — Web Push payload 스키마 `{title, notice_id}`(8절, sw.js는 `/notices/[id]`로 이동), 환경변수 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`(9절 표). 승인된 설계라 잠겨 있어 26번과 함께 문서 수정 허용 여부 결정 필요.
 
 ## 승인된 설계
 
@@ -122,3 +128,4 @@ owner: pm
 - [[2026-09-27_anyang-implementation-paused]]
 - [[anyang-preferences-put-missing-mask-pii]]
 - [[anyang-backend-api-mihwakjeong-removal-corruption]]
+- [[anyang-jobs-collect-missing-maxduration]]

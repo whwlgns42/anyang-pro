@@ -47,14 +47,14 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(draft): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차
-- [[anyang-backend-api]] — 안양 비서 API 계약(draft): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기(실제 셀렉터), Web Push, 관리자 API(공지 목록 포함), 배포, UNO Q runbook
-- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
+- [[anyang-database-schema]] — 안양 비서 DB 설계(active, 승인 2026-09-27): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차
+- [[anyang-backend-api]] — 안양 비서 API 계약(active, 재승인 2026-09-28): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기(실제 셀렉터), Web Push, 관리자 API(공지 목록 포함), 배포, UNO Q runbook
+- [[anyang-frontend-screens]] — 안양 비서 화면 설계(active, 재승인 2026-09-28): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
 
-- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(draft, 22·23 인용 공지 스트림·관리자 공지 목록 추가)
-- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(draft, 22·23 인용 카드·관리자 공지 목록 탭 추가)
+- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(active, 22·23 인용 공지 스트림·관리자 공지 목록 추가)
+- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(active, 22·23 인용 카드·관리자 공지 목록 탭 추가)
 
 ## Concepts
 
@@ -75,6 +75,7 @@
 ## Errors / Lessons
 
 - [[anyang-preferences-put-missing-mask-pii]] — 안양 비서: 선호 수정 API가 가림 없이 Gemini로 전송(해결 622962b, embedText 내부 강제 가림)
+- [[anyang-jobs-collect-missing-maxduration]] — 안양 비서: 수집·임베딩 잡 라우트에 maxDuration 누락으로 설계의 300초 전제 미적용(해결 992e01e)
 - [[anyang-backend-api-mihwakjeong-removal-corruption]] — 안양 비서: 승인 후 (미확정) 기계적 삭제로 backend-api 문장 비문·위키링크 앵커 공백 잔존(설계 잠금 대상, 사용자 결정 대기)
 
 ## Prompt Library
