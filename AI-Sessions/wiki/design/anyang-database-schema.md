@@ -247,7 +247,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | id | uuid, PK | |
 | user_id | uuid, FK → users.id, on delete set null | 아래 "탈퇴 후 보관" 참고. cascade가 아니다 |
 | consent_type | text, not null | `collection_use`(수집·이용) 또는 `overseas_transfer`(국외 이전). [[glossary]]의 consent-type. 값 셋은 이 두 개로 고정(제안) |
-| policy_version | text, not null | 동의 시점의 개인정보 처리방침 버전 문자열(제안, 예: 날짜 기반 `2026-09-27`). 버전 부여 방식은 미확정 — backend 조율 필요 |
+| policy_version | text, not null | 동의 시점의 개인정보 처리방침 버전 문자열(제안, 예: 날짜 기반 `2026-09-27`). 버전 부여 방식은 [[anyang-backend-api#1. 인증 (Auth.js v5)]] 참고 |
 | consented_at | timestamptz, not null, default now() | 동의 시각 |
 | withdrawn_at | timestamptz, null 허용 | 계정 탈퇴 시각. 사용자 삭제 처리 시 이 컬럼에 탈퇴 시각을 채우고 나서 `users` 행을 삭제한다(애플리케이션 책임, 아래 "탈퇴 후 보관" 참고) |
 | ip_address | inet, null 허용 | 동의 시점 IP 기록 여부(제안) — 민감정보 최소화 원칙과 배치되므로 필요성 자체가 미확정 |
