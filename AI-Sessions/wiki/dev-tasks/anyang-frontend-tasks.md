@@ -14,7 +14,7 @@ owner: frontend
 
 ## Context
 
-의존: [[anyang-backend-api]]의 인증(동의 포함)·프로필·채팅·공지·알림설정·선호·히스토리
+의존: [[anyang-backend-api]]의 인증(동의 포함)·프로필·채팅·공지·알림설정·선호·히스토리·관리자
 엔드포인트가 먼저 구현돼 있어야(또는 목/스텁으로라도) 해당 화면을 붙일 수 있다. 개인정보
 동의 화면(`/consent`)의 세부 문구·동의 항목 단일/분리, 프로필 코드값 셋, 비밀번호 재설정
 기능 자체는 여전히 미확정이라
@@ -50,11 +50,22 @@ owner: frontend
     `GET /api/conversations/:id/messages` 연동.
 11. **개인정보 처리방침 페이지** (`/privacy-policy`) — 정적 페이지. 법률 검토된 문구 확정 후
     콘텐츠만 채운다(구조는 이번에 만든다).
+12. **관리자 공통 레이아웃·가드** (`/admin`) — 관리자 API 응답 코드 기준 접근 판정([[anyang-frontend-screens#공통 레이아웃 (모바일 우선, 미확정)]]의 "관리자 가드" 절), 확인 다이얼로그 공통
+    컴포넌트(정지·정지 해제·삭제 공용). 13~15번이 의존.
+13. **공지 수집 관리 화면** (`/admin/collect-runs`) — 실행 이력, 수동 수집 실행(최대 300초
+    진행 상태 표시), 공지 숨김/해제. `GET/POST /api/admin/collect-runs`,
+    `PATCH /api/admin/notices/:id/hide|unhide` 연동.
+14. **알림 발송 현황·외부 API 사용량 화면** (`/admin/notify-logs`, `/admin/api-usage`) — 날짜
+    범위 표. `GET /api/admin/notify-logs/summary`, `GET /api/admin/api-usage/summary` 연동.
+    파일이 겹치지 않아 13번과 병렬 가능.
+15. **사용자 관리·통계 화면** (`/admin/users`) — 통계 카드, 사용자 목록, 정지·정지 해제·삭제
+    (확인 다이얼로그 경유). `GET /api/admin/users`, `GET /api/admin/stats`,
+    `PATCH /api/admin/users/:id/suspend|unsuspend`, `DELETE /api/admin/users/:id` 연동.
 
 ### 순서 제안
 
 1 → 2 → 3 → 4 → (5, 6 병렬 가능, 파일 겹치지 않음) → (7, 8 함께) → 9, 10(각각 병렬 가능,
-파일 겹치지 않음) → 11.
+파일 겹치지 않음) → 11 → 12 → (13, 14, 15 각각 병렬 가능, 파일 겹치지 않음).
 
 ## 테스트 방법
 

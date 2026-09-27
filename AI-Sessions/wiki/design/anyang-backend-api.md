@@ -12,8 +12,9 @@ owner: backend
 Next.js(App Router) Route Handler로 인증(동의 게이트 포함), 프로필 CRUD, 알림 설정,
 "AI가 기억하는 내 정보"(조회·수정·삭제), 대화 히스토리 조회, 채팅(DeepSeek 스트리밍 + RAG),
 Gemini 임베딩, 공지 수집기(안양시 청년 게시판 1개), 임베딩 파이프라인, 스케줄러(수집·알림 잡),
-Web Push를 제공한다. 스키마는 [[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은
-모두 제안이며 `(미확정)`이고, 사용자 설계 승인으로 확정된다.
+Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 스키마는
+[[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이며 `(미확정)`이고,
+사용자 설계 승인으로 확정된다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -36,6 +37,13 @@ Web Push를 제공한다. 스키마는 [[anyang-database-schema]]를 따른다. 
   - 임베딩 모델·차원: `gemini-embedding-001`, `output_dimensionality=768`. 모델이
     1536/768차원 축소를 지원한다는 사실은 공식 문서로 확인됨(아래 4절 출처). database 문서의
     `notice_chunks.embedding` / `user_preferences.embedding`이 `VECTOR(768)`로 갱신됨.
+- 확정([[anyang-service-scope]], user, 2026-09-27, 관리자 페이지 추가 요청 반영): 관리자는
+  DB 역할 컬럼 없이 환경변수 `ADMIN_EMAILS`로만 지정하고, 관리자 API는 서버가 매 요청 세션
+  이메일을 확인한다. 관리자 기능 4종(공지 수집 관리, 알림 발송 현황, 사용자 관리·통계, 외부
+  API 사용량)과 "대화·기억 원문 비노출" 원칙도 확정. 13절에 API 계약을 둔다. database가 이
+  기능을 담을 `collect_runs`/`notify_logs`/`api_usage_logs`/`notices.hidden_at`/
+  `users.suspended_at`을 [[anyang-database-schema]]에 이미 추가했다(테이블 구조 자체는
+  아직 미확정).
 - 이 세션(backend)에는 웹 접근 도구가 없어 수집 대상 게시판의 `robots.txt`와 실제 HTML 구조는
   이번 설계에서 확인하지 못했다 — **구현 전 확인(미확정)**으로 남긴다(5절).
 - 커스텀 도메인은 배포 시점에 붙인다([[anyang-deployment-portability]] 원칙 5, user,
@@ -94,6 +102,22 @@ Web Push를 제공한다. 스키마는 [[anyang-database-schema]]를 따른다. 
   3. 이메일 발송 수단(SMTP/서비스)은 미정 — 이 설계 범위 밖, 별도 확인 필요.
 - **결정 필요**: 비밀번호 재설정 기능을 이번 스콥에 넣을지 자체가 계획서에 없던 항목이라
   backend 판단만으로 확정할 수 없다. pm/사용자 확인이 필요하다(미해결 질문 참고).
+
+### 1-2. 정지 계정(`users.suspended_at`) 차단 방식 (제안, 미확정)
+
+`users.suspended_at`은 database가 제안한 컬럼이다([[anyang-database-schema#users
+(미확정)]]). JWT 세션 전략이라 서버가 세션을 직접 무효화할 수 없으므로, 정지가 즉시 반영되게
+아래 두 지점에서 확인한다(제안).
+
+1. **로그인 시점**: Auth.js `signIn` 콜백에서 `suspended_at is not null`이면 로그인 자체를
+   거부한다(신규 로그인 차단).
+2. **이미 발급된 세션**: `/api/admin/*`를 제외한 인증 필요 API 공통 미들웨어(Next.js
+   `middleware.ts` 또는 각 라우트 공통 헬퍼, 미확정)에서 매 요청마다 `users.suspended_at`을
+   조회해 not null이면 403으로 거부한다. 이 서비스 규모에서는 요청마다 1회 단순 조회 추가가
+   과설계가 아니라고 판단한다(제안) — JWT에 정지 여부를 캐싱하면 정지 후에도 세션 만료까지
+   계속 접근 가능해지는 문제가 더 크다.
+3. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
+   `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택).
 
 ### 2. 프로필 CRUD
 
@@ -202,6 +226,15 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 공지 본문/선호 문장만. 둘 다 `user_id`, `email`, `name` 미전송(제약은 애플리케이션 코드가
 지킨다 — database 문서에도 기록됨).
 
+**`api_usage_logs` 기록 지점(제안, 미확정)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
+호출을 각각 감싸는 공통 래퍼 함수 안에서, 성공·실패와 무관하게 호출 직후 1행을 기록한다
+(user_id 없음, [[anyang-database-schema#api_usage_logs (미확정)]] 그대로). 값 셋(제안):
+`provider`는 `deepseek` / `gemini`, `operation`은 DeepSeek는 `chat`, Gemini는 `embedding`
+고정(둘 다 이 한 종류만 쓰므로 값이 늘 필요는 없다, YAGNI), `status`는 `success` /
+`rate_limited`(429 응답) / `error`(그 외 실패). `input_tokens`/`output_tokens`는 제공자
+응답에 토큰 수 필드가 있으면 채우고 없으면 null. 이 로그 기록 자체는 반복되지만 결정적
+매핑(HTTP 상태 코드 → status 값)이라 Jev 대상이 아니다(dev-common 제외 조건).
+
 ### 3-1. 대화 히스토리 조회 — 채택
 
 대화 히스토리 목록 화면은 채택으로 확정됐다([[anyang-service-scope]], user, 2026-09-27).
@@ -260,6 +293,13 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 - User-Agent에 연락 가능한 식별 문자열을 남긴다(제안, 미확정 — 예: 서비스명 + 문의 이메일).
 - 게시판 HTML 구조(목록/상세 셀렉터, 페이지네이션 방식)는 구현 전 확인이 필요하다 — 확정된
   것은 URL과 robots.txt 준수·요청 간격 원칙뿐이다.
+- **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices
+  (미확정)]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
+  애플리케이션 책임으로 끝나고, 숨김 해제 시 재임베딩 비용이 없다(YAGNI, 물리 삭제는 되돌리기
+  비용만 크고 이득이 없다). `/api/notices/recommended`, `/api/notices/:id`, 채팅 RAG 검색
+  (3절), notify-job 매칭(7절) 등 `notices`/`notice_chunks`를 조회하는 모든 지점에서
+  `notices.hidden_at is null` 조건을 공통 쿼리 헬퍼에 넣어 빠뜨리지 않게 한다(제안, 미확정 —
+  헬퍼 함수명·위치는 구현 단계에서 정함).
 
 ### 6. 임베딩 파이프라인
 
@@ -298,12 +338,20 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
     and (now() at time zone timezone)::time
         between (notify_time) and (notify_time + interval '5 minutes')::time;
   ```
-  - **중복 발송 방지(제안, 미확정)**: 위 창 기반 비교만으로는 잡이 재시도되거나 실행이
-    겹치면 같은 사용자에게 하루 두 번 밀어줄 위험이 있다. 신규 컬럼 추가 대신, 매칭된
-    공지 자체를 "이 사용자에게 이미 보낸 공지"로 표시(예: 발송 로그 또는
-    `user_preferences`처럼 별도 테이블)해 두면 같은 공지를 두 번 보내지 않는다 — 이
-    아이디어는 스키마 변경(새 테이블)이 필요할 수 있어 database와 후속 조율이 필요하다
-    (미해결 질문 참고, 이번 세션은 합의가 필수적이지 않은 범위라 호출하지 않았다).
+  - **중복 발송 방지 — `notify_logs` 채택(제안, 미확정, database 조율 완료)**: database가
+    추가한 `notify_logs` 테이블의 `unique(user_id, notice_id)` 제약을 그대로 쓴다
+    ([[anyang-database-schema#notify_logs (미확정)]]). 흐름: 매칭된 (사용자, 공지) 쌍마다
+    먼저 `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'success')
+    ON CONFLICT (user_id, notice_id) DO NOTHING`을 실행하고, 실제로 삽입된 경우에만
+    Web Push를 전송한다(삽입 안 됐으면 이미 보낸 것이므로 건너뜀). Push 전송이 실패하면
+    같은 트랜잭션에서 `result`를 `'failed'`로 갱신한다(초기 삽입값을 낙관적으로
+    `'success'`로 넣지 않고, 삽입 시 `'pending'`을 넣은 뒤 전송 결과에 따라 `'success'`/
+    `'failed'`로 UPDATE하는 2단계 방식이 더 정확하다 — `result` 값 셋에 `pending`을
+    추가할지는 database와 재조율 필요, 미확정). 재시도(실패 행을 다시 성공으로 갱신)
+    정책(몇 번, 언제)은 이번 스콥에서는 만들지 않는다(YAGNI — 다음 알림 주기에 새 공지가
+    또 오면 그때 다시 시도되므로 별도 재시도 잡 없이도 서비스가 동작한다). 이렇게 하면 잡이
+    재시도되거나 실행이 겹쳐도 DB 유니크 제약으로 중복 발송이 막힌다(프로젝트 문서 확인
+    항목 17 해결에 반영).
   - `timezone` 컬럼은 항상 `'Asia/Seoul'` 고정([[anyang-database-schema#notify_settings
     (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]).
 - `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 최근 수집된
@@ -339,6 +387,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 | `SCHEDULER_SHARED_SECRET` | pg_net/cron → 앱 API 호출 인증 |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
+| `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
 
 ### 10. Vercel 배포 설정
 
@@ -411,6 +460,113 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
    프런트에 안내(제안, 미확정 — 재구독 유도 UI는 frontend 소관).
 5. `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`는 origin과 무관하게 동일 값 유지(재발급 불필요).
 
+### 13. 관리자 API (`/api/admin/*`) — 제안, 미확정
+
+관리자 지정·기능 범위·"대화·기억 원문 비노출" 원칙은 확정
+([[anyang-service-scope]], user, 2026-09-27). 아래 엔드포인트·응답 필드·구현 방식은 제안이며
+`(미확정)`이다.
+
+#### 13-0. 공통 인가
+
+- 공통 헬퍼(제안, 미확정 이름: `requireAdmin(request)`)를 모든 `/api/admin/*` 핸들러
+  맨 앞에서 호출한다. 로그인 세션이 없으면 401, 로그인은 됐지만 세션 이메일이
+  `ADMIN_EMAILS`(쉼표로 분리한 목록, 대소문자 무시 비교, 제안)에 없으면 403을 반환한다
+  (관리자 API 존재 자체를 숨기는 404 방식도 검토했으나, 이 서비스는 공개 attack surface가
+  아니고 403이 더 단순하며 클라이언트 에러 처리도 쉬워 403을 기본안으로 택한다 — YAGNI).
+- `ADMIN_EMAILS` 값은 매 요청 `process.env`에서 읽는다(별도 캐싱 없음, 배포당 값이 바뀌지
+  않으므로 과설계 방지).
+- 관리자 화면 API 응답에는 어떤 엔드포인트에서도 `messages.content`, `user_preferences.
+  preference_text` 등 대화·기억 원문을 포함하지 않는다(확정 원칙, 이 문서 전체에 적용).
+
+#### 13-1. 공지 수집 관리
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/admin/collect-runs` | `collect_runs` 목록(최신순, 페이지네이션 미확정) |
+| POST | `/api/admin/collect-runs` | 수동 수집 실행 |
+| PATCH | `/api/admin/notices/:id/hide` | 공지 숨김. body `{ hidden_reason? }`(미확정) |
+| PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
+
+- `POST /api/admin/collect-runs`는 5절 수집기 로직을 `trigger_type='manual'`,
+  `triggered_by=<관리자 user_id>`로 동기 실행한다(제안, 미확정). Vercel Fluid Compute 함수
+  한도(300초, 11절)를 넘기지 않는다는 전제 — 게시판 1개, 신규/변경분만 저장하는 구조라 매
+  실행이 300초를 넘길 가능성은 낮다고 판단(YAGNI, 별도 잡 큐를 두지 않는다). 실행이 오래
+  걸리는 경우가 실제로 생기면 그때 비동기 큐 도입을 재검토한다(설계 변경 대상).
+- `PATCH .../hide`, `.../unhide`는 [[anyang-database-schema#notices (미확정)]]의
+  `hidden_at`/`hidden_reason`을 갱신한다. 숨김 처리는 5절에서 채택한 쿼리 조건 방식을 따른다
+  (물리 삭제 없음).
+- 인증 필요(13-0), 관리자만.
+
+#### 13-2. 알림 발송 현황
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/admin/notify-logs/summary` | 날짜별 발송·실패 수 + 구독 수 |
+
+- 쿼리 파라미터(미확정): `from`, `to`(날짜 범위, 기본값 최근 30일 제안).
+- 응답(제안, 미확정): `{ daily: [{ day, success_count, failed_count }], notify_enabled_count,
+  push_device_count }`. `daily`는
+  [[anyang-database-schema#notify_logs (미확정)]]의 집계 쿼리 예시를 그대로 쓴다.
+- **"구독 수" 집계 기준(제안, 채택)**: database가 제기한 미확정 질문(두 지표 중 택1)을
+  "둘 다 반환"으로 해소한다 — `notify_enabled_count`는 `notify_settings.enabled=true`
+  행 수(서비스 관점 "알림 받기로 설정한 사용자 수"), `push_device_count`는
+  `push_subscriptions` 행 수(등록된 브라우저/기기 수, 사용자 1명이 여러 기기를 등록할 수
+  있어 사용자 수와 다를 수 있음). 두 값 다 단순 COUNT라 계산 비용이 낮아 하나만 고르는 대신
+  둘 다 보여주는 쪽이 관리자에게 더 정확한 그림을 준다(YAGNI에 위배되지 않음 — 추가 로직
+  없이 쿼리 하나 더).
+- 인증 필요(13-0), 관리자만.
+
+#### 13-3. 사용자 관리·통계
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/admin/users` | 사용자 목록(페이지네이션) |
+| GET | `/api/admin/stats` | 가입자 수, 연령대·직군·재학재직 집계 |
+| PATCH | `/api/admin/users/:id/suspend` | 계정 정지 |
+| PATCH | `/api/admin/users/:id/unsuspend` | 정지 해제 |
+| DELETE | `/api/admin/users/:id` | 계정 삭제 |
+
+- `GET /api/admin/users` 응답 필드 최소화(제안, 미확정): `{ id, email, created_at,
+  suspended_at }`만 반환한다. `name`, 프로필 상세(생년·성별·직군), 대화·기억 관련 필드는
+  목록에 넣지 않는다 — 정지/삭제 조작에는 `id`만 있으면 되고, 계정 식별에는 `email`이
+  필요하다고 판단(그 이상은 "개인별 통계 노출 최소화" 원칙에 어긋남). 프로필 집계는
+  `/api/admin/stats`에서 개인 식별 없이 개수로만 제공한다.
+- `GET /api/admin/stats` 응답(제안, 미확정): `{ total_users, by_birth_decade: [{ decade,
+  count }], by_occupation_type: [{ occupation_type, count }], by_enrollment_status:
+  [{ enrollment_status, count }] }`.
+  [[anyang-database-schema#연령대·직군 집계 쿼리 예시 (제안) — 관리자 화면 "사용자 관리·통계"용]]
+  쿼리를 그대로 쓴다. 개인별 행이 아니라 집계 개수만 반환하므로 원문 비노출 원칙과 충돌하지
+  않는다.
+- `PATCH .../suspend`, `.../unsuspend`는 `users.suspended_at`을 갱신한다. 1-2절의 정지
+  차단 방식이 이 값을 기준으로 동작한다.
+- `DELETE /api/admin/users/:id`는 `users` 행을 삭제한다. [[anyang-database-schema#users
+  (미확정)]]의 cascade 정책에 따라 관련 행(profiles/accounts/credentials/conversations/
+  push_subscriptions/notify_settings/user_preferences)이 함께 삭제된다. `consents`
+  cascade 여부는 아직 미확정(프로젝트 문서 확인 항목 14) — 그 질문이 풀리기 전까지는 현재
+  스키마의 cascade 그대로 동작한다. 이 삭제는 관리자 화면의 정식 기능(사용자 삭제 버튼)이지
+  dev-common 3조("파일 삭제는 사용자 승인 후")가 말하는 에이전트의 임의 삭제 작업이
+  아니므로 별도 세션 내 승인 절차는 없다 — 프런트에서 확인 다이얼로그를 두는 것으로
+  충분하다(제안, frontend 소관).
+- 인증 필요(13-0), 관리자만.
+
+#### 13-4. 외부 API 사용량
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/admin/api-usage/summary` | 제공자별 호출 수·오류·토큰, 무료 한도 대비 사용량 |
+
+- 쿼리 파라미터(미확정): `from`, `to`(기본값 오늘, database 집계 쿼리 예시와 동일 범위 제안).
+- 응답(제안, 미확정): `{ providers: [{ provider, day, success_count, rate_limited_count,
+  error_count, input_tokens, output_tokens, limit_note }] }`.
+  [[anyang-database-schema#api_usage_logs (미확정)]]의 집계 쿼리를 그대로 쓴다.
+- **무료 한도 값의 출처**: 이 문서 11절 "공식 문서로 확인한 수치" 표를 그대로 링크한다(값을
+  이 절에 다시 옮겨 적지 않는다 — 두 곳에 있으면 한쪽만 고쳐져 어긋난다는 규칙). Gemini
+  임베딩은 RPD 한도(약 1,000/일)가 있어 `limit_note`에 "오늘 사용량 / 1000"처럼 계산해
+  넣는다(제안, 미확정 상수: 코드 내 `GEMINI_FREE_TIER_RPD = 1000` 등, DB에 두지 않음).
+  DeepSeek는 RPM이 아니라 동시성 제한이라 "무료 한도 대비 %"로 표현할 지표가 없으므로
+  `limit_note`는 DeepSeek 행에는 null(제안) — 억지로 비율을 만들지 않는다(YAGNI).
+- 인증 필요(13-0), 관리자만.
+
 ## 테스트 방법
 
 - **인증·동의**: Google OAuth 로그인 성공 시 `users` 행 생성/재사용 확인. Credentials 가입 →
@@ -441,6 +597,24 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   검증.
 - **Runbook**: 개발 환경에서 로컬 PostgreSQL로 실제 덤프/복원 1회 리허설(UNO Q 실기기
   테스트는 이 설계 범위 밖 — 구현 단계에서 별도 확인).
+- **관리자 API 인가**: `ADMIN_EMAILS`에 없는 로그인 사용자가 `/api/admin/*` 아무 엔드포인트나
+  호출 시 403, 비로그인 401 확인. `ADMIN_EMAILS`에 있는 사용자는 200 확인.
+- **관리자 API 원문 비노출**: `/api/admin/users`, `/api/admin/stats`,
+  `/api/admin/notify-logs/summary`, `/api/admin/api-usage/summary` 응답 payload를 캡처해
+  `messages`/`user_preferences.preference_text` 등 대화·기억 원문 필드가 섞여 있지 않은지
+  키 존재 여부로 자동 검증(3절 데이터 최소화 테스트와 같은 방식).
+- **정지 계정 차단**: `suspend` 후 신규 로그인 시도 거부, 기존 세션으로 인증 필요 API 호출 시
+  403 확인. `unsuspend` 후 다시 정상 동작하는지 확인.
+- **공지 숨김**: `hide` 후 `/api/notices/recommended`·채팅 RAG 검색 결과에 해당 공지가 빠지는지
+  확인. `unhide` 후 다시 나오는지 확인.
+- **알림 중복 발송 방지(`notify_logs`)**: 같은 (user_id, notice_id) 쌍으로 알림 잡을 두 번
+  실행해도 Web Push가 한 번만 전송되는지(두 번째 실행에서 `INSERT ... ON CONFLICT DO
+  NOTHING`이 삽입을 막아 전송을 건너뛰는지) 확인.
+- **수동 수집 실행**: `POST /api/admin/collect-runs` 호출 시 `collect_runs`에
+  `trigger_type='manual'`, `triggered_by=<관리자 id>` 행이 생기고 응답이 300초 안에
+  오는지(목 서버로 짧게) 확인.
+- **api_usage_logs 기록**: DeepSeek·Gemini 호출을 목으로 성공/429/오류 각각 재현해
+  `api_usage_logs`에 대응하는 `status` 값으로 1행씩 남는지 확인.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -450,8 +624,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - 비밀번호 재설정("비밀번호 찾기") 기능 자체를 이번 스콥에 넣을지 — 계획서·서비스 범위
   결정에 없던 항목이라 backend 판단만으로 확정할 수 없다(1-1절). 넣는다면 이메일 발송
   수단도 별도로 정해야 한다.
-- 알림 잡 중복 발송 방지를 위한 "사용자별 발송 이력" 저장 방식 — 새 테이블/컬럼이 필요할
-  수 있어 database와 후속 조율이 필요하다(7절).
+- 알림 잡 중복 발송 방지 — 해결(2026-09-27, database 제안 + backend 채택): `notify_logs`의
+  `unique(user_id, notice_id)` + `INSERT ... ON CONFLICT DO NOTHING`(7절). 다만
+  `result` 값 셋에 `pending`을 추가할지(전송 전/후 2단계 기록)는 database와 재조율이
+  필요하다(7절, 미해결).
 - 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 게시판 구조 확인 후 재검토(3절 c항,
   [[anyang-youth-policy-assistant#확인이 필요한 항목]] 9번과 연결).
 - UNO Q 전환 시 HTTPS 확보 방법(리버스 프록시/터널, 12절 7번) — 이 설계 범위 밖 별도 조사 필요.

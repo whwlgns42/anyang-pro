@@ -10,7 +10,9 @@ owner: database
 ## Summary
 
 PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 기록, 공지(notice)와 그 벡터
-조각, 대화, 선호(preference) 벡터, 푸시 구독, 알림 설정 테이블을 둔다. 스케줄은 Supabase
+조각, 대화, 선호(preference) 벡터, 푸시 구독, 알림 설정 테이블을 둔다. 관리자 기능(수집 이력,
+공지 숨김, 알림 발송 로그, 계정 정지, 외부 API 사용량)을 위한 로그성 테이블도 두되 개인별
+대화·기억 원문은 담지 않는다. 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
 사용자 설계 승인으로 확정되기 전까지 `(미확정)`이다.
@@ -39,6 +41,11 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
   세션 전략은 JWT(쿠키)로, DB 세션 테이블은 쓰지 않는다 — 이전 가능성 원칙(표준 스키마만 사용)과
   충돌하지 않고 세션 테이블 관리 부담도 없앤다. 아래 테이블 제안은 이 전제로 갱신했다.
   라이브러리·전략 자체는 backend 제안이며 사용자 설계 승인으로 확정된다.
+- 관리자 기능: 2026-09-27 user 확정 — 관리자는 DB 역할 컬럼 없이 환경변수 `ADMIN_EMAILS`로만
+  지정한다([[anyang-service-scope]]). 관리자 기능 ①~④(공지 수집 관리, 알림 발송 현황, 사용자
+  관리·통계, 외부 API 사용량)는 확정이나, 이를 담을 로그성 테이블 구조·컬럼·보존 기간은 모두
+  이 문서의 다른 값과 마찬가지로 (미확정) 제안이다. 관리자 화면에서도 개인별 대화·기억 원문은
+  보이지 않는다(집계·메타데이터만) — 이 원칙에 따라 아래 로그 테이블은 대화 내용을 담지 않는다.
 
 ## Details
 
@@ -58,6 +65,16 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
 | email_verified | timestamptz, null 허용 | Auth.js 어댑터 규격 |
 | name | text, null 허용 | 화면 표시용, 필수 아님(개인정보 최소화) |
 | created_at | timestamptz, default now() | |
+| suspended_at | timestamptz, null 허용 | 관리자가 계정을 정지한 시각. null이면 정상 상태(제안). 정지 사유를 남길지는 미확정 — 필요하면 별도 컬럼(예: `suspended_reason text`) 추가(되돌릴 수 있는 마이그레이션) |
+
+- **정지 계정 처리 방식 (제안, backend 확정 필요)**: 로그인 시 `suspended_at`이 not null이면
+  인증 자체를 막을지, 로그인은 허용하되 API 응답을 차단할지는 backend가 정한다. 알림(notify-job)은
+  `suspended_at`이 not null인 사용자를 조회 대상에서 제외한다(아래 pg_cron 절 쿼리에 조건 추가 필요).
+  정지는 로그인 계정(`users`) 단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.
+- **계정 삭제**는 이 컬럼과 무관하게 기존 cascade 정책(위 각 테이블 `on delete cascade`)을 그대로
+  따른다 — `users` 행 삭제 시 profiles/accounts/credentials/conversations/push_subscriptions/
+  notify_settings/user_preferences가 함께 삭제된다. `consents`는 위 "회원 탈퇴 시 삭제/보존
+  여부" 미확정과 연결(아래 변경 없음).
 
 #### accounts (미확정) — OAuth 연동, Auth.js 어댑터 규격 기본안
 
@@ -122,10 +139,20 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
 | content_hash | text, unique, not null | 본문(또는 제목+본문) 해시. 같은 공지 재수집 시 중복 방지 |
 | published_at | timestamptz, null 허용 | 게시일. 게시판에 없으면 null |
 | collected_at | timestamptz, default now() | |
+| hidden_at | timestamptz, null 허용 | 관리자가 잘못 수집된 공지를 숨긴 시각. null이면 정상 노출(제안, [[glossary]]의 notice-hidden) |
+| hidden_reason | text, null 허용 | 숨김 사유(관리자가 입력, 필수 아님) |
 
 - 인덱스: unique(content_hash) — 중복 방지의 핵심. unique(source_url)도 별도로 둔다(같은 글이
   URL은 같은데 본문만 갱신되는 경우 구분 필요 여부는 미확정 — 수집 대상 게시판이 정해지지 않아
   갱신 패턴을 알 수 없음, 확인 항목 1과 연결).
+- **숨김 처리와 추천·검색 제외 (제안)**: `hidden_at is not null`인 공지는 사용자 노출·추천·
+  벡터 검색 결과에서 제외한다. 두 가지 구현 방식 중 하나를 backend가 고른다.
+  1. 매 조회 쿼리(추천 목록, `notice_chunks` 벡터 유사도 검색의 조인 대상)에 `notices.hidden_at
+     is null` 조건을 추가한다 — 스키마 변경 없이 애플리케이션/쿼리 책임으로 끝난다(제안, 별도
+     마이그레이션 불필요).
+  2. 숨김 시 `notice_chunks`에서 해당 `notice_id`의 행을 물리 삭제해 검색 인덱스에서 완전히
+     제거한다 — 다시 숨김 해제하면 재임베딩이 필요해 되돌리기 비용이 크므로 권장하지 않는다(제안).
+  기본안은 1번이다. 최종 선택은 backend 조율 후 확정한다.
 
 #### notice_chunks (미확정) — 벡터 검색용
 
@@ -242,6 +269,146 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
   DB 서버의 시스템 시간대나 `now()`의 UTC 값을 그대로 비교하지 않는다(애플리케이션/쿼리 책임,
   아래 pg_cron/pg_net 절 참고).
 
+#### collect_runs (미확정) — 관리자 화면 "공지 수집 관리"용, [[glossary]]의 collect-run
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | uuid, PK | |
+| started_at | timestamptz, not null, default now() | |
+| finished_at | timestamptz, null 허용 | 실행 중이면 null |
+| trigger_type | text, not null | `scheduled`(pg_cron 자동) 또는 `manual`(관리자 수동 실행). 값 셋은 제안 |
+| status | text, not null, default 'running' | `running` / `success` / `failed`. 값 셋은 제안 |
+| collected_count | integer, not null, default 0 | 이번 실행에서 새로 저장한 공지 수 |
+| error_summary | text, null 허용 | 실패 시 오류 요약(스택 트레이스 전체가 아니라 요약, 민감정보 없음) |
+| triggered_by | uuid, FK → users.id, null 허용 | 수동 실행한 관리자. 자동 실행이면 null |
+
+- 인덱스: `(started_at desc)` — 이력을 최신 순으로 조회.
+- collect-job(수집 잡) 실행 시작 시 1행을 만들고(`status='running'`), 끝나면 `finished_at`·
+  `status`·`collected_count`·`error_summary`를 갱신한다(애플리케이션 책임).
+- 관리자 화면의 "수동 수집 실행"은 이 테이블에 `trigger_type='manual'` 행을 만들며 잡을
+  즉시 실행하는 API 엔드포인트로 구현한다(backend 설계에서 확정).
+
+#### notify_logs (미확정) — 관리자 화면 "알림 발송 현황"용 + 중복 발송 방지, [[glossary]]의 notify-log
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | uuid, PK | |
+| user_id | uuid, FK → users.id, on delete cascade | |
+| notice_id | uuid, FK → notices.id, on delete cascade | |
+| sent_at | timestamptz, not null, default now() | |
+| result | text, not null | `success` / `failed`. 값 셋은 제안 |
+| error_summary | text, null 허용 | 실패 사유 요약(예: push 구독 만료) |
+
+- **중복 발송 방지 제안 (프로젝트 문서 확인 항목 17과 연결)**: `unique(user_id, notice_id)`
+  제약을 둔다. notify-job은 발송 전에 이 유니크 제약을 이용해 "이미 보낸 적 있는 (사용자, 공지)
+  조합"을 걸러낸다 — 예를 들어 `INSERT ... ON CONFLICT (user_id, notice_id) DO NOTHING`으로
+  먼저 기록을 시도하고, 실제로 삽입된 경우에만 푸시를 전송한다(제안, backend 구현 단계에서
+  정확한 순서 확정). 이렇게 하면 같은 공지를 같은 사용자에게 두 번 보내는 경합 상황도 DB
+  제약으로 막힌다.
+  - 주의: `result='failed'`인 행도 유니크 제약에 걸리므로, 발송 실패 후 재시도가 필요하면
+    실패 행을 다시 성공으로 갱신(UPDATE)하는 방식으로 처리한다(제안). 재시도 정책 자체(몇 번,
+    언제)는 이 설계 범위 밖이며 backend가 정한다.
+- 인덱스: `unique(user_id, notice_id)`(위), `(sent_at)` — 날짜별 발송·실패 수 집계용.
+- 관리자 화면 "날짜별 발송·실패 수" 집계 쿼리 예시(제안):
+  ```sql
+  select date_trunc('day', sent_at) as day, result, count(*)
+  from notify_logs
+  group by 1, 2
+  order by 1 desc;
+  ```
+  "구독 수"는 `select count(*) from notify_settings where enabled = true` 또는
+  `select count(*) from push_subscriptions`로 집계한다(어느 쪽을 "구독 수"로 볼지는 미확정 —
+  backend 조율 필요).
+
+#### api_usage_logs (미확정) — 관리자 화면 "외부 API 사용량"용, [[glossary]]의 api-usage-log
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | uuid, PK | |
+| provider | text, not null | `deepseek` / `gemini`. 값 셋은 제안 |
+| operation | text, not null | 작업 종류(예: `chat`, `embedding`). 값 셋은 backend가 정함 |
+| requested_at | timestamptz, not null, default now() | |
+| status | text, not null | `success` / `rate_limited`(429) / `error`. 값 셋은 제안 |
+| input_tokens / output_tokens | integer, null 허용 | 제공자 응답에 토큰 수가 없으면 null |
+
+- **사용자 식별 없이 기록 (제안, 확정 필요)**: 이 테이블은 무료 한도 대비 사용량 집계가
+  목적이므로 `user_id`를 두지 않는다 — 개인정보 최소화 원칙 및 "외부 AI에 식별정보 전송 금지"
+  원칙([[anyang-ai-models-data-transfer]])과 같은 방향이다. 사용자별 사용량 분석이 나중에
+  필요해지면 컬럼 추가(되돌릴 수 있는 마이그레이션)가 필요하며, 이는 새 요구사항이므로 별도
+  설계 변경으로 다룬다.
+- 인덱스: `(provider, date_trunc('day', requested_at))` 대신 아래처럼 쿼리 시점에
+  `date_trunc`를 쓰거나, 집계가 잦으면 `requested_at` 단순 인덱스로 충분한지 backend가
+  구현 단계에서 판단한다(제안, 과설계 방지).
+- 무료 한도 대비 일 단위 집계 쿼리 예시(제안):
+  ```sql
+  select provider, date_trunc('day', requested_at) as day,
+         count(*) filter (where status = 'success') as success_count,
+         count(*) filter (where status = 'rate_limited') as rate_limited_count,
+         count(*) filter (where status = 'error') as error_count,
+         sum(input_tokens) as input_tokens, sum(output_tokens) as output_tokens
+  from api_usage_logs
+  where requested_at >= date_trunc('day', now())
+  group by 1, 2;
+  ```
+  "무료 한도 대비 사용량"(예: 일 1000회 중 며칠 몇 회)은 이 집계 결과와 제공자별 한도 상수
+  (코드 또는 환경변수, DB에 두지 않음)를 애플리케이션에서 비교해 계산한다(제안).
+- 각 API 호출 지점(DeepSeek 채팅, Gemini 임베딩)에서 성공/실패와 무관하게 1행씩 남긴다
+  (backend 구현 단계에서 호출 래퍼에 공통으로 넣는 방식 제안).
+
+#### 연령대·직군 집계 쿼리 예시 (제안) — 관리자 화면 "사용자 관리·통계"용
+
+개인 식별 없이 집계만 하므로 `profiles`를 그룹핑해서 조회한다.
+
+```sql
+-- 연령대 집계 (만 나이 계산은 애플리케이션이 birth_year 기준 5살 단위 등으로 구간화하거나,
+-- 아래처럼 SQL에서 10년 단위로 묶는 방식도 가능. 구간 폭은 미확정 — backend/frontend 조율)
+select (birth_year / 10) * 10 as birth_decade, count(*)
+from profiles
+where birth_year is not null
+group by 1
+order by 1;
+
+-- 직군 집계
+select occupation_type, count(*)
+from profiles
+where occupation_type is not null
+group by 1;
+
+-- 가입자 수(전체)
+select count(*) from users where suspended_at is null;
+```
+
+- 위 쿼리는 `user_id`나 개별 행을 반환하지 않고 개수만 반환하므로 "관리자 화면에서도 개인별
+  대화·기억 원문은 보이지 않는다" 원칙과 충돌하지 않는다.
+
+### 로그성 테이블 보존 기간·정리 잡 (미확정, 제안)
+
+- 대상: `collect_runs`, `notify_logs`, `api_usage_logs` — 시간이 지날수록 계속 쌓이기만 하는
+  로그성 테이블. `notices`/`notice_chunks`/`consents`/`user_preferences`는 서비스 핵심 데이터라
+  이 절의 정리 대상이 아니다.
+- 제안 보존 기간: 90일(관리자 화면이 "최근 이력"을 보여주는 용도이면 충분하다는 가정). 정확한
+  기간은 확정되지 않았고 사용자 승인이 필요하다 — 특히 `notify_logs`는 위 "중복 발송 방지"의
+  유니크 제약 근거 데이터이므로, 오래된 행을 지우면 같은 (사용자, 공지) 조합에 다시 알림을
+  보낼 수 있게 된다. 이 부작용을 감수할지는 확인이 필요한 항목으로 올린다.
+- 정리 잡은 위 collect-job/notify-job과 같은 방식(pg_cron이 트리거, 삭제 로직은 앱 API 또는
+  단순 SQL)으로 둔다(제안):
+  ```sql
+  -- 제안: 매일 새벽 오래된 로그 정리 (보존 기간·주기 모두 미확정)
+  select cron.schedule(
+    'cleanup-logs',
+    '0 18 * * *', -- UTC 18:00 = Asia/Seoul 03:00
+    $$
+    delete from collect_runs where started_at < now() - interval '90 days';
+    delete from notify_logs where sent_at < now() - interval '90 days';
+    delete from api_usage_logs where requested_at < now() - interval '90 days';
+    $$
+  );
+  ```
+- **되돌릴 수 없는 마이그레이션 아님, but 되돌릴 수 없는 삭제**: 이 정리 잡은 스키마 변경이
+  아니라 데이터 삭제를 주기적으로 실행하는 것이다. dev-common.md 규칙상 "데이터 삭제"는
+  되돌릴 수 없는 작업에 해당하므로, 이 정리 잡 자체를 pg_cron에 등록하는 것은 구현 단계에서
+  별도 사용자 승인이 필요하다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
+
 ### pg_cron / pg_net 잡 정의 (미확정)
 
 이전 가능성 원칙에 따라 스케줄 로직 본체는 앱 API 엔드포인트에 둔다. pg_cron은 트리거만 한다.
@@ -271,12 +438,16 @@ select cron.schedule(
   ```sql
   -- 제안: notify_time이 Asia/Seoul 기준 현재 시각과 (트리거 주기 오차 범위 내로) 일치하고
   -- enabled = true인 사용자를 고른다. 트리거 주기가 5분이면 5분 단위로 맞춰 비교한다.
-  select user_id
-  from notify_settings
-  where enabled = true
-    and date_trunc('minute', notify_time)
-        = date_trunc('minute', (now() at time zone timezone)::time);
+  select ns.user_id
+  from notify_settings ns
+  join users u on u.id = ns.user_id
+  where ns.enabled = true
+    and u.suspended_at is null
+    and date_trunc('minute', ns.notify_time)
+        = date_trunc('minute', (now() at time zone ns.timezone)::time);
   ```
+
+  - `u.suspended_at is null` 조건은 정지된 계정에 알림을 보내지 않기 위한 제안이다.
 
   - `timezone` 컬럼이 항상 `'Asia/Seoul'`로 고정이므로 이 쿼리는 사실상 Asia/Seoul 기준
     비교이지만, 컬럼을 참조해 두어 나중에 사용자별 시간대를 늘려야 할 때(현재는 계획 없음)
@@ -304,6 +475,9 @@ select cron.schedule(
   삭제, 데이터 삭제, 타입 축소)은 없다.
 - 구현 단계에서 재임베딩 절차 중 "기존 임베딩 컬럼 삭제"(모델 교체 시)는 되돌릴 수 없는
   마이그레이션이다. 실행 전 별도 사용자 승인이 필요하다(dev-common.md 규칙 4단계).
+- 위 "로그성 테이블 보존 기간·정리 잡"의 `cleanup-logs` pg_cron 등록(주기적 데이터 삭제)도
+  되돌릴 수 없는 작업이다. 구현 단계에서 이 잡을 실제로 등록하려면 지시서에 이 작업 항목에
+  대한 별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서 보고한다.
 
 ## 테스트 방법 (제안)
 
@@ -324,6 +498,15 @@ select cron.schedule(
   있어야 유효하다.
 - pg_cron/pg_net: 개발 프로젝트에서 잡을 등록하고 `cron.job_run_details` 테이블로 실행 이력과
   `net.http_post` 응답 상태코드를 확인한다.
+- 공지 숨김 확인: 테스트 공지를 `hidden_at`으로 숨긴 뒤, 추천·벡터 검색 쿼리 결과에 해당
+  공지가 나오지 않는지 확인한다.
+- 알림 중복 발송 방지 확인: 같은 (user_id, notice_id)로 `notify_logs`에 두 번 INSERT를 시도해
+  `unique(user_id, notice_id)` 제약이 두 번째 삽입을 막는지(`ON CONFLICT DO NOTHING` 시
+  실제 행이 추가되지 않는지) 확인한다.
+- 계정 정지 확인: 테스트 사용자를 `suspended_at`으로 정지시킨 뒤, notify-job 대상 선정 쿼리
+  결과에서 제외되는지 확인한다.
+- 로그 정리 잡 확인(승인 후 구현 시): 오래된 `sent_at`/`started_at`/`requested_at` 값을 가진
+  테스트 행을 넣고 `cleanup-logs` 잡 실행 후 삭제됐는지 확인한다.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -337,6 +520,16 @@ select cron.schedule(
   기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)는 구조 자체가
   아직 (미확정)이다.
 - 회원 탈퇴 시 동의 기록(`consents`) 삭제/보존 여부 — 미해결. 아래 미해결 질문 참고.
+- 관리자 기능 — 해결(2026-09-27, user): 역할 컬럼 없이 `ADMIN_EMAILS`, 기능 범위 ①~④
+  확정. [[anyang-service-scope]]. 이를 담을 `collect_runs`/`notify_logs`/`api_usage_logs`
+  테이블 구조, `notices.hidden_at`/`users.suspended_at` 컬럼은 구조 자체가 아직 (미확정)이다.
+- 로그성 테이블(`collect_runs`/`notify_logs`/`api_usage_logs`) 보존 기간과 정리 잡 등록 여부 —
+  미해결. 특히 `notify_logs` 삭제가 중복 발송 방지 제약과 상충할 수 있음(위 "로그성 테이블
+  보존 기간·정리 잡" 참고).
+- "구독 수" 집계 기준(`notify_settings.enabled=true` 수 vs `push_subscriptions` 행 수) — 미해결,
+  backend 조율 필요.
+- 공지 숨김을 쿼리 조건으로 처리할지, `notice_chunks` 물리 삭제로 처리할지 — 미해결(기본안은
+  쿼리 조건), backend 조율 필요.
 
 ## Links
 

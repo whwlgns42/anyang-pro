@@ -29,7 +29,7 @@ owner: pm
 | 배포 | Vercel Hobby(`icn1`) + Supabase 무료(서울, pgvector). UNO Q 미사용 | [[anyang-deployment-portability]] |
 | 스케줄 | 알림 잡은 Supabase `pg_cron` + `pg_net`이 몇 분마다 앱 API 호출 | [[anyang-deployment-portability]] |
 | 이용 조건 | Hobby는 비상업 전용. 수익화하면 Pro 전환 | [[anyang-deployment-portability]] |
-| 서비스 범위 | 수집 대상 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의·처리방침 | [[anyang-service-scope]] |
+| 서비스 범위 | 수집 대상 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의·처리방침, 관리자 페이지(`ADMIN_EMAILS`, 기능 4종, 대화·기억 원문 비노출) | [[anyang-service-scope]] |
 | 이전 가능성 원칙 | Vercel+Supabase ↔ UNO Q 양방향 전환, Docker 미사용 | [[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO Q)]] |
 
 ### 진행 상태
@@ -38,6 +38,7 @@ owner: pm
 - 2026-09-27: git init 사용자 승인. git-manager가 저장소 생성과 초기 커밋(기존 vault + 설계 단계 문서).
 - 2026-09-27: pm 세션 비정상 종료 후 재개. 설계 문서 역링크 보완(database·backend), 인수인계 [[2026-09-27_anyang-design-approval-wait]] 작성.
 - 2026-09-27: 사용자 답변(확인 항목 1·2·3·5·6·10·11·12)을 [[anyang-service-scope]]로 확정, 원칙 5(도메인 나중) 변경. 설계 수정 라운드(database → backend → frontend) 완료, 설계 문서 5종 draft로 재승인 대기. 새 질문 14~19.
+- 2026-09-27: 사용자 새 요청 — 관리자 페이지 추가([[anyang-service-scope]]). 설계 수정 라운드(database → backend → frontend) 완료. 새 질문 20·21.
 
 ### 설계 문서 (status: draft, 사용자 승인 대기)
 
@@ -65,9 +66,11 @@ owner: pm
 14. 회원 탈퇴 시 동의 기록(`consents`) 삭제 vs 법적 보존 — 현재 설계는 on delete cascade(잠정). database 제기 2026-09-27. [[anyang-database-schema]]
 15. 동의 항목을 단일 체크로 받을지, 수집·이용 / 국외 이전으로 분리할지. database 제기 2026-09-27.
 16. 비밀번호 재설정 기능을 이번 범위에 넣을지(계획서에 없던 항목). 넣으면 이메일 발송 수단도 정해야 한다. 이메일 인증은 backend가 범위 제외로 제안. backend 제기 2026-09-27. [[anyang-backend-api]]
-17. 알림 잡 중복 발송 방지 방식(사용자별 발송 이력 테이블 등) — database·backend 후속 조율 필요. backend 제기 2026-09-27.
+17. 알림 잡 중복 발송 방지 방식 — database 제안(2026-09-27): `notify_logs`의 `unique(user_id, notice_id)`. 설계 승인으로 확정. [[anyang-database-schema]]
 18. 처리방침 개정 시 재동의 강제 여부(`consents.policy_version`) — backend는 이번엔 만들지 않기로 제안. backend 제기 2026-09-27.
 19. 프로필 코드값 셋(`gender`·`occupation_type`·`enrollment_status` 선택지) — database 설계 승인 때 함께 확정. frontend 제기 2026-09-27. [[anyang-database-schema]]
+20. 로그성 테이블(`collect_runs`·`notify_logs`·`api_usage_logs`) 보존 기간(제안 90일)과 정리 잡(pg_cron, 데이터 삭제라 되돌릴 수 없음) 등록 여부. `notify_logs`를 지우면 오래된 공지가 재발송될 수 있어 항목 17과 함께 판단. database 제기 2026-09-27. [[anyang-database-schema]]
+21. `notify_logs.result`에 `pending`(발송 전) 값을 둘지 — 사용자 결정보다 database·backend 설계 조율 항목. 현재 제안은 `success`/`failed`만. backend 제기 2026-09-27. [[anyang-backend-api]]
 
 ## 승인된 설계
 

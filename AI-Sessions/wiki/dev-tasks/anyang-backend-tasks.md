@@ -17,9 +17,11 @@ database의 마이그레이션이 먼저 적용돼야 한다.
 
 의존: [[anyang-database-schema]]의 테이블(users/accounts/credentials/profiles/notices/
 notice_chunks/conversations/messages/user_preferences/push_subscriptions/notify_settings/
-consents)이 먼저 마이그레이션돼 있어야 아래 작업을 시작할 수 있다. 서비스 범위는
+consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hidden_at)이
+먼저 마이그레이션돼 있어야 아래 작업을 시작할 수 있다. 서비스 범위는
 [[anyang-service-scope]](수집 대상 게시판 1개, 프로필 4항목, 알림 자유 시각+on/off, 기억·
-대화 히스토리 화면, 인증 부가 테이블 미사용, 가입 시 동의)로 확정됐다.
+대화 히스토리 화면, 인증 부가 테이블 미사용, 가입 시 동의, 관리자 페이지 `ADMIN_EMAILS`
+기반 기능 4종)로 확정됐다.
 
 ## Details
 
@@ -49,13 +51,25 @@ consents)이 먼저 마이그레이션돼 있어야 아래 작업을 시작할 �
 9. **스케줄러 공유 시크릿 미들웨어** — `/api/jobs/*` 공통 인증. 4·5·7번이 의존.
 10. **환경변수·배포 설정** — `output: 'standalone'`, Vercel 프로젝트 설정(icn1), 9절 환경변수
     실제 값 채우기(비밀 값은 문서에 남기지 않음). `APP_ORIGIN`은 배포 시 Vercel 기본 도메인
-    사용, 커스텀 도메인은 나중에(12-1절 절차).
+    사용, 커스텀 도메인은 나중에(12-1절 절차). `ADMIN_EMAILS`도 이 단위에서 채운다.
 11. **UNO Q 전환 runbook 리허설** — 로컬 PostgreSQL 덤프/복원 1회(개발 환경 한정).
+12. **관리자 공통 인가** — `requireAdmin` 헬퍼(13-0절, `ADMIN_EMAILS` 파싱·비교, 401/403).
+    1·9번 의존(세션·미들웨어 재사용).
+13. **관리자 — 공지 수집 관리** — `GET/POST /api/admin/collect-runs`,
+    `PATCH /api/admin/notices/:id/hide`·`/unhide`(13-1절). 5·12번 의존. 5번(수집기 로직
+    재사용)이 끝난 뒤 착수.
+14. **관리자 — 알림 발송 현황 / 사용자 관리·통계 / 외부 API 사용량** —
+    `GET /api/admin/notify-logs/summary`, `GET/PATCH/DELETE /api/admin/users*`,
+    `GET /api/admin/stats`, `GET /api/admin/api-usage/summary`(13-2~13-4절). 12번 의존.
+    정지 계정 차단(1-2절 미들웨어)은 이 단위에서 함께 구현.
+15. **`api_usage_logs` 기록 래퍼** — DeepSeek(6번)·Gemini(3번) 호출 공통 래퍼에 로그 기록 추가.
+    3·6번 의존, 14번이 이 데이터를 조회하므로 14번보다 먼저 끝나야 한다.
 
 ### 순서 제안
 
-3, 9 → (1, 2, 2-1 병렬 가능) → 2-2, 4 → 6, 8, 2-3 → 7 → 10. 5는 robots.txt·HTML 구조
-확인이 끝나는 대로 별도로 끼워 넣는다. 11은 나머지가 끝난 뒤 여유 있을 때.
+3, 9, 12 → (1, 2, 2-1 병렬 가능) → 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10. 5는
+robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 11은 나머지가 끝난 뒤
+여유 있을 때.
 
 ## 테스트 방법
 

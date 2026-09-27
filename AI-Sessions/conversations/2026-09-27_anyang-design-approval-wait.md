@@ -13,7 +13,7 @@ owner: pm
 
 ## Context
 
-2026-09-27 pm 세션이 비정상 종료된 뒤 재개했다. 사용자가 확인 항목 대부분에 답해 [[anyang-service-scope]]로 확정했고, 배포 원칙 5(커스텀 도메인은 나중, base URL 환경변수)를 [[anyang-deployment-portability]]에서 바꿨다. 그에 맞춰 database → backend → frontend 순서로 설계를 수정했다.
+2026-09-27 pm 세션이 비정상 종료된 뒤 재개했다. 사용자가 확인 항목 대부분에 답해 [[anyang-service-scope]]로 확정했고, 배포 원칙 5(커스텀 도메인은 나중, base URL 환경변수)를 [[anyang-deployment-portability]]에서 바꿨다. 그에 맞춰 database → backend → frontend 순서로 설계를 수정했다. 이어서 사용자 새 요청인 관리자 페이지(`ADMIN_EMAILS`, 기능 4종, 대화·기억 원문 비노출)를 같은 순서로 설계에 추가했다.
 
 ## Details
 
@@ -30,7 +30,7 @@ owner: pm
 
 1. 동의 기록: 탈퇴 시 삭제 vs 보존(14), 동의 체크 단일 vs 분리(15), 처리방침 개정 시 재동의 강제(18)
 2. 비밀번호 재설정 기능 포함 여부와 이메일 발송 수단(16)
-3. 알림 중복 발송 방지 방식(17) — 사용자 답보다 database·backend 설계 보완이 필요할 수 있다
+3. 로그성 테이블 보존 기간과 정리 잡 등록(20). 중복 발송 방지(17)는 `notify_logs` 유니크 제약으로 설계됨. `pending` 상태 여부(21)는 database·backend 조율 항목
 4. 프로필 코드값 셋(19)
 5. 공지 자격요건 구조화 컬럼 여부(9)
 6. 설계 문서 5종 승인 여부, 확정하지 않을 값이 있는지
