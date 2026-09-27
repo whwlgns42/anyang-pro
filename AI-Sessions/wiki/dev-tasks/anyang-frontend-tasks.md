@@ -31,7 +31,8 @@ owner: frontend
    (`ACCOUNT_SUSPENDED`/`CONSENT_REQUIRED`/`ADMIN_ONLY`, backend 1-4절) 분기 처리. 정지는
    로그인을 막지 않고 `session.suspended` 플래그로 정지 안내 화면을 보여주는 방식(backend
    1-2절, 로그인 차단 방식 폐기)으로 처리한다 — 세션 종료 없이 403 `ACCOUNT_SUSPENDED` 응답을
-   받으면 정지 안내 화면으로 돌려보낸다. 이후 전체 화면이 의존.
+   받으면 정지 안내 화면으로 돌려보낸다. `ADMIN_EMAIL_RESERVED`는 이 공통 가드가 아니라
+   2번 작업(가입 화면)에서 인라인 오류로 처리한다. 이후 전체 화면이 의존.
 2. **로그인/가입 화면** (`/login`) — Google 소셜 + 이메일·비밀번호 폼, `POST /api/auth/register`
    연동(body는 backend 1절의 `consents` 형식). 정지 계정은 로그인 성공 후 정지 안내 화면으로
    이동(1번 작업과 연계, 탈퇴 경로 링크 포함). `OAuthAccountNotLinked`(backend 1-5절) 오류

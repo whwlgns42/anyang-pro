@@ -69,8 +69,7 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
 | created_at | timestamptz, default now() | |
 | suspended_at | timestamptz, null 허용 | 관리자가 계정을 정지한 시각. null이면 정상 상태(제안). 정지 사유를 남길지는 미확정 — 필요하면 별도 컬럼(예: `suspended_reason text`) 추가(되돌릴 수 있는 마이그레이션) |
 
-- **정지 계정 처리 방식**: [[anyang-backend-api#1-2. 정지 계정(users.suspended_at) 제한 방식
-  (제안, 미확정 — 2차 재점검 반영: 로그인차단 방식 폐기)]]에서 정리한다 — 로그인은 허용, 제한
+- **정지 계정 처리 방식**: [[anyang-backend-api#1-2. 정지 계정 제한 방식]]에서 정리한다 — 로그인은 허용, 제한
   상태(제안, 미확정). 알림(notify-job)은 `suspended_at`이 not null인 사용자를 조회 대상에서
   제외한다(아래 pg_cron 절 쿼리, `u.suspended_at is null` 조건). 정지는 로그인 계정(`users`)
   단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.

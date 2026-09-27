@@ -103,7 +103,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   [[anyang-backend-api#1-4. 403 응답 에러 코드 (제안, 미확정)]]의 에러 코드 존재를 전제)**:
   인증 필요 API가 403을 반환하면 공통 인증 가드가 응답 body의 `error` 코드로 아래처럼
   분기한다.
-  - `ACCOUNT_SUSPENDED` (backend [[anyang-backend-api#1-2. 정지 계정(`users.suspended_at`) 제한 방식 (제안, 미확정 — 2차 재점검 반영: 로그인 차단 방식 폐기)]]) →
+  - `ACCOUNT_SUSPENDED` (backend [[anyang-backend-api#1-2. 정지 계정 제한 방식]]) →
     정지는 로그인 자체를 막지 않는다. 로그인은 항상 허용되고, 로그인 성공 시 세션에 담기는
     `session.suspended`(boolean, backend 제안) 플래그가 true면 로그인 직후 정지 안내
     화면(1절)으로 보낸다(세션은 유지, 로그아웃하지 않는다). 정지 안내 화면에서 가능한 동작은
@@ -118,6 +118,8 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
     필요 상태에서도 호출 가능하다(backend 1절 예외).
   - `ADMIN_ONLY` → `/admin/*` 전용(아래 "관리자 가드" 참고), 관리자가 아니라는 안내 후
     `/chat`으로 보낸다(미확정).
+  - `ADMIN_EMAIL_RESERVED`는 이 공통 가드가 아니라 1절 가입 화면에서만 인라인 오류로
+    처리한다(가입 시도 응답이라 리다이렉트 대상이 없음).
 - **관리자 가드 (확정 원칙, [[anyang-service-scope]], user, 2026-09-27)**: 관리자 판정은
   서버만 한다. `ADMIN_EMAILS` 목록은 서버 환경변수([[anyang-backend-api#13-0. 공통 인가]])
   로만 존재하며, 클라이언트 코드·번들·정적 자산 어디에도 이메일 목록을 넣지 않는다(임포트,
@@ -152,8 +154,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   가입할 수 없습니다. Google로 로그인해 주세요"(제안, 미확정 문구)를 표시한다.
 - 로그인 흐름(미확정): Auth.js Credentials 로그인 → 성공 시 프로필 존재 여부에 따라 `/chat`
   또는 `/onboarding`. 401 시 "이메일 또는 비밀번호가 올바르지 않습니다"(미확정 문구).
-- **정지된 계정 로그인**(제안, 미확정 문구 — [[anyang-backend-api#1-2. 정지 계정
-  (`users.suspended_at`) 제한 방식 (제안, 미확정 — 2차 재점검 반영: 로그인 차단 방식 폐기)]]
+- **정지된 계정 로그인**(제안, 미확정 문구 — [[anyang-backend-api#1-2. 정지 계정 제한 방식]]
   기준, 에러 코드는 [[anyang-backend-api#1-4. 403 응답 에러 코드 (제안, 미확정)]]의
   `ACCOUNT_SUSPENDED`): **로그인 자체는 정지 여부와 무관하게 허용된다**(이전 "로그인 시점
   차단" 제안은 폐기). 이메일·비밀번호, Google 로그인 모두 정상적으로 성공하고, 세션에 담긴
