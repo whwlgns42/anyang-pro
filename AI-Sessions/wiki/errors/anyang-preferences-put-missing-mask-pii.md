@@ -1,7 +1,7 @@
 ---
 type: error
 date: 2026-09-28
-status: superseded
+status: active
 owner: code-review
 ---
 

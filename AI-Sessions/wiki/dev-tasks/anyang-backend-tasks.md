@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -51,13 +51,15 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 3. **Gemini 임베딩 클라이언트 + 재시도·배치** — 공통 유틸(임베딩 호출, 백오프, 배치 처리).
    이후 2-2·4·6번이 의존.
 4. **임베딩 파이프라인** — `/api/jobs/embed`. 3번 의존.
-5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). 착수 전 `robots.txt`
-   준수와 HTML 구조를 실제로 확인해야 한다(구현 전 확인, backend 설계 5절) — 이 확인이
-   끝나기 전까지 파서 상세 구현은 보류.
+5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). robots.txt 404(제한 없음)와
+   게시판 HTML 구조는 2026-09-28 메인 세션이 확인했고 커밋 766ea20에서 구현·테스트됨
+   (backend 설계 5절, [[2026-09-28_anyang-first-build-paused]]). 구조가 바뀌면 파서를 갱신한다.
 6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 공용 가림 함수
    (`lib/mask-pii.ts` 등, 미확정 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·선호 추출 결과
    문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
-   기존에는 Gemini 임베딩에만 적용). 3번 의존.
+   기존에는 Gemini 임베딩에만 적용). **인용 공지 스트림(신규, 확인 항목 22, backend 설계
+   3-2절)** — RAG 검색 결과(notice_id 중복 제거)를 `event: citations` SSE 이벤트로 DeepSeek
+   청크 전에 먼저 전송, 빈 목록도 `data: []`로 전송. 3번 의존.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). 3·8번 의존. 중복 발송 방지 방식은
    database·backend 조율 완료(backend 설계 7절).
@@ -71,8 +73,10 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
     확인 후 `ADMIN_EMAILS` 파싱·비교, 401/403 — `accounts` 테이블 조회 방식 아님, 2차
     재점검 반영). 1·9번 의존(1번의 `token.provider`/`session` 클레임, 세션·미들웨어 재사용).
 13. **관리자 — 공지 수집 관리** — `GET/POST /api/admin/collect-runs`,
+    `GET /api/admin/notices`(신규, 확인 항목 23, 숨김 포함·페이지네이션),
     `PATCH /api/admin/notices/:id/hide`·`/unhide`(13-1절). 5·12번 의존. 5번(수집기 로직
-    재사용)이 끝난 뒤 착수.
+    재사용)이 끝난 뒤 착수. `GET /api/admin/notices`는 스키마 변경이 필요 없다(database
+    작업 없이 이 단위 안에서 구현).
 14. **관리자 — 알림 발송 현황 / 사용자 관리·통계 / 외부 API 사용량** —
     `GET /api/admin/notify-logs/summary`, `GET/PATCH/DELETE /api/admin/users*`,
     `GET /api/admin/stats`, `GET /api/admin/api-usage/summary`(13-2~13-4절). 12번 의존.

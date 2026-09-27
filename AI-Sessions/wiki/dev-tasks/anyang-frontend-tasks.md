@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -22,6 +22,10 @@ owner: frontend
 2026-09-27)에서 확정됐다. `occupation_type`의 온보딩 입력 컴포넌트(select vs 라디오, 8개
 선택지 때문에 나온 제안)는 설계 승인(2026-09-27)으로 네이티브 select로 확정됐다
 ([[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)]]).
+
+**2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
+1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
+3절(채팅 인용 카드)·11절(공지 목록 탭) draft 반영에 의존한다.
 
 ## Details
 
@@ -52,8 +56,12 @@ owner: frontend
 4. **온보딩 화면** (`/onboarding`) — 프로필 입력 폼(4개 확정 항목·코드값 셋 확정 기준 —
    [[anyang-service-scope]]), `PUT /api/profile` 연동. `occupation_type` 입력 컴포넌트(select
    vs 라디오)는 화면 설계 승인 시 확정.
-5. **채팅 화면** (`/chat`) — 메시지 리스트, 스트리밍 응답 렌더링, 공지 인용 카드, 히스토리
-   목록 진입점. `POST /api/chat` 연동.
+5. **채팅 화면** (`/chat`) — 메시지 리스트, 스트리밍 응답 렌더링, 히스토리 목록 진입점.
+   `POST /api/chat` 연동. (1차 구현은 인용 카드 없이 텍스트만 표시 — 인용 카드는 5-1번.)
+5-1. **채팅 인용 카드 반영** (`/chat`, 신규 — 확인 항목 22) — SSE 파서에 `event: citations`
+   블록 분기 추가, 인용 카드(제목·게시일, `/notices/[id]` 링크) 렌더링, 빈 목록 시 카드 행
+   생략. 세부는 [[anyang-frontend-screens#3. 채팅 화면 (`/chat`, 미확정)]] "인용 공지 카드"
+   절. 5번 이후 착수.
 6. **추천 공지 피드·상세** (`/notices`, `/notices/[id]`) — `GET /api/notices/recommended`,
    `GET /api/notices/:id` 연동.
 7. **알림 설정 화면** (`/settings/notifications`) — 토글·시각 선택 UI, 알림을 켠 시각
@@ -75,8 +83,13 @@ owner: frontend
     아니라 이번 로그인 방식(JWT provider 클레임) 기준, backend 13-0절), 확인 다이얼로그
     공통 컴포넌트(정지·정지 해제·삭제 공용). 13~15번이 의존.
 13. **공지 수집 관리 화면** (`/admin/collect-runs`) — 실행 이력, 수동 수집 실행(최대 300초
-    진행 상태 표시), 공지 숨김/해제. `GET/POST /api/admin/collect-runs`,
-    `PATCH /api/admin/notices/:id/hide|unhide` 연동.
+    진행 상태 표시). `GET/POST /api/admin/collect-runs` 연동. (1차 구현은 실행 이력·수동
+    수집만 있고 숨김 UI 없음 — 공지 목록·숨김/해제는 13-1번.)
+13-1. **공지 목록 탭 반영** (`/admin/collect-runs`, 신규 — 확인 항목 23) — "실행 이력"/
+    "공지 목록" 탭 전환, `GET /api/admin/notices`(상태 필터·페이지 이동) 연동, 숨김/해제
+    확인 다이얼로그 경유 `PATCH /api/admin/notices/:id/hide|unhide` 연동, 400/5xx 에러 표시.
+    세부는 [[anyang-frontend-screens#11. 공지 수집 관리 (`/admin/collect-runs`, 미확정)]]
+    "공지 목록 탭" 절. 13번 이후 착수, 12번(관리자 공통 가드)에도 의존.
 14. **알림 발송 현황·외부 API 사용량 화면** (`/admin/notify-logs`, `/admin/api-usage`) — 날짜
     범위 표. `GET /api/admin/notify-logs/summary`, `GET /api/admin/api-usage/summary` 연동.
     파일이 겹치지 않아 13번과 병렬 가능.
@@ -87,8 +100,8 @@ owner: frontend
 ### 순서 제안
 
 1 → 2 → 3 → 3-1(3과 파일 겹치지 않으면 병렬 가능) → 4 → (5, 6 병렬 가능, 파일 겹치지 않음) →
-(7, 8 함께) → 9, 10(각각 병렬 가능, 파일 겹치지 않음) → 11 → 12 → (13, 14, 15 각각 병렬 가능,
-파일 겹치지 않음).
+5-1 → (7, 8 함께) → 9, 10(각각 병렬 가능, 파일 겹치지 않음) → 11 → 12 → (13, 14, 15 각각
+병렬 가능, 파일 겹치지 않음) → 13-1.
 
 ## 테스트 방법
 

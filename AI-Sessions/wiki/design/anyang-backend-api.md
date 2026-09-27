@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -15,6 +15,11 @@ Gemini 임베딩, 공지 수집기(안양시 청년 게시판 1개), 임베딩 �
 Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 스키마는
 [[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이며 `(미확정)`이고,
 사용자 설계 승인으로 확정된다.
+
+**2026-09-28 개정(확인 항목 22·23)**: 채팅 응답에 인용 공지 스트림 계약(3-2절)과 관리자용
+`GET /api/admin/notices`(13-1절)를 추가했다. 둘 다 기존 스키마
+([[anyang-database-schema]])로 구현 가능하며 스키마 변경이 필요하지 않다. 값은 모두
+`(미확정)`이며 재승인 대상이다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -343,6 +348,10 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
       있으면)과 가림 처리 후 임베딩한 벡터를 결합(예: 최근 선호 top-K 평균 + 현재 메시지
       임베딩, 가중치 미확정)해 쿼리 벡터를 만든다.
    b. `notice_chunks`에서 코사인 유사도 상위 K건(K 미확정, 제안 5)을 pgvector HNSW로 검색.
+      이 검색 쿼리는 `notices.hidden_at is null` 조건을 포함해 숨김 공지를 원천 제외한다(5절
+      숨김 처리 방식 그대로, 기존 구현 유지). **이 K건이 3-2절 인용 공지 목록의 원천이다**
+      (제안, 미확정 — 검색과 인용이 같은 결과 집합을 쓴다. 별도 인용 전용 검색을 추가하지
+      않는다, YAGNI).
    c. **프로필 조건 필터**: `notices`/`notice_chunks`에 정형화된 대상 조건 컬럼(연령·성별·
       직군 자격요건)을 두지 않는 것은 1차 출시 범위로 확정됐다([[anyang-service-scope]],
       user, 2026-09-27 — 게시판 구조 확인 여부와 무관하게 이번 스콥에서는 재검토하지
@@ -361,7 +370,10 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
      파라미터로 사용자별 동시성을 관리할 수 있으나, 식별정보 전송 금지 원칙에 따라 실제
      `user_id`/`email`이 아닌 **서버가 발급한 무작위 내부 ID**만 이 파라미터에 넣는다(제안,
      미확정 — 예: `crypto.randomUUID()`를 세션마다 생성해 재사용).
-4. 응답 스트리밍 중 청크를 클라이언트로 전달, 완료 후 `messages`에 저장(role=assistant).
+4. **응답 스트리밍**(제안, 미확정 — 3-2절 인용 계약 반영): 클라이언트로 보내는 스트림 맨
+   앞에 3-2절의 인용 이벤트 1개를 먼저 보낸 뒤, 이어서 DeepSeek SSE 청크를 그대로(tee)
+   전달한다. 완료 후 `messages`에 저장(role=assistant, 인용 목록 자체는 저장하지 않는다 —
+   2-b의 검색 결과에서 매번 다시 구할 수 있어 저장할 필요가 없다, YAGNI).
 5. **선호 추출(제안, 미확정)**: 대화 종료 또는 N턴마다(N 미확정) DeepSeek에 "이 대화에서
    드러난 선호를 문장으로 요약" 요청(식별정보 없이 대화 내용만 전송) → 결과 문장에도 0번의
    가림 함수를 적용한 뒤(제안, 채택, 2차 재점검 반영 — 사용자가 대화 중 언급한 전화번호·
@@ -403,6 +415,44 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
   목록 식별은 충분). 제목은 최초 생성 후 수정 API를 두지 않는다(제안, 미확정).
 - 인증 필요, 본인 것만 접근.
 
+### 3-2. 채팅 인용 공지 스트림 계약 (신규, 제안, 미확정 — 확인 항목 22 반영)
+
+[[anyang-frontend-screens#3. 채팅]]의 인용 카드(제목 + `/notices/[id]` 링크)가 렌더링할 수
+있도록, `POST /api/chat` 응답 스트림에 인용 공지 목록을 담는 이벤트를 추가한다. DeepSeek
+SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 기존 구현 유지) — 인용 목록은
+그 앞에 별도 이벤트로 한 번만 보낸다.
+
+- **이벤트 형식(제안, 미확정)**: SSE 커스텀 이벤트 `event: citations`, 뒤이어
+  `data: <JSON>\n\n` 한 줄. JSON 배열의 각 원소:
+  `{ id, title, source_url, posted_at }` — `posted_at`은 `notices.published_at`
+  ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]], null 허용
+  컬럼이므로 값이 null일 수 있다, 프런트가 null 처리). DeepSeek 표준 청크(`data:
+  {"choices":[...]}`형)와 구분하려고 `event:` 필드를 쓴다 — 클라이언트가 `event:` 없는
+  줄(`data:`만 있는 줄)은 기존처럼 OpenAI 호환 델타로, `event: citations`가 붙은 블록만
+  인용 목록으로 파싱한다(제안, 미확정 — 정확한 파서 분기는 frontend 소관).
+- **전송 시점(제안, 미확정)**: DeepSeek 호출(3절 3번) 직전, 2-b RAG 검색이 끝난 직후 스트림
+  헤더를 연 뒤 이 이벤트 1개를 가장 먼저 쓰고, 그다음 DeepSeek 응답 스트림을 이어붙인다.
+  인용 이벤트는 대화당 1회만 보낸다(대화 도중 갱신 없음, YAGNI).
+- **원천(확정 — 위 2-b 반영)**: 2-b RAG 검색으로 이미 구한 상위 K개 `notice_chunks` 결과를
+  그대로 쓴다. 같은 `notice_id`의 청크가 여러 건 뽑히면 **가장 유사도가 높은(검색 순서상
+  먼저 나온) 1건만 남기고 중복 제거**한다(제안, 미확정 — 공지 단위로 카드 1개씩만 보여주면
+  충분, 청크 단위로 여러 장 보여줄 필요 없다). 중복 제거 후 순서는 유사도 순 그대로 유지.
+- **숨김 공지 제외(확정)**: 2-b 검색 쿼리 자체가 `notices.hidden_at is null` 조건을 이미
+  포함하므로(위 2-b 수정 반영) 별도 필터가 필요 없다 — 검색 결과에 숨김 공지가 애초에
+  섞이지 않는다.
+- **빈 목록 처리(제안, 미확정)**: 2-b 검색 결과가 0건이면(관련 공지 없음, 3절 기존
+  `noticesText`의 "(관련 공지 없음)" 분기와 동일 조건) `event: citations` 이벤트를
+  `data: []`(빈 배열)로 보낸다 — 이벤트 자체를 생략하지 않는다(제안, 채택 — 프런트가 항상
+  같은 이벤트를 기다리면 되므로 "이벤트가 없으면 아직 안 왔다 vs 원래 없다"를 구분할 필요가
+  없어진다, YAGNI에 부합).
+- **테스트 방법(제안)**: 목 DeepSeek 스트림으로 `POST /api/chat` 통합 테스트 시, 응답 스트림을
+  파싱해 `event: citations` 블록이 DeepSeek 청크보다 먼저 오는지, JSON 배열 각 원소가
+  `id/title/source_url/posted_at` 키를 갖는지 확인. 숨김 처리된(`hidden_at` not null)
+  공지가 RAG 검색 픽스처에 섞여 있어도 인용 목록에 나오지 않는지 확인(2-b 쿼리 조건
+  검증). 관련 공지가 0건인 픽스처로 호출 시 `data: []`가 오는지(이벤트 생략이 아닌지)
+  확인. 같은 `notice_id`의 청크 2개가 RAG 결과에 함께 뽑히는 픽스처로 인용 목록에 그
+  `notice_id`가 1건만 남는지(중복 제거) 확인.
+
 ### 4. Gemini 임베딩 호출
 
 - 모델 `gemini-embedding-001`, `output_dimensionality=768`. 모델이 기본 3072차원이며
@@ -425,23 +475,27 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 - 대상 게시판 URL: **확정** — 안양시 청년 게시판 1개
   (https://www.anyang.go.kr/youth/selectBbsNttList.do?bbsNo=1184&key=3543,
   [[anyang-service-scope]], user, 2026-09-27).
-- **robots.txt 준수 확인 — 구현 전 확인(미확정)**: 이 설계 세션(backend)에는 웹 접근 도구가
-  없어 `https://www.anyang.go.kr/robots.txt`와 실제 게시판 HTML 구조를 이번에 확인하지
-  못했다. 구현 착수 전 반드시 확인한다 — 확인 방법(제안, 미확정): 구현 단계에서
-  `curl https://www.anyang.go.kr/robots.txt`로 `Disallow`/`Crawl-delay`를 먼저 읽고,
-  `/youth/selectBbsNttList.do` 경로가 `Disallow`에 걸리면 수집을 시작하지 않고 사용자에게
-  보고한다(설계 변경 필요 사안이 된다).
-- 흐름(제안, 미확정):
-  1. 위 robots.txt 확인을 통과해야 수집을 실행한다(가드).
-  2. `robots.txt`의 `Crawl-delay`가 있으면 그 값을, 없으면 기본 요청 간격 2초(제안, 미확정)를
-     요청 사이에 둔다.
-  3. 목록 페이지 → 상세 페이지 순으로 HTML을 파싱(파서 라이브러리 미확정, 예:
-     `cheerio` — 게시판 HTML 구조 확인 후 셀렉터 확정, 구현 전 확인 항목).
+- **robots.txt 준수 확인 — 확인됨(2026-09-28, 메인 세션 확인)**:
+  `https://www.anyang.go.kr/robots.txt`는 404 — 제한 없음으로 처리한다(구현에 반영됨,
+  `web/lib/collector.ts`).
+- **게시판 HTML 구조 — 확인됨(2026-09-28, 메인 세션 확인, 커밋 766ea20에서 구현·테스트됨,
+  출처: [[2026-09-28_anyang-first-build-paused]] "다음 할 일" 3번)**. 구조가 바뀌면 파서를
+  갱신한다.
+  - 목록: `table.p-table tbody tr` → `td.p-subject a`가 제목·상대 href(예:
+    `./selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=<n>&...`, `&amp;` 디코드 필요), 마지막
+    `td`의 `<time>`이 게시일(YYYY-MM-DD). 고유키는 `nttNo`.
+  - 상세: 제목 `span.p-table__subject_text`, 본문 `td.p-table__content`, 첨부
+    `ul.p-attach a.p-attach__link`. 상세 페이지에는 게시일이 없으므로 목록에서 읽은 값을 쓴다.
+  - 인코딩은 UTF-8.
+- 흐름(파서 부분 확인됨, 나머지 미확정 표시 유지):
+  1. robots.txt 404(제한 없음) 확인을 거쳐 수집을 실행한다.
+  2. `robots.txt`에 `Crawl-delay`가 없으므로 기본 요청 간격 2초(제안, 미확정)를 요청 사이에
+     둔다.
+  3. 목록 페이지 → 상세 페이지 순으로 위 확인된 셀렉터로 HTML을 파싱한다(파서 라이브러리는
+     `cheerio`, 구현됨).
   4. `content_hash`(제목+본문 해시, 미확정)로 기존 공지와 비교해 신규/변경분만 저장.
   5. 신규/변경 공지는 임베딩 파이프라인 큐에 등록(4번 참고).
 - User-Agent에 연락 가능한 식별 문자열을 남긴다(제안, 미확정 — 예: 서비스명 + 문의 이메일).
-- 게시판 HTML 구조(목록/상세 셀렉터, 페이지네이션 방식)는 구현 전 확인이 필요하다 — 확정된
-  것은 URL과 robots.txt 준수·요청 간격 원칙뿐이다.
 - **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices
   (미확정)]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
   애플리케이션 책임으로 끝나고, 숨김 해제 시 재임베딩 비용이 없다(YAGNI, 물리 삭제는 되돌리기
@@ -676,6 +730,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 |---|---|---|
 | GET | `/api/admin/collect-runs` | `collect_runs` 목록(최신순, 페이지네이션 미확정) |
 | POST | `/api/admin/collect-runs` | 수동 수집 실행 |
+| GET | `/api/admin/notices` | 공지 목록(숨김 포함, 페이지네이션) — 신규(확인 항목 23) |
 | PATCH | `/api/admin/notices/:id/hide` | 공지 숨김. body `{ hidden_reason? }`(미확정) |
 | PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
 
@@ -684,6 +739,36 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   한도(300초, 11절)를 넘기지 않는다는 전제 — 게시판 1개, 신규/변경분만 저장하는 구조라 매
   실행이 300초를 넘길 가능성은 낮다고 판단(YAGNI, 별도 잡 큐를 두지 않는다). 실행이 오래
   걸리는 경우가 실제로 생기면 그때 비동기 큐 도입을 재검토한다(설계 변경 대상).
+- **`GET /api/admin/notices` (신규, 제안, 미확정 — 확인 항목 23 반영)**: 관리자 공지 목록
+  화면([[anyang-frontend-screens#11. 공지 수집 관리 (`/admin/collect-runs`, 미확정)]])이
+  공지를 숨김/해제하려면 먼저 전체 목록(숨김 포함)을 봐야 하는데, 기존에는 조회 API가
+  없었다. 필요한 컬럼(`id`, `title`, `source_url`, `published_at`, `collected_at`,
+  `hidden_at`, `hidden_reason`)은 이미
+  [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]]에 있어
+  **스키마 변경 없이** 이 API를 만들 수 있다(database 문서 확인 완료, 이번 세션에서 스키마
+  변경 요청 없음).
+  - 쿼리 파라미터(제안, 미확정): `page`(1부터 시작, 기본 1), `page_size`(기본 20, 최대
+    100 — 다른 관리자 목록과 별도 상한을 둘 이유가 없어 13-3절 사용자 목록과 같은 관례를
+    따른다, 제안). 숨김 여부로 걸러 보고 싶을 수 있어 `hidden`(선택, `true`/`false`/생략 —
+    생략 시 전체) 파라미터도 둔다(제안, 미확정 — 필터 없이 전체를 다 내려도 되지만 관리자가
+    "숨김만" 또는 "정상만" 보고 싶을 수 있어 추가, YAGNI에 크게 위배되지 않는 선에서 쿼리
+    파라미터 1개 추가).
+  - 정렬(제안, 미확정): `collected_at desc`(최신 수집순 고정, 정렬 기준 선택 파라미터는
+    두지 않는다 — 다른 관리자 목록도 정렬 옵션이 없다, YAGNI).
+  - 응답(제안, 미확정): `{ items: [{ id, title, source_url, published_at, collected_at,
+    hidden_at, hidden_reason }], page, page_size, total_count }`. `total_count`는
+    `count(*)` 별도 쿼리(제안 — 다른 관리자 목록 페이지네이션과 같은 관례가 아직 이
+    문서에 없어 새로 정한다, 페이지네이션이 미확정인 `collect-runs`와 달리 이 API는
+    프런트가 "전체 몇 건" 표시를 요구할 수 있다고 보고 포함, 미확정이면 frontend 조율
+    시 제외 가능).
+  - 에러 코드: 인증 없음 401, 관리자 아님 403(`ADMIN_ONLY`, 13-0절과 동일), `page`/
+    `page_size`가 숫자가 아니거나 범위를 벗어나면 400(제안, 미확정 — 메시지 형식은
+    다른 400과 동일하게 `{ error: "INVALID_REQUEST" }`, 3절 기존 관례 재사용).
+  - 인가: 13-0절 `requireAdmin` 그대로 재사용(제안 — 새 인가 규칙을 만들지 않는다, YAGNI).
+  - 테스트 방법(제안): 숨김/정상 공지가 섞인 픽스처로 호출 시 `hidden` 파라미터 없이는
+    둘 다, `hidden=true`면 숨김만, `hidden=false`면 정상만 나오는지 확인. `page_size`
+    범위를 벗어난 값(0, 101)으로 호출 시 400 확인. 관리자 아닌 로그인 사용자 403,
+    비로그인 401 확인(13-0절 관례와 동일 방식으로 자동 검증).
 - `PATCH .../hide`, `.../unhide`는 [[anyang-database-schema#notices (미확정)]]의
   `hidden_at`/`hidden_reason`을 갱신한다. 숨김 처리는 5절에서 채택한 쿼리 조건 방식을 따른다
   (물리 삭제 없음).
@@ -822,6 +907,15 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   판정한다).
 - **공지 숨김**: `hide` 후 `/api/notices/recommended`·채팅 RAG 검색 결과에 해당 공지가 빠지는지
   확인. `unhide` 후 다시 나오는지 확인.
+- **채팅 인용 공지 스트림(3-2절, 확인 항목 22)**: 위 "채팅" 항목의 페이로드 캡처 테스트에
+  더해, `event: citations` 블록이 DeepSeek 청크보다 먼저 오는지·JSON 배열 원소가
+  `id/title/source_url/posted_at` 키를 갖는지·숨김 공지가 섞인 RAG 픽스처에서도 인용
+  목록에 나오지 않는지·관련 공지 0건일 때 `data: []`가 오는지·같은 `notice_id` 청크
+  중복이 인용 목록에서 1건으로 합쳐지는지 확인(3-2절 테스트 방법과 동일, 여기서는 목록만
+  참조).
+- **관리자 공지 목록(확인 항목 23)**: `GET /api/admin/notices`가 `hidden` 파라미터로
+  숨김/정상을 필터링하는지, `page_size` 범위를 벗어나면 400인지, 관리자 아님 403·비로그인
+  401인지 확인(13-1절 테스트 방법과 동일, 여기서는 목록만 참조).
 - **알림 중복 발송 방지 + pending 선점(`notify_logs`)**: 같은 (user_id, notice_id) 쌍으로
   `INSERT ... ON CONFLICT DO NOTHING`을 두 번 실행해 첫 번째만 `pending` 행을 만들고 두
   번째는 삽입되지 않는지(전송을 건너뛰는지) 확인. 전송 후 `UPDATE`로 `success`/`failed`가
@@ -866,6 +960,14 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   관리자 수동 삭제 경로)을 기본안으로 채택했다. 이메일 인증이 없는 구조적 한계상 완전한
   해결책은 없다고 판단해 블로킹 질문으로 올리지 않았으나, 설계 승인 시 이 기본안 자체에
   이견이 없는지 확인이 필요하다.
+- **채팅 인용 공지 스트림(3-2절, 확인 항목 22)** — 이벤트 형식(`event: citations`)·전송
+  시점·중복 제거·빈 목록 처리는 backend 제안이며 `(미확정)`이다. frontend가 이 형식으로
+  파싱 가능한지는 다음 조율 차례에 확인이 필요하다(이번 호출 범위 밖 — frontend 조율은
+  이번 지시서에서 요청받지 않았다).
+- **관리자 공지 목록(13-1절, 확인 항목 23)** — `GET /api/admin/notices`는 기존 스키마
+  ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]])로 구현
+  가능하다(스키마 변경 불필요, database 재조율 없이 진행). 쿼리 파라미터·응답 필드·
+  `total_count` 포함 여부는 backend 제안이며 `(미확정)`이다.
 
 ## Links
 
@@ -880,3 +982,4 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - [[anyang-backend-tasks]]
 - [[anyang-frontend-screens]]
 - [[anyang-frontend-tasks]]
+- [[anyang-preferences-put-missing-mask-pii]]
