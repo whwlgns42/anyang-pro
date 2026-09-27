@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requireUser } from "@/lib/require-auth";
+import { maskPii } from "@/lib/mask-pii";
 import { embedText } from "@/lib/embeddings";
 
 type Params = { params: Promise<{ id: string }> };
@@ -25,10 +26,14 @@ export async function PUT(request: NextRequest, { params }: Params) {
     return NextResponse.json(null, { status: 404 });
   }
 
+  // user_preferences 저장 문장은 채팅 선호 추출(web/app/api/chat/route.ts)과 같이 가림 처리 후
+  // 문장으로 통일한다(anyang-backend-api 3절 0번, [[anyang-ai-models-data-transfer]]).
+  const maskedText = maskPii(preferenceText);
+
   // 재임베딩 실패(2차 묶음 연결 전에는 항상 실패) 시 텍스트도 갱신하지 않는다 — 설계 요구.
   let embedding;
   try {
-    embedding = await embedText(preferenceText);
+    embedding = await embedText(maskedText);
   } catch {
     return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 502 });
   }
@@ -40,10 +45,10 @@ export async function PUT(request: NextRequest, { params }: Params) {
             embedding_model = $5,
             updated_at = now()
       where id = $1 and user_id = $2`,
-    [id, authResult.userId, preferenceText, JSON.stringify(embedding.embedding), embedding.model],
+    [id, authResult.userId, maskedText, JSON.stringify(embedding.embedding), embedding.model],
   );
 
-  return NextResponse.json({ id, preference_text: preferenceText });
+  return NextResponse.json({ id, preference_text: maskedText });
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {

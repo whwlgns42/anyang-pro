@@ -1,4 +1,5 @@
 import { ApiCallError, withApiUsageLog } from "./api-usage-log";
+import { maskPii } from "./mask-pii";
 
 // anyang-backend-api 4절 Gemini 임베딩 클라이언트 + 재시도·배치(dev-tasks 3번).
 export type EmbeddingResult = {
@@ -62,9 +63,13 @@ async function callGeminiWithRetry(text: string): Promise<{ embedding: number[] 
   throw lastError;
 }
 
+// 가림 처리는 이 함수 한 곳에서 강제한다(anyang-backend-api 3절 0번) — 호출부가 maskPii()를
+// 빠뜨려도 Gemini로 원문이 나가지 않는다. maskPii는 이미 가려진 텍스트를 다시 넣어도 정규식이
+// 더 매칭할 것이 없어 그대로 반환하므로(멱등), 호출부가 이미 가린 텍스트를 넘겨도 결과는 같다.
 export async function embedText(text: string): Promise<EmbeddingResult> {
+  const masked = maskPii(text);
   const embedding = await withApiUsageLog("gemini", "embedding", async () => {
-    const result = await callGeminiWithRetry(text);
+    const result = await callGeminiWithRetry(masked);
     return { value: result.embedding };
   });
   return { embedding, model: GEMINI_MODEL };

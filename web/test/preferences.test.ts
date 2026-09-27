@@ -62,6 +62,33 @@ describe("PUT /api/preferences/:id", () => {
     expect(updateCall).toBeDefined();
   });
 
+  it("masks phone/email/rrn before sending to embedText, and stores the masked text", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("suspended_at")) return { rows: [{ suspended_at: null }] };
+      if (sql.includes("policy_version")) return { rows: [{ policy_version: "2026-09-27" }] };
+      if (sql.includes("select id from user_preferences")) return { rows: [{ id: "pref-1" }] };
+      return { rows: [] };
+    });
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+
+    const raw = "연락처는 010-1234-5678, 메일은 test.user@example.com, 주민번호 950101-1234567";
+    const res = await PUT(makeRequest({ preference_text: raw }), {
+      params: Promise.resolve({ id: "pref-1" }),
+    });
+
+    expect(res.status).toBe(200);
+    const [sentText] = embedTextMock.mock.calls[0] as [string];
+    expect(sentText).not.toContain("010-1234-5678");
+    expect(sentText).not.toContain("test.user@example.com");
+    expect(sentText).not.toContain("950101-1234567");
+
+    const updateCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("update user_preferences"));
+    const storedText = (updateCall?.[1] as unknown[])[2] as string;
+    expect(storedText).not.toContain("010-1234-5678");
+    expect(storedText).not.toContain("test.user@example.com");
+    expect(storedText).not.toContain("950101-1234567");
+  });
+
   it("404 when preference does not belong to the user", async () => {
     queryMock.mockImplementation(async (sql: string) => {
       if (sql.includes("suspended_at")) return { rows: [{ suspended_at: null }] };
