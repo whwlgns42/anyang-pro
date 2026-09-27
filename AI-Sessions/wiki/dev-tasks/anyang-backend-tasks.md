@@ -1,0 +1,70 @@
+---
+type: dev-task
+date: 2026-09-27
+status: draft
+owner: backend
+---
+
+# 안양 청년정책 비서 — Backend 구현 작업 단위
+
+## Summary
+
+[[anyang-backend-api]] 설계 승인 후 구현할 작업을 기능 단위로 나눈 목록이다. 각 단위는
+독립적으로 테스트·커밋 가능하도록 쪼갰다(dev-common 규칙 4). 순서는 의존 관계를 따른다 —
+database의 마이그레이션이 먼저 적용돼야 한다.
+
+## Context
+
+의존: [[anyang-database-schema]]의 테이블(users/accounts/credentials/profiles/notices/
+notice_chunks/conversations/messages/user_preferences/push_subscriptions/notify_settings/
+consents)이 먼저 마이그레이션돼 있어야 아래 작업을 시작할 수 있다. 서비스 범위는
+[[anyang-service-scope]](수집 대상 게시판 1개, 프로필 4항목, 알림 자유 시각+on/off, 기억·
+대화 히스토리 화면, 인증 부가 테이블 미사용, 가입 시 동의)로 확정됐다.
+
+## Details
+
+### 작업 단위 (모두 [[anyang-backend-api]] 승인 후 착수, 값은 그 문서 기준 미확정)
+
+1. **인증·동의** — Auth.js v5 설정(Google + Credentials provider, JWT 세션),
+   `/api/auth/register`(동의 게이트 포함), `/api/auth/consent`(Google 로그인 동의).
+   비밀번호 재설정 포함 여부는 미해결 질문(backend 설계 1-1절) — 해결되면 이 단위에 추가.
+   테스트: 로그인/가입/동의/오류 케이스([[anyang-backend-api#테스트 방법]] 1번).
+2. **프로필 CRUD** — `GET/PUT /api/profile`(4항목: birth_year/gender/occupation_type/
+   enrollment_status). 테스트: 인증·본인 확인.
+2-1. **알림 설정** — `GET/PUT /api/notify-settings`. 테스트: 인증·형식 검증.
+2-2. **기억(user_preferences)** — `GET/PUT/DELETE /api/preferences`. PUT은 동기 재임베딩
+   포함(3번 의존). 테스트: 수정 시 임베딩 갱신, 실패 시 롤백.
+2-3. **대화 히스토리** — `GET /api/conversations`, `GET /api/conversations/:id/messages`,
+   대화 생성 시 `title` 자동 생성(첫 메시지 앞부분).
+3. **Gemini 임베딩 클라이언트 + 재시도·배치** — 공통 유틸(임베딩 호출, 백오프, 배치 처리).
+   이후 2-2·4·6번이 의존.
+4. **임베딩 파이프라인** — `/api/jobs/embed`. 3번 의존.
+5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). 착수 전 `robots.txt`
+   준수와 HTML 구조를 실제로 확인해야 한다(구현 전 확인, backend 설계 5절) — 이 확인이
+   끝나기 전까지 파서 상세 구현은 보류.
+6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 3번 의존.
+7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출). 3·8번
+   의존. 중복 발송 방지 방식은 database와 후속 조율 필요(backend 설계 7절 미해결 질문).
+8. **Web Push** — `POST/DELETE /api/push/subscribe`, `web-push` 연동.
+9. **스케줄러 공유 시크릿 미들웨어** — `/api/jobs/*` 공통 인증. 4·5·7번이 의존.
+10. **환경변수·배포 설정** — `output: 'standalone'`, Vercel 프로젝트 설정(icn1), 9절 환경변수
+    실제 값 채우기(비밀 값은 문서에 남기지 않음). `APP_ORIGIN`은 배포 시 Vercel 기본 도메인
+    사용, 커스텀 도메인은 나중에(12-1절 절차).
+11. **UNO Q 전환 runbook 리허설** — 로컬 PostgreSQL 덤프/복원 1회(개발 환경 한정).
+
+### 순서 제안
+
+3, 9 → (1, 2, 2-1 병렬 가능) → 2-2, 4 → 6, 8, 2-3 → 7 → 10. 5는 robots.txt·HTML 구조
+확인이 끝나는 대로 별도로 끼워 넣는다. 11은 나머지가 끝난 뒤 여유 있을 때.
+
+## 테스트 방법
+
+각 작업 단위의 테스트는 [[anyang-backend-api#테스트 방법]]에 이미 기술돼 있다. 여기서는
+중복하지 않는다.
+
+## Links
+
+- [[anyang-backend-api]]
+- [[anyang-database-schema]]
+- [[anyang-youth-policy-assistant]]
+- [[anyang-service-scope]]

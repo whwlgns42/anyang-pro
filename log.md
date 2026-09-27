@@ -20,3 +20,8 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-27 --:-- | flag | [rule-skip] git 저장소가 없어 설계 문서 커밋을 git-manager에 위임하지 못함(git init 승인 대기) | .claude/rules/dev-common.md 규칙 4
 2026-09-27 --:-- | lint | flag 해결(원래 flag 줄의 2026-09-27 --:--): 사용자가 git init 승인, git-manager가 저장소 생성·초기 커밋 | [[anyang-youth-policy-assistant]]
 2026-09-27 --:-- | save | 비정상 종료된 pm 세션 재개: 설계 문서 역링크 보완, 설계 승인 대기 인수인계 작성 | [[anyang-database-schema]] [[anyang-backend-api]] [[2026-09-27_anyang-design-approval-wait]] [[anyang-youth-policy-assistant]]
+2026-09-27 20:12 | save | 하네스에 Jev 보조 판단 추가(scripts/jev.py: docs·dup·save-filter, 실패 시 종료 코드 3), 200개 트리거 대체, 회귀 검사 추가. 실측 약 1.4초/회 | [[.claude/rules/knowledge-ops]] [[.claude/rules/dev-common]] [[CLAUDE]]
+2026-09-27 20:12 | flag | [read-fail] export-template --self-check 실패: 배포본에 glossary·index의 안양 프로젝트 링크가 남음(reset_index가 Design·Dev Tasks·Conversations 절과 glossary를 초기화하지 않음) | .claude/skills/export-template/export.py
+2026-09-27 20:12 | flag | [rule-skip] 초기 커밋 0b7166d에 glossary·decisions 5종·anyang-frontend-screens·dev-tasks 2종 누락(untracked) | [[anyang-youth-policy-assistant]]
+2026-09-27 --:-- | save | 사용자 답변 반영: 서비스 범위 결정(수집 대상·프로필·알림·기억/히스토리 화면·개인정보 동의), 배포 원칙 5 변경(도메인 나중), 설계 수정 라운드 완료, 재승인 대기, 새 확인 항목 14~19 | [[anyang-service-scope]] [[anyang-deployment-portability]] [[anyang-database-schema]] [[anyang-backend-api]] [[anyang-frontend-screens]] [[anyang-backend-tasks]] [[anyang-frontend-tasks]] [[anyang-youth-policy-assistant]] [[2026-09-27_anyang-design-approval-wait]]
+2026-09-27 --:-- | lint | flag 해결(원래 flag 줄의 2026-09-27 20:12): 누락 파일(glossary·decisions·anyang-frontend-screens·dev-tasks·.gitkeep)을 설계 수정 커밋에 포함 | [[anyang-youth-policy-assistant]]

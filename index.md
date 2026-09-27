@@ -32,6 +32,7 @@
 - `scripts/lint_wiki.py`: 문서 구조·링크 그래프 검사기 (`bash scripts/lint-wiki.sh`로 실행)
 - `scripts/agent_guard.py`: 에이전트 규칙을 강제하는 훅 (호출 허용 목록, git 쓰기 제한, 종료 시 린트)
 - `scripts/test_rules.py`: 한 번 고친 규칙이 다시 깨지지 않는지 보는 회귀 검사 (`python scripts/test_rules.py`)
+- `scripts/jev.py`: Jev 보조 판단 — 관련 문서 순위, 중복 확인, Save Filter (실패 시 종료 코드 3, 직접 판단)
 - `.claude/settings.json`: 훅과 권한 설정 (push·init 등은 항상 사용자 확인)
 
 ## Projects
@@ -62,6 +63,7 @@
 - [[anyang-stack-database]] — 안양 비서: Next.js App Router PWA + PostgreSQL/pgvector
 - [[anyang-ai-models-data-transfer]] — 안양 비서: DeepSeek 대화, Gemini 무료 임베딩, 외부 AI에 식별정보 전송 금지
 - [[anyang-login-method]] — 안양 비서: Google 로그인 + 이메일·비밀번호 가입
+- [[anyang-service-scope]] — 안양 비서: 수집 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의
 - [[anyang-deployment-portability]] — 안양 비서: Vercel Hobby icn1 + Supabase 서울, UNO Q 양방향 이전 원칙, Docker 미사용
 
 ## Sources
