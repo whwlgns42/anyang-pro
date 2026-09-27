@@ -69,7 +69,7 @@ owner: pm
 16. 비밀번호 재설정 — 해결(2026-09-27, user): 1차 출시 제외, Google 로그인으로 대체 안내, 이메일 발송 수단 불필요. [[anyang-service-scope]]
 17. 알림 잡 중복 발송 방지 — `notify_logs`의 `unique(user_id, notice_id)`(database 제안). 설계 승인으로 확정. [[anyang-database-schema]]
 18. 처리방침 개정 시 재동의 — 해결(2026-09-27, user): 강제한다. [[anyang-service-scope]]
-19. 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 따르고 설계 승인으로 확정. `gender`·`occupation_type`은 제안 목록이 없어 database가 추가함 — 승인 때 사용자가 목록을 보고 확정. [[anyang-database-schema]]
+19. 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 따르고 설계 승인으로 확정. `gender`·`occupation_type`은 제안 목록이 없어 database가 추가함. 직군(업종·직무)과 재학/재직 여부(`enrollment_status`)가 겹치지 않게 다시 나눔(메인 세션 검토 반영). 승인 때 사용자가 목록을 보고 확정. [[anyang-database-schema]]
 20. 로그 보존 — 해결(2026-09-27, user): 수집 이력·API 사용량 90일 정리 잡 등록, 알림 발송 로그는 삭제 대상에서 제외. [[anyang-service-scope]]
 21. 발송 로그 `pending` 상태 — 해결(2026-09-27, user): 추가. 세부는 database·backend 설계. [[anyang-service-scope]]
 

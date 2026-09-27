@@ -120,8 +120,8 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
 | user_id | uuid, PK, FK → users.id, on delete cascade | |
 | birth_year | smallint, null 허용 | 나이대 계산용. 생년월일 전체 저장은 개인정보 최소화 관점에서 비권장(제안) |
 | gender | text, null 허용 | 선택값. 코드값 셋(미확정, 제안): `male`/`female`/`unspecified`(응답 안 함) |
-| occupation_type | text, null 허용 | 직군. 코드값 셋(미확정, 제안): `student`/`job_seeker`/`employee`/`self_employed`/`freelancer`/`unemployed`/`other` |
-| enrollment_status | text, null 허용 | 재학/재직 여부([[glossary]]). 코드값 셋(예: `student`/`employed`/`neither`)은 미확정 |
+| enrollment_status | text, null 허용 | 재학/재직/구직 등 상태([[glossary]]). 코드값 셋(미확정, 제안): `student`(재학)/`employed`(재직)/`job_seeking`(구직 중)/`none`(해당 없음) |
+| occupation_type | text, null 허용 | 업종·직무 성격. `enrollment_status`와 값이 겹치지 않는다. 코드값 셋(미확정, 제안): `it`(IT·소프트웨어)/`manufacturing`(제조)/`service`(서비스)/`public`(공공·비영리)/`self_employed`(자영업)/`other`(기타) |
 | updated_at | timestamptz | |
 
 - 개인정보 최소화 관점 선택지(제안):
@@ -129,16 +129,22 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
   2. 항목을 더 늘려야 하면 `ALTER TABLE ADD COLUMN`(되돌릴 수 있는 마이그레이션)으로 추가한다.
     단, 항목 범위 자체를 늘리는 것은 [[anyang-service-scope]] 확정을 뒤집는 것이므로 설계 변경
     절차(재승인)를 거친다.
-- **코드값 선택지 (미확정 제안값, 근거)**: `enrollment_status`는 위 표의
-  `student`/`employed`/`neither` 예시를 그대로 유지한다.
+- **코드값 선택지 (모두 미확정 제안값)**: "직군"(`occupation_type`)과 "재학/재직 여부"
+  (`enrollment_status`)는 사용자가 별도 항목으로 정했으므로([[anyang-service-scope]], user,
+  2026-09-27) 코드값이 서로 겹치지 않게 다시 나눴다.
   - `gender`(미확정, 제안): `male`/`female`/`unspecified`. 개인정보 최소화 원칙상 강제 응답을
     피해야 하므로 "응답 안 함"(`unspecified`)을 포함한다.
-  - `occupation_type`(미확정, 제안): `student`(학생)/`job_seeker`(구직자)/`employee`(직장인)/
-    `self_employed`(자영업자)/`freelancer`(프리랜서)/`unemployed`(무직)/`other`(기타) 7개.
-    안양시 청년정책 공고가 통상 구분하는 대상(재학생, 취업준비생, 재직자, 자영업·프리랜서,
-    미취업)을 근거로 5~8개 범위 안에서 구성했다. `enrollment_status`(재학/재직 여부)와 일부
-    의미가 겹치지만([[glossary]]), 정책 공고문은 재학/재직 여부와 별개로 직군(예: 프리랜서
-    vs 일반 직장인)을 구분해 자격 조건을 거는 경우가 있어 별도 항목으로 유지한다(제안 근거).
+  - `enrollment_status`(미확정, 제안): 재학·재직·구직 등 "상태"만 담는다 — `student`(재학)/
+    `employed`(재직)/`job_seeking`(구직 중)/`none`(그 외, 해당 없음) 4개.
+  - `occupation_type`(미확정, 제안): 업종·직무 "성격" 분류만 담는다 — `it`(IT·소프트웨어)/
+    `manufacturing`(제조)/`service`(서비스)/`public`(공공·비영리)/`self_employed`(자영업)/
+    `other`(기타) 6개. 재학생·미취업자처럼 직군이 없는 사용자는 이 컬럼이 이미 null 허용이므로
+    값을 넣지 않는다(제안) — null이 "해당 없음"을 의미하므로 별도 `none` 값은 추가하지 않는다.
+    구직자는 상태상 `enrollment_status='job_seeking'`이면서 `occupation_type`은 null(아직
+    특정 업종에 속하지 않음)이 되는 조합을 기본으로 본다(제안).
+  - 두 항목은 서로 다른 축(상태 vs 업종 성격)이라 값이 겹치지 않는다. 다만 두 항목을 함께
+    쓰는 근거(정책 공고가 실제로 이 조합으로 자격 조건을 나눈다는 것)는 확인된 출처가 없는
+    추정이다(미확정, 근거: 추정) — 확인이 필요한 항목에 올린다.
   이 코드값들은 다른 설계 값과 마찬가지로 설계 승인으로 확정되며, 승인 전까지는 `(미확정)`
   표시를 유지한다([[anyang-service-scope]], user, 2026-09-27).
 
@@ -600,9 +606,9 @@ select cron.schedule(
 - 공지 자격요건 구조화 컬럼 — 해결(2026-09-27, user): 1차 출시에서 만들지 않는다.
   [[anyang-service-scope]]. 위 `notices` 절 제목에 명시.
 - 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 설계 승인으로 확정한다.
-  [[anyang-service-scope]]. `gender`(`male`/`female`/`unspecified`)와 `occupation_type`
-  (`student`/`job_seeker`/`employee`/`self_employed`/`freelancer`/`unemployed`/`other`)
-  제안값을 위 `profiles` 절에 추가했다(근거는 그 절 참고) — 설계 승인 전까지 (미확정) 유지.
+  [[anyang-service-scope]]. `gender`/`enrollment_status`/`occupation_type` 제안값은 위
+  `profiles` 절 "코드값 선택지" 메모를 참고(값을 여기 옮겨 적지 않는다 — 중복 방지) —
+  설계 승인 전까지 (미확정) 유지.
 - 비밀번호 재설정 1차 출시 제외 — 해결(2026-09-27, user): 제외. [[anyang-service-scope]].
   관련 테이블(`verification_tokens` 등) 없음을 재확인 — 이 문서에 그런 테이블이 없다.
 - 수집 대상 게시판에 따른 notices 갱신·중복 판정 세부, collect-job 주기 (확인 항목 1과 연결) —
