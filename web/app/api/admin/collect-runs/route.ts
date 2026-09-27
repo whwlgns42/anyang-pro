@@ -4,6 +4,9 @@ import { requireAdmin } from "@/lib/require-admin";
 import { runCollectJob } from "@/lib/collector";
 
 // anyang-backend-api 13-1절 — collect_runs 목록 조회, 수동 수집 실행(동기, manual).
+// anyang-backend-api 10절 — POST가 실행하는 runCollectJob과 동일한 Fluid Compute 300초 한도 전제.
+export const maxDuration = 300;
+
 export async function GET() {
   const admin = await requireAdmin();
   if (admin instanceof Response) return admin;

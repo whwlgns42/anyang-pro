@@ -6,6 +6,9 @@ import { runEmbedJob } from "@/lib/embed-job";
 // anyang-backend-api 5·7절 — 공지 수집기 잡. pg_cron이 5분 간격이 아닌 하루 1회 트리거한다.
 // 7절 표 "제안: 수집 잡 직후" — 별도 엔드포인트 호출 없이 같은 요청 안에서 임베딩 파이프라인을
 // 직접 호출한다(pg_cron 잡을 추가로 등록하지 않는다).
+// anyang-backend-api 10절 — Fluid Compute 함수 최대 300초 한도를 명시.
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const authError = requireSchedulerSecret(request);
   if (authError) return authError;

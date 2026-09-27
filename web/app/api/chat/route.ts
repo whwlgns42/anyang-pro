@@ -9,6 +9,9 @@ import { streamDeepSeekChat, summarizePreference, type ChatMessage } from "@/lib
 // anyang-backend-api 3절 — 채팅 + RAG. DeepSeek 스트리밍 응답을 tee()해 클라이언트로는 원본
 // SSE 바이트를 그대로 전달하고, 다른 분기는 서버가 읽어 조립·저장한다(스트림 형식 자체는
 // DeepSeek(OpenAI 호환) SSE 그대로 — 3차/frontend가 그 형식을 그대로 파싱해야 한다).
+// anyang-backend-api 10절 — DeepSeek 스트리밍 응답이 Fluid Compute 함수 최대 300초 안에 끝나야 한다.
+export const maxDuration = 300;
+
 const RAG_TOP_K = 5;
 const PREFERENCE_EXTRACTION_EVERY_N_MESSAGES = 6; // 제안값(미확정) — 메시지 6개(왕복 3회)마다
 
