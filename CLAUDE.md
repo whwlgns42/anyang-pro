@@ -62,5 +62,6 @@ Claude Code가 이 Obsidian vault에서 일할 때 따르는 업무 규약의 �
 | 설치된 스킬·플러그인 대장 | `.claude/skills/README.md` |
 | 개발 도구(gh CLI 등) 설치법 | `.claude/rules/dev-environment.md` |
 | 용어 정의 | `AI-Sessions/wiki/concepts/glossary.md` |
+| 관련 문서 찾기·중복 확인·저장 판단 (Jev) | `.claude/rules/knowledge-ops.md`의 Jev 보조 판단 |
 | 현재 프로젝트 맥락 | `AI-Sessions/wiki/projects/` |
 | 명령별 붙여넣기용 프롬프트 | `prompts/` |

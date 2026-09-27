@@ -196,8 +196,26 @@ def check_rule_text():
     expect("design-lock" in settings, "settings.json no longer wires the design-lock hook")
 
 
+def check_jev_advisory():
+    """Jev stays advisory: falls back with exit 3, never feeds enforcement."""
+    import jev
+    jev.api_key = lambda: None
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            jev.cmd_save_filter("x")
+            code = 0
+        except SystemExit as e:
+            code = e.code
+    expect(code == jev.UNAVAILABLE, f"jev.py without key exits {code}, want {jev.UNAVAILABLE}")
+    with contextlib.redirect_stdout(io.StringIO()):
+        expect(jev.main(["docs", "AI-Sessions/raw/a.md"]) == 2, "jev.py accepts raw paths")
+    for name in ("agent_guard.py", "lint_wiki.py"):
+        src = (Path(__file__).resolve().parent / name).read_text(encoding="utf-8")
+        expect("jev" not in src, f"{name} references jev; enforcement must stay deterministic")
+
+
 CHECKS = [check_index_filter, check_git_write, check_call_graph, check_design_lock,
-          check_log_order, check_rule_text]
+          check_log_order, check_rule_text, check_jev_advisory]
 
 
 def main():
