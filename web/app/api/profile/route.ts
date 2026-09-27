@@ -12,35 +12,45 @@ type ProfileBody = {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+// anyang-database-schema profiles 표(126~133행): 모든 항목 null 허용, 미입력해도 서비스 이용 가능.
+// 값이 온 항목만 코드값·범위를 검증하고, null/undefined는 그대로 통과시킨다.
 function validateProfile(body: ProfileBody | null) {
   if (!body) return null;
   const { birth_year, gender, occupation_type, enrollment_status } = body;
 
   if (
-    typeof birth_year !== "number" ||
-    !Number.isInteger(birth_year) ||
-    birth_year < 1900 ||
-    birth_year > CURRENT_YEAR
+    birth_year != null &&
+    (typeof birth_year !== "number" ||
+      !Number.isInteger(birth_year) ||
+      birth_year < 1900 ||
+      birth_year > CURRENT_YEAR)
   ) {
     return null;
   }
-  if (typeof gender !== "string" || !GENDERS.includes(gender as (typeof GENDERS)[number])) {
+  if (gender != null && (typeof gender !== "string" || !GENDERS.includes(gender as (typeof GENDERS)[number]))) {
     return null;
   }
   if (
-    typeof occupation_type !== "string" ||
-    !OCCUPATION_TYPES.includes(occupation_type as (typeof OCCUPATION_TYPES)[number])
+    occupation_type != null &&
+    (typeof occupation_type !== "string" ||
+      !OCCUPATION_TYPES.includes(occupation_type as (typeof OCCUPATION_TYPES)[number]))
   ) {
     return null;
   }
   if (
-    typeof enrollment_status !== "string" ||
-    !ENROLLMENT_STATUSES.includes(enrollment_status as (typeof ENROLLMENT_STATUSES)[number])
+    enrollment_status != null &&
+    (typeof enrollment_status !== "string" ||
+      !ENROLLMENT_STATUSES.includes(enrollment_status as (typeof ENROLLMENT_STATUSES)[number]))
   ) {
     return null;
   }
 
-  return { birth_year, gender, occupation_type, enrollment_status };
+  return {
+    birth_year: birth_year ?? null,
+    gender: gender ?? null,
+    occupation_type: occupation_type ?? null,
+    enrollment_status: enrollment_status ?? null,
+  };
 }
 
 // anyang-backend-api 2절 — 프로필 4항목 CRUD(본인만).
