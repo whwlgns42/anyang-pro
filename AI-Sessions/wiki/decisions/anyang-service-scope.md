@@ -26,7 +26,7 @@ decided_by: user
 | 기억 화면 | "AI가 기억하는 내 정보" 화면을 넣는다. 조회·수정·삭제 |
 | 대화 히스토리 | 대화 히스토리 목록 화면을 넣는다 |
 | 인증 부가 테이블 | `verification_tokens` 등 쓰지 않는다 |
-| 개인정보 동의 | 가입 시(Google·이메일 모두) 필수 동의 화면. 수집 항목(생년·성별 등)과 목적, DeepSeek(중국 서버 처리)·Gemini 무료 티어로의 국외 이전 고지, 동의 시각 기록. 개인정보 처리방침 페이지 포함. 세부 문구·동의 기록 방식은 설계에서 정한다 |
+| 개인정보 동의 | 가입 시(Google·이메일 모두) 필수 동의 화면. 수집 항목(생년·성별 등)과 목적, DeepSeek(중국 서버 처리)·Gemini 무료 티어로의 국외 이전 고지(Gemini로 대화 내용 전송 포함, user 2026-09-27 — [[anyang-ai-models-data-transfer]]), 동의 시각 기록. 개인정보 처리방침 페이지 포함. 세부 문구·동의 기록 방식은 설계에서 정한다 |
 | 동의 항목 | "수집·이용"과 "국외 이전"을 분리해 각각 받는다 |
 | 처리방침 개정 | 개정 시 재동의를 강제한다 |
 | 탈퇴 시 동의 기록 | 즉시 삭제하지 않고 증빙용으로 1년 보관한 뒤 정리 잡으로 삭제한다 |
@@ -44,6 +44,7 @@ decided_by: user
 - [[anyang-youth-policy-assistant]]
 - [[anyang-login-method]]
 - [[glossary]]
+- [[anyang-ai-models-data-transfer]]
 - [[anyang-database-schema]]
 - [[anyang-backend-api]]
 - [[anyang-frontend-screens]]

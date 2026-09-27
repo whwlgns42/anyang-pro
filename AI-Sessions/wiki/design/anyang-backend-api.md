@@ -101,10 +101,13 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
   미들웨어(`middleware.ts` 또는 공통 헬퍼, 미확정 이름)에서 `suspended_at` 확인 다음 순서로
   검사한다 — 로그인 사용자의 `consent_type`(`collection_use`, `overseas_transfer`) 각각에
   대해 `consented_at`이 가장 최근인 행의 `policy_version`이 현재 `POLICY_VERSION`과 같은지
-  확인한다. 하나라도 다르거나 기록이 없으면 403(재동의 필요, 응답 body에 필요한
-  `consent_type` 목록 포함, 제안)을 반환해 프런트가 재동의 화면으로 보내게 한다. 예외:
-  `/api/auth/*`, `/api/auth/consent` 자신, `/api/admin/*`(관리자는 13-0절 별도 인가)는 이
-  검사에서 제외한다(제안, 미확정). 재동의는 `POST /api/auth/consent`를 그대로 호출해
+  확인한다. 하나라도 다르거나 기록이 없으면 403(재동의 필요, 에러 코드
+  `CONSENT_REQUIRED` — 1-4절 참고, 응답 body에 필요한 `consent_type` 목록 포함, 제안)을
+  반환해 프런트가 재동의 화면으로 보내게 한다. 예외:
+  `/api/auth/*`, `/api/auth/consent` 자신, `/api/admin/*`(관리자는 13-0절 별도 인가),
+  `DELETE /api/account`(제안, 미확정 — 재동의하지 않은 사용자도 탈퇴는 막지 않는다. 처리방침에
+  재동의하지 않으려는 사용자에게 사실상 탈퇴 외 선택지가 없어지는 것을 막기 위함)는 이
+  검사에서 제외한다. 재동의는 `POST /api/auth/consent`를 그대로 호출해
   처리한다(위와 동일 엔드포인트 재사용, 새 엔드포인트를 만들지 않는다 — YAGNI).
 - Auth.js 표준 콜백(`signIn`, `session`, `jwt`)에서 `users` 테이블에 없는 신규 Google 로그인
   사용자는 자동 생성(Auth.js 어댑터 기본 동작).
@@ -140,11 +143,14 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 
 1. **로그인 시점**: Auth.js `signIn` 콜백에서 `suspended_at is not null`이면 로그인 자체를
    거부한다(신규 로그인 차단).
-2. **이미 발급된 세션**: `/api/admin/*`를 제외한 인증 필요 API 공통 미들웨어(Next.js
-   `middleware.ts` 또는 각 라우트 공통 헬퍼, 미확정)에서 매 요청마다 `users.suspended_at`을
-   조회해 not null이면 403으로 거부한다. 이 서비스 규모에서는 요청마다 1회 단순 조회 추가가
+2. **이미 발급된 세션**: `/api/admin/*`와 `DELETE /api/account`를 제외한 인증 필요 API 공통
+   미들웨어(Next.js `middleware.ts` 또는 각 라우트 공통 헬퍼, 미확정)에서 매 요청마다
+   `users.suspended_at`을 조회해 not null이면 403(에러 코드 `ACCOUNT_SUSPENDED` — 1-4절
+   참고)으로 거부한다. 이 서비스 규모에서는 요청마다 1회 단순 조회 추가가
    과설계가 아니라고 판단한다(제안) — JWT에 정지 여부를 캐싱하면 정지 후에도 세션 만료까지
-   계속 접근 가능해지는 문제가 더 크다.
+   계속 접근 가능해지는 문제가 더 크다. `DELETE /api/account`를 예외로 두는 이유(제안,
+   미확정): 정지된 사용자도 탈퇴할 권리 자체는 막지 않는다 — 정지가 서비스 이용 제한이지
+   계정 삭제 금지는 아니라고 판단했다.
 3. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
    `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택).
 
@@ -171,6 +177,24 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
   처리, 미확정 구현).
 - 탈퇴 확인 다이얼로그는 frontend 소관(제안).
 
+### 1-4. 403 응답 에러 코드 (제안, 미확정)
+
+frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 분기해 다른 화면을 보여줄 수
+있도록, 인증 필요 API가 반환하는 403 응답 body에 아래 문자열 중 하나를 `{ error: "<code>" }`
+형태로 포함한다(제안, 미확정 — 키 이름 `error`도 미확정).
+
+| 코드 | 발생 위치 | 의미 |
+|---|---|---|
+| `ACCOUNT_SUSPENDED` | 1-2절 정지 확인 | 계정이 정지됨 |
+| `CONSENT_REQUIRED` | 1절 재동의 판정 | 처리방침 개정으로 재동의 필요 |
+| `ADMIN_ONLY` | 13-0절 관리자 인가 | 로그인은 됐으나 관리자가 아님 |
+
+- 관리자 거부는 **404가 아니라 403**으로 통일한다(13-0절에서 이미 결정한 대로 — 이 서비스는
+  공개 attack surface가 아니므로 엔드포인트 존재를 숨길 필요가 낮고, 403이 frontend 처리도
+  단순하다). 이 문서 전체에서 관리자 API의 "권한 없음"은 항상 403 + `ADMIN_ONLY`다.
+- 401(비로그인)은 코드 문자열 없이 기존대로 빈 body 또는 최소 body를 반환한다(제안 —
+  로그인 여부는 프런트가 세션 유무로 이미 알 수 있어 별도 코드가 필요 없다, YAGNI).
+
 ### 2. 프로필 CRUD
 
 | 메서드 | 경로 | 설명 |
@@ -194,7 +218,15 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 | GET | `/api/notices/:id` | 공지 상세 1건 |
 
 - `/api/notices/recommended` 매칭 로직은 7절 `/api/jobs/notify`의 코사인 유사도 방식을
-  재사용(제안, 미확정) — 프로필/선호 임베딩과 `notice_chunks` 유사도 상위 N건(N 미확정).
+  재사용(제안, 미확정) — **프로필은 임베딩하지 않는다**([[anyang-ai-models-data-transfer]]
+  확정). 선호(`user_preferences.embedding`)와 `notice_chunks` 유사도 상위 N건(N 미확정)을
+  고른다. 프로필 조건(나이대·성별·직군)은 이 벡터 유사도 계산에 들어가지 않고, 3절과 같이
+  DeepSeek 프롬프트 조건으로만 쓰이거나(채팅), 이 피드에서는 아예 쓰이지 않는다(제안,
+  미확정 — 프로필 조건을 이 목록에도 반영할지는 이번 스콥에서 정하지 않는다).
+- **선호가 없는 신규 사용자(제안, 미확정)**: `user_preferences` 행이 없으면(대화 이력이 없어
+  선호가 추출되지 않은 상태) 유사도 계산 자체가 불가능하므로, 이 경우 최신 공지 순
+  (`notices.collected_at desc`, `hidden_at is null`)으로 대체해 반환한다 — 빈 목록보다
+  낫다는 판단(제안).
 - 응답 필드(목록, 미확정): `{ id, title, excerpt, posted_at }`. `excerpt`는 본문 앞부분
   발췌(길이 미확정).
 - 응답 필드(상세, 미확정): `{ id, title, body, source_url, posted_at }`. `source_url`은
@@ -248,16 +280,22 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 
 1. 사용자 메시지를 `messages`에 저장(role=user).
 2. RAG 검색:
-   a. `user_preferences.embedding`(누적 선호 벡터, 있으면)과 현재 메시지를 임베딩한 벡터를
-      결합(예: 최근 선호 top-K 평균 + 현재 메시지 임베딩, 가중치 미확정)해 쿼리 벡터를 만든다.
+   a. 현재 사용자 메시지를 Gemini로 보내기 전에 전화번호·이메일·주민등록번호 형태를
+      **정규식으로 가린다**(제안, 미확정 패턴 — user 결정, [[anyang-ai-models-data-transfer]],
+      2026-09-27). 이 임베딩은 검색 쿼리 벡터로 한 번만 쓰고 저장하지 않는다
+      ([[anyang-database-schema#conversations / messages (미확정)]]의 "채팅 사용자 메시지
+      임베딩 저장 여부" 절 그대로 채택). `user_preferences.embedding`(누적 선호 벡터,
+      있으면)과 가림 처리 후 임베딩한 벡터를 결합(예: 최근 선호 top-K 평균 + 현재 메시지
+      임베딩, 가중치 미확정)해 쿼리 벡터를 만든다.
    b. `notice_chunks`에서 코사인 유사도 상위 K건(K 미확정, 제안 5)을 pgvector HNSW로 검색.
-   c. **프로필 조건 필터**: 현재 `notices`/`notice_chunks` 스키마에는 정형화된 대상 조건
-      컬럼(연령·성별·직군 자격요건)이 없다 — 게시판 구조가 아직 확인되지 않아
-      ([[anyang-youth-policy-assistant#확인이 필요한 항목]] 1번) 그런 컬럼을 설계에 넣을
-      근거가 없다. 그래서 이 단계에서는 프로필 조건(나이대·성별·직군)을 DB 쿼리 필터가 아니라
-      **DeepSeek 프롬프트의 컨텍스트 조건**으로만 전달해 "이 조건에 맞는 것만 우선 언급"하도록
-      한다(제안, 미확정). 게시판 구조 확인 후 자격요건 파싱이 가능해지면 `notices`에 구조화
-      컬럼 추가를 검토한다 — 이는 설계 변경이므로 그때 database와 재조율한다.
+   c. **프로필 조건 필터**: `notices`/`notice_chunks`에 정형화된 대상 조건 컬럼(연령·성별·
+      직군 자격요건)을 두지 않는 것은 1차 출시 범위로 확정됐다([[anyang-service-scope]],
+      user, 2026-09-27 — 게시판 구조 확인 여부와 무관하게 이번 스콥에서는 재검토하지
+      않는다). 프로필도 임베딩하지 않는다([[anyang-ai-models-data-transfer]] 확정). 그래서
+      프로필 조건(나이대·성별·직군)은 DB 쿼리 필터·벡터 유사도가 아니라 **DeepSeek 프롬프트의
+      컨텍스트 조건**으로만 전달해 "이 조건에 맞는 것만 우선 언급"하도록 한다(제안,
+      미확정). 자격요건 구조화 컬럼 도입은 이번 스콥 밖의 새 요구사항이므로, 필요해지면
+      별도 설계 변경으로 database와 재조율한다.
 3. DeepSeek API 호출(OpenAI 호환 Chat Completions, `stream: true`, 미확정). 전송 메시지에는
    **식별정보 없이** 다음만 포함: 프로필 조건 텍스트(나이대·성별·직군), 검색된 공지 제목·본문
    일부, 최근 대화 맥락. `email`, `name`, `user_id`는 절대 포함하지 않는다
@@ -275,7 +313,8 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
    텍스트 생성은 dev-common Jev 조건에서 제외).
 
 **외부 전송 데이터 최소화 요약**: DeepSeek에는 조건·공지 텍스트·대화 텍스트만, Gemini에는
-공지 본문/선호 문장만. 둘 다 `user_id`, `email`, `name` 미전송(제약은 애플리케이션 코드가
+공지 본문/선호 문장/채팅 사용자 메시지(전화번호·이메일·주민등록번호 형태 정규식 가림 후,
+위 2-a)만. 둘 다 `user_id`, `email`, `name` 미전송(제약은 애플리케이션 코드가
 지킨다 — database 문서에도 기록됨).
 
 **`api_usage_logs` 기록 지점(제안, 미확정)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
@@ -368,7 +407,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 
 | 엔드포인트 | 설명 | 트리거 주기(미확정) |
 |---|---|---|
-| `POST /api/jobs/collect` | 공지 수집기(5절) 실행 | 미확정 — 게시판 갱신 주기를 몰라 확정 불가 |
+| `POST /api/jobs/collect` | 공지 수집기(5절) 실행 | 하루 1회(미확정 제안, database 제안과 같은 시각 — Asia/Seoul 04:00, [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]) |
 | `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 미확정, 제안: 수집 잡 직후 |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
 
@@ -380,16 +419,11 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
   표현식 그대로(예: `*/5 * * * *`) 정확히 실행되므로(Vercel Cron처럼 1시간 창 안 임의
   시점이 아니다), `/api/jobs/notify`는 "직전 실행 이후 지금까지" 창을 본다 — Asia/Seoul
   기준 `notify_time`이 `(현재 시각 - 5분, 현재 시각]` 범위에 들어오는 `enabled=true`
-  사용자를 고른다(자정 경계는 날짜 넘김 처리 필요, 미확정 구현). 이렇게 하면 사용자가 어떤
-  분을 고르든 늦어도 5분 안에 그 시각을 창이 지나간다.
-  ```sql
-  -- 제안(미확정): Asia/Seoul 기준 현재 시각의 5분 창 안에 notify_time이 있는 사용자
-  select user_id
-  from notify_settings
-  where enabled = true
-    and (now() at time zone timezone)::time
-        between (notify_time) and (notify_time + interval '5 minutes')::time;
-  ```
+  사용자를 고른다. 이렇게 하면 사용자가 어떤 분을 고르든 늦어도 5분 안에 그 시각을 창이
+  지나간다. **자정 경계 처리를 포함한 실제 쿼리는 여기서 다시 적지 않고**
+  [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 대상 사용자 선정 쿼리를
+  그대로 쓴다(`notify_time + 5분`이 자정을 넘는 경우를 OR로 분기 처리한 SQL, database가
+  이미 작성해뒀다 — 값을 복제하면 한쪽만 고쳐질 위험이 있어 링크로 대체).
   - **중복 발송 방지 — `notify_logs` pending 2단계 채택(제안, database 조율 완료)**:
     database가 확정한 `notify_logs` 구조([[anyang-database-schema#notify_logs
     (미확정)]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
@@ -415,11 +449,24 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
       문서 확인 항목 17 해결에 반영).
   - `timezone` 컬럼은 항상 `'Asia/Seoul'` 고정([[anyang-database-schema#notify_settings
     (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]).
-- `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 최근 수집된
-  미발송 공지 중 사용자 선호/프로필과의 코사인 유사도가 임계값(미확정, 제안 0.75) 이상인
-  것만 골라 Web Push 전송(8절). **판정은 코사인 유사도 임계값(결정적 계산)만 쓰고 LLM을
-  쓰지 않는다** — 반복 판단이지만 정규식/산술로 결정적으로 풀리므로 dev-common Jev 제외
-  조건에 해당해 Jev 도입 대상이 아니다.
+- `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 후보 공지를 다음
+  두 조건으로 좁힌 뒤 Web Push 전송(8절) 여부를 정한다.
+  1. **알림 대상 공지 범위(제안, database 제안 채택)**: `notices.collected_at >
+     notify_settings.enabled_at` — 사용자가 알림을 켠(또는 다시 켠) 시각 이후 수집된 공지만
+     대상으로 한다([[anyang-database-schema#notify_settings (미확정 — 컬럼 타입은 설계
+     승인 전, 항목 범위·시간대는 확정)]]). `enabled_at`이 null(과거 가입자로 아직 값이 없는
+     경우)이면 이 조건을 적용하지 않는다(제안 — 기존 사용자에게 갑자기 알림이 끊기지 않도록).
+     이렇게 과거에 쌓인 공지가 알림을 켜자마자 한꺼번에 발송되는 것을 막는다.
+  2. **유사도 임계값**: 1번을 통과한 공지 중 **`notice_chunks` 벡터와 사용자
+     `user_preferences.embedding`(선호) 벡터**의 코사인 유사도가 임계값(미확정, 제안 0.75)
+     이상인 것만 고른다. **프로필은 임베딩하지 않으므로**([[anyang-ai-models-data-transfer]]
+     확정) 이 계산에 들어가지 않는다 — 프로필 조건은 채팅(3절)에서만 DeepSeek 프롬프트
+     조건으로 쓰인다. `user_preferences`가 없는 사용자는 유사도 계산 대상이 없으므로 이
+     잡에서는 매칭되는 공지가 없다(제안 — 2-1절 추천 피드와 달리 알림은 최신순 대체를
+     두지 않는다. 선호 없이 무작위로 푸시를 보내면 오히려 사용자 경험을 해친다는 판단).
+  **판정은 코사인 유사도 임계값(결정적 계산)만 쓰고 LLM을 쓰지 않는다** — 반복 판단이지만
+  정규식/산술로 결정적으로 풀리므로 dev-common Jev 제외 조건에 해당해 Jev 도입 대상이
+  아니다.
 - Vercel Cron은 이전 가능성 원칙 3에 따라 쓰지 않는다.
 
 ### 8. Web Push (VAPID)
@@ -499,8 +546,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 7. HTTPS: UNO Q는 가정용 회선이라 인증서·터널이 별도 필요(예: 리버스 프록시 + Let's
    Encrypt, 또는 Cloudflare Tunnel — 미확정, 이 문서 범위 밖 추가 조사 필요).
 8. DNS `APP_ORIGIN` 도메인의 A/CNAME 레코드를 UNO Q 공인 IP(또는 터널 엔드포인트)로 변경.
-9. 전환 후 Google OAuth 콘솔의 승인된 리다이렉트 URI가 `APP_ORIGIN` 기준이라 도메인이
-   그대로면 변경 불필요(원칙 5 — 커스텀 도메인을 처음부터 사용하는 이유).
+9. 전환 후 Google OAuth 콘솔의 승인된 리다이렉트 URI가 `APP_ORIGIN` 기준이라, 전환 후에도
+   같은 도메인을 그대로 쓰면(원칙 5 — 커스텀 도메인은 배포 시점에 붙여 이후 환경 전환과
+   무관하게 유지) 리다이렉트 URI 변경이 불필요하다. 도메인 자체를 바꾸는 경우는 12-1절 절차를
+   따른다.
 
 **UNO Q → Vercel+Supabase**: 역순(1은 UNO Q PostgreSQL에서 `pg_dump`, 3은 Supabase
 `DATABASE_URL`로 `pg_restore`, 4는 `vercel deploy`, 6은 pg_cron+pg_net 잡 재등록).
@@ -530,10 +579,20 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 #### 13-0. 공통 인가
 
 - 공통 헬퍼(제안, 미확정 이름: `requireAdmin(request)`)를 모든 `/api/admin/*` 핸들러
-  맨 앞에서 호출한다. 로그인 세션이 없으면 401, 로그인은 됐지만 세션 이메일이
-  `ADMIN_EMAILS`(쉼표로 분리한 목록, 대소문자 무시 비교, 제안)에 없으면 403을 반환한다
+  맨 앞에서 호출한다. 로그인 세션이 없으면 401을 반환한다.
+- **관리자 판정은 Google 로그인(OAuth) 계정에만 적용한다(제안, 채택)**: 세션 이메일을
+  `ADMIN_EMAILS`와 비교하기 전에, 그 이메일·비밀번호(Credentials) 가입 계정은 이메일 인증이
+  없어(1-1절) 타인의 이메일 주소로 가입할 수 있으므로 먼저 로그인 방식을 확인한다.
+  `requireAdmin`은 `accounts` 테이블에서 `user_id = <세션 사용자>` AND `provider = 'google'`
+  행이 있는지 조회한다(제안, 미확정 쿼리 예시: `SELECT 1 FROM accounts WHERE user_id = $1
+  AND provider = 'google'`). 그 행이 없으면(Credentials로 가입/로그인한 계정) 세션 이메일이
+  `ADMIN_EMAILS`에 있어도 403(`ADMIN_ONLY`, 1-4절)을 반환한다 — Google 계정 여부를 먼저
+  걸러야 이메일만으로는 관리자를 사칭할 수 없다. 그 행이 있으면 세션 이메일이
+  `ADMIN_EMAILS`(쉼표로 분리한 목록, 대소문자 무시 비교, 제안)에 있는지 비교해 없으면
+  403(`ADMIN_ONLY`)을, 있으면 통과시킨다
   (관리자 API 존재 자체를 숨기는 404 방식도 검토했으나, 이 서비스는 공개 attack surface가
-  아니고 403이 더 단순하며 클라이언트 에러 처리도 쉬워 403을 기본안으로 택한다 — YAGNI).
+  아니고 403이 더 단순하며 클라이언트 에러 처리도 쉬워 403을 기본안으로 택한다 — YAGNI,
+  1-4절과 동일 결정).
 - `ADMIN_EMAILS` 값은 매 요청 `process.env`에서 읽는다(별도 캐싱 없음, 배포당 값이 바뀌지
   않으므로 과설계 방지).
 - 관리자 화면 API 응답에는 어떤 엔드포인트에서도 `messages.content`, `user_preferences.
@@ -645,7 +704,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   확인(제외 확정 반영).
 - **탈퇴**: `DELETE /api/account` 호출 후 `users` 행이 삭제되고, 해당 사용자의 `consents`
   행은 삭제되지 않은 채 `user_id`가 null·`withdrawn_at`이 채워졌는지 확인. `DELETE
-  /api/admin/users/:id`도 같은 결과인지 확인.
+  /api/admin/users/:id`도 같은 결과인지 확인. 재동의가 필요한 옛 `policy_version`
+  상태이거나 `suspended_at`이 채워진 계정도 `DELETE /api/account` 호출이 403 없이 성공하는지
+  확인(1절·1-2절 예외 경로 테스트).
 - **프로필 CRUD**: 미인증 요청 401. 본인 프로필만 GET/PUT 가능(다른 user_id로 접근 시도해
   403/404 확인).
 - **알림 설정**: 미인증 401. `notify_time` 형식이 아닌 값(예: `"25:00"`) PUT 시 400.
@@ -656,7 +717,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   새 대화 생성 시 `title`이 첫 메시지 앞부분으로 채워지는지 확인.
 - **채팅**: DeepSeek API를 목(mock)으로 대체한 통합 테스트로 스트리밍 응답 조립 확인.
   전송 payload를 캡처해 `email`/`name`/`user_id` 문자열이 포함되지 않는지 검증(정규식 또는
-  키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증.
+  키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증. 전화번호·이메일·주민등록번호 형태를
+  포함한 사용자 메시지로 Gemini 임베딩 호출을 목으로 캡처해, 가림 처리 후 문자열이 Gemini로
+  전달되는지 확인(정규식 가림 자동 검증).
 - **RAG 검색**: 알려진 `notice_chunks` 픽스처와 쿼리 벡터로 코사인 유사도 상위 K가 예상
   순서로 나오는지 확인.
 - **임베딩 파이프라인**: Gemini API를 목으로 대체, 429 응답 시 재시도 횟수·백오프 간격이
@@ -670,7 +733,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - **Runbook**: 개발 환경에서 로컬 PostgreSQL로 실제 덤프/복원 1회 리허설(UNO Q 실기기
   테스트는 이 설계 범위 밖 — 구현 단계에서 별도 확인).
 - **관리자 API 인가**: `ADMIN_EMAILS`에 없는 로그인 사용자가 `/api/admin/*` 아무 엔드포인트나
-  호출 시 403, 비로그인 401 확인. `ADMIN_EMAILS`에 있는 사용자는 200 확인.
+  호출 시 403(`ADMIN_ONLY`), 비로그인 401 확인. `ADMIN_EMAILS`에 있고 **Google 로그인**한
+  사용자는 200 확인. `ADMIN_EMAILS`에 있지만 **Credentials(이메일·비밀번호)로 가입/로그인한**
+  사용자는 이메일이 일치해도 403(`ADMIN_ONLY`)인지 확인(관리자 사칭 방지 테스트).
 - **관리자 API 원문 비노출**: `/api/admin/users`, `/api/admin/stats`,
   `/api/admin/notify-logs/summary`, `/api/admin/api-usage/summary` 응답 payload를 캡처해
   `messages`/`user_preferences.preference_text` 등 대화·기억 원문 필드가 섞여 있지 않은지
@@ -709,10 +774,12 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   분리(둘 다 필수), 처리방침 개정 시 재동의 강제, 탈퇴 시 즉시 삭제 아님·보관 후 삭제(1절,
   1-3절). `POLICY_VERSION` 코드 상수 위치(`lib/consent.ts` 등, 미확정 정확한 경로)와
   재동의 판정 위치(공통 미들웨어, 1절)는 backend 제안이며 설계 승인으로 확정된다.
-- **동의 기록 보관 기간(숫자) — 미해결**: database 문서에서 제기한 채로 남아 있다
-  ([[anyang-database-schema#확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에
-  반영)]]) — 90일(로그 테이블과 동일) vs 더 긴 기간(예: 1년) 중 사용자 확인 필요. 보관 만료분
-  정리 잡은 이 숫자가 정해진 뒤에야 등록할 수 있다.
+- **동의 기록 보관 기간(숫자) — 해결(2026-09-27, user)**: 1년으로 확정됐다
+  ([[anyang-service-scope]], [[anyang-database-schema#consents (미확정) — 가입 시 개인정보
+  필수 동의 기록]]). 로그 테이블(90일)보다 긴 것은 `consents`가 법적 증빙 목적이기 때문이다.
+  보관 만료분 정리 잡(`delete from consents where withdrawn_at < now() - interval '1
+  year'`) 자체는 되돌릴 수 없는 삭제이므로, 실제 pg_cron 등록은 구현 단계 지시서에 이 잡
+  등록에 대한 별도 사용자 승인이 적혀 있어야 한다([[anyang-backend-tasks]] 16번 작업 참고).
 - 로그 정리 잡(`collect_runs`/`api_usage_logs` 90일) 등록 — 해결(2026-09-27, user): 보존
   기간·등록 자체는 승인됨. 실제 pg_cron 등록은 database 소관 SQL이라 이 문서에 API
   엔드포인트는 없다. [[anyang-backend-tasks]]에 구현 단계 작업 단위로 등록해, 구현 착수

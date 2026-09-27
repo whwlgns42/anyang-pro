@@ -22,9 +22,9 @@ Google 소셜 로그인과 자체 회원가입(이메일·비밀번호)을 둘 �
 |---|---|
 | 로그인 | Google 소셜 로그인 + 자체 회원가입(이메일·비밀번호) |
 
-- 인증 라이브러리(계획서의 Auth.js 제안), 비밀번호 해시 방식은 미확정이다. backend 설계에서 정한다.
+- 인증 라이브러리와 비밀번호 해시 방식은 [[anyang-backend-api]] 인증 절에서 정한다(설계 승인으로 확정).
 - Supabase Auth는 쓰지 않는다. 근거는 [[anyang-deployment-portability]].
-- Google OAuth 리다이렉트는 도메인에 묶이므로 커스텀 도메인 결정이 필요하다([[anyang-youth-policy-assistant#확인이 필요한 항목]]).
+- Google OAuth 리다이렉트 URI는 base URL 환경변수로 받고, 커스텀 도메인을 나중에 붙일 때 추가한다([[anyang-deployment-portability]] 원칙 5).
 
 ## Links
 

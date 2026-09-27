@@ -45,14 +45,14 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(draft): 테이블, HNSW, pg_cron+pg_net 잡, 재임베딩 절차
-- [[anyang-backend-api]] — 안양 비서 API 계약(draft): 인증, 채팅 RAG, 임베딩, 수집기, Web Push, 배포, UNO Q runbook
-- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft): 로그인·온보딩·채팅·공지 피드·알림 설정, PWA
+- [[anyang-database-schema]] — 안양 비서 DB 설계(draft): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차
+- [[anyang-backend-api]] — 안양 비서 API 계약(draft): 인증·동의·정지, 채팅 RAG, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
+- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
 
-- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위 11개(draft)
-- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위 9개(draft)
+- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위 21개(draft)
+- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위 15개(draft)
 
 ## Concepts
 
@@ -61,7 +61,7 @@
 ## Decisions
 
 - [[anyang-stack-database]] — 안양 비서: Next.js App Router PWA + PostgreSQL/pgvector
-- [[anyang-ai-models-data-transfer]] — 안양 비서: DeepSeek 대화, Gemini 무료 임베딩, 외부 AI에 식별정보 전송 금지
+- [[anyang-ai-models-data-transfer]] — 안양 비서: DeepSeek 대화, Gemini 무료 임베딩, 외부 AI에 식별정보 전송 금지, 채팅 메시지 임베딩은 정규식 가림 후 허용
 - [[anyang-login-method]] — 안양 비서: Google 로그인 + 이메일·비밀번호 가입
 - [[anyang-service-scope]] — 안양 비서: 수집 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의, 관리자 페이지(ADMIN_EMAILS)
 - [[anyang-deployment-portability]] — 안양 비서: Vercel Hobby icn1 + Supabase 서울, UNO Q 양방향 이전 원칙, Docker 미사용

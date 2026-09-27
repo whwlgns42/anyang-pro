@@ -48,7 +48,9 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). 착수 전 `robots.txt`
    준수와 HTML 구조를 실제로 확인해야 한다(구현 전 확인, backend 설계 5절) — 이 확인이
    끝나기 전까지 파서 상세 구현은 보류.
-6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 3번 의존.
+6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 사용자 메시지를 Gemini로
+   임베딩하기 전 전화번호·이메일·주민등록번호 형태를 정규식으로 가리는 처리 포함(backend
+   설계 3절, user 결정 [[anyang-ai-models-data-transfer]]). 3번 의존.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). 3·8번 의존. 중복 발송 방지 방식은
    database·backend 조율 완료(backend 설계 7절).
@@ -71,17 +73,30 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
     3·6번 의존, 14번이 이 데이터를 조회하므로 14번보다 먼저 끝나야 한다.
 16. **로그 정리 잡 등록(`collect_runs`/`api_usage_logs` 90일)** —
     [[anyang-database-schema#로그성 테이블 보존 기간·정리 잡]]의 `cleanup-logs` pg_cron
-    SQL을 database가 등록한다(app API 엔드포인트 없음, backend 작업 아님). 이 항목은
-    되돌릴 수 없는 삭제를 주기적으로 실행하는 것이므로, 착수 전 이 구현 단계 지시서에 이
-    잡 등록에 대한 별도 사용자 승인이 적혀 있는지 반드시 확인한다(dev-common 규칙 4,
+    SQL을 database가 등록한다(app API 엔드포인트 없음, backend 작업 아님). 보존 기간(90일)과
+    정리 잡 등록 자체는 이미 승인됐다(user, 2026-09-27, [[anyang-service-scope]]). 다만 이
+    항목은 되돌릴 수 없는 삭제를 주기적으로 실행하는 것이므로, 착수 전 이 구현 단계
+    지시서에 **이 잡을 지금 실제로 pg_cron에 등록하는 것**에 대한 별도 사용자 승인이 적혀
+    있는지 반드시 확인한다(dev-common 규칙 4,
     [[anyang-database-schema#되돌릴 수 없는 마이그레이션 표시]]). 승인 기록이 없으면
     등록하지 않고 멈춰서 보고한다. `notify_logs`는 이 정리 대상이 아니다(확정).
+17. **동의 기록(`consents`) 보관 만료분 정리 잡 등록(1년)** —
+    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]]의
+    "탈퇴 후 보관" 절 `delete from consents where withdrawn_at is not null and withdrawn_at
+    < now() - interval '1 year'` pg_cron SQL을 database가 등록한다(app API 엔드포인트 없음,
+    backend 작업 아님). 보관 기간(1년)은 이미 승인됐다(user, 2026-09-27,
+    [[anyang-service-scope]]). 16번과 마찬가지로 되돌릴 수 없는 삭제이므로, 착수 전 이
+    구현 단계 지시서에 **이 잡을 지금 실제로 pg_cron에 등록하는 것**에 대한 별도 사용자
+    승인이 적혀 있는지 반드시 확인한다. 승인 기록이 없으면 등록하지 않고 멈춰서 보고한다.
+    16번과 대상 테이블·보존 기간이 달라 별도 작업 단위로 둔다(YAGNI에 위배되지 않음 —
+    합치면 오히려 조건 분기가 늘어난다).
 
 ### 순서 제안
 
-3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16. 5는
+3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 11은 나머지가 끝난 뒤
-여유 있을 때. 16은 database 보관 기간 확정과 이 잡 등록에 대한 별도 승인이 먼저 있어야 한다.
+여유 있을 때. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
+적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨).
 
 ## 테스트 방법
 

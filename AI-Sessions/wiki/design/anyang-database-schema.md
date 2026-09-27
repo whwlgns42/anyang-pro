@@ -37,7 +37,9 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
   마찬가지로 사용자 설계 승인으로 확정된다. 모델 교체 시 재임베딩 절차는 아래 별도로 둔다.
 - 인증 라이브러리: 2026-09-27 backend 확정 제안 — Auth.js(NextAuth) v5, Credentials
   provider(이메일·비밀번호, bcrypt 해시) + Google OAuth provider 병행. 표준 PostgreSQL 어댑터
-  스키마(users/accounts/verification_tokens) + 자체 `credentials` 테이블 구성을 그대로 쓴다.
+  스키마(users/accounts) 중 `verification_tokens`을 제외한 부분 + 자체 `credentials` 테이블
+  구성을 쓴다. `verification_tokens`는 쓰지 않는 것으로 확정됐다([[anyang-service-scope]],
+  user, 2026-09-27 — 아래 `sessions` 절 참고).
   세션 전략은 JWT(쿠키)로, DB 세션 테이블은 쓰지 않는다 — 이전 가능성 원칙(표준 스키마만 사용)과
   충돌하지 않고 세션 테이블 관리 부담도 없앤다. 아래 테이블 제안은 이 전제로 갱신했다.
   라이브러리·전략 자체는 backend 제안이며 사용자 설계 승인으로 확정된다.
@@ -162,8 +164,10 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | hidden_reason | text, null 허용 | 숨김 사유(관리자가 입력, 필수 아님) |
 
 - 인덱스: unique(content_hash) — 중복 방지의 핵심. unique(source_url)도 별도로 둔다(같은 글이
-  URL은 같은데 본문만 갱신되는 경우 구분 필요 여부는 미확정 — 수집 대상 게시판이 정해지지 않아
-  갱신 패턴을 알 수 없음, 확인 항목 1과 연결).
+  URL은 같은데 본문만 갱신되는 경우 구분 필요 여부는 미확정 — 수집 대상 게시판은
+  https://www.anyang.go.kr/youth/selectBbsNttList.do?bbsNo=1184&key=3543 로 확정됐으나
+  ([[anyang-service-scope]]), 그 게시판의 실제 갱신 패턴(같은 글 수정 여부)은 아직 관찰되지
+  않아 미확정으로 남는다).
 - **숨김 처리와 추천·검색 제외 (제안)**: `hidden_at is not null`인 공지는 사용자 노출·추천·
   벡터 검색 결과에서 제외한다. 두 가지 구현 방식 중 하나를 backend가 고른다.
   1. 매 조회 쿼리(추천 목록, `notice_chunks` 벡터 유사도 검색의 조인 대상)에 `notices.hidden_at
@@ -208,6 +212,14 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 - DeepSeek로 보내는 값은 조건(나이대·성별·직군)뿐이라는 원칙([[anyang-ai-models-data-transfer]])은
   앱 코드에서 지킨다. `messages.content`에 식별정보를 넣지 않는 것은 스키마가 아니라 애플리케이션
   책임이므로 이 설계에서 강제하지 않는다(참고로 남김).
+- **채팅 사용자 메시지 임베딩 저장 여부 (제안)**: 사용자 메시지를 Gemini로 임베딩해 채팅
+  RAG 검색에 쓰는 것은 허용됐다([[anyang-ai-models-data-transfer]], user, 2026-09-27). 이
+  임베딩은 그 요청의 검색 쿼리 벡터로 한 번만 쓰이고 재사용되지 않으므로(공지·선호 임베딩처럼
+  나중에 다시 유사도 검색할 대상이 아니다), `messages`에 별도 `embedding` 컬럼을 두거나 별도
+  테이블에 저장하지 않는다(제안) — 요청 처리 중 메모리에서만 계산해 쓰고 버린다. 저장하면
+  개인정보 최소화 원칙에도 어긋나고(대화 내용의 벡터 표현이 영구히 남음), YAGNI에도 맞지
+  않는다(검색 후 재사용 계획 없음). 나중에 과거 메시지 유사도 검색이 필요해지면 컬럼 추가로
+  대응하되, 이는 새 요구사항이므로 별도 설계 변경으로 다룬다.
 
 #### user_preferences (미확정) — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터
 
@@ -307,9 +319,17 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | user_id | uuid, PK, FK → users.id, on delete cascade | |
 | notify_time | time, not null | 사용자가 자유롭게 고른 하루 중 시각([[glossary]]의 notify-time). 시간대는 아래 timezone 기준 |
 | enabled | boolean, not null, default true | 알림 on/off |
+| enabled_at | timestamptz, null 허용 | 알림을 켠(또는 마지막으로 다시 켠) 시각(제안). 알림 대상 공지 범위를 이 시각 이후 수집분으로 제한하는 데 쓴다(아래 참고). `enabled=false`로 끄는 시점에는 건드리지 않고, `false→true`로 다시 켤 때만 갱신한다(애플리케이션 책임) |
 | timezone | text, not null, default 'Asia/Seoul' | 서비스가 국내 전용이므로 Asia/Seoul로 고정한다(확정). 모든 사용자에게 동일하게 적용하며, 사용자별로 다른 시간대를 선택하는 기능은 없다 |
 | updated_at | timestamptz, default now() | 설정 변경 시각 |
 
+- **알림 대상 공지 범위 (제안, 미확정)**: "알림을 켠 시각 이후 수집된 공지만" 알림 대상으로
+  삼는다 — 가입(또는 재가입) 직후 과거에 쌓인 공지가 한꺼번에 발송되는 것을 막기 위함이다.
+  `/api/jobs/notify`의 매칭 쿼리(backend, [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림
+  잡]])에 `notices.collected_at > notify_settings.enabled_at` 조건을 추가하는 방식을 제안한다.
+  `enabled_at`이 null이면(과거 가입자로 아직 값이 없는 경우) 이 조건을 적용하지 않는 것으로
+  본다(제안 — 기존 사용자에게 갑자기 알림이 끊기지 않도록). 최종 채택 여부와 정확한 비교
+  조건은 backend 조율 후 확정한다.
 - `notify_time`은 `time` 범위(00:00~23:59)만 검증하면 된다(애플리케이션 책임, CHECK 제약 불필요).
 - 시간대 처리: `notify_time`은 시간대 정보가 없는 `time` 타입이므로, "지금이 사용자의 알림
   시각인지" 비교할 때는 항상 `timezone`(Asia/Seoul 고정) 기준으로 현재 시각을 변환해 비교한다.
@@ -462,15 +482,18 @@ select count(*) from users where suspended_at is null;
   [[anyang-service-scope]]) — 다만 dev-common.md 규칙상 되돌릴 수 없는 마이그레이션은 실행
   단계에서도 그 마이그레이션에 대한 사용자 승인이 지시서에 별도로 적혀 있어야 실행할 수 있다.
   구현 단계 지시서에 이 잡 등록에 대한 승인이 적혀 있지 않으면 등록하지 않고 멈춰서 보고한다
-  (아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영). `consents` 보관 만료분 정리 잡은
-  보존 기간 자체가 아직 미확정이므로 별도다(위 `consents` 절 참고).
+  (아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영). `consents` 보관 만료분 정리 잡의
+  보존 기간은 1년으로 확정됐다([[anyang-service-scope]], user, 2026-09-27, 위 `consents` 절
+  참고) — 다만 90일 로그와 보존 기간이 다르고 삭제 대상 테이블도 달라 정리 잡 등록 자체는
+  별도로 다룬다.
 
 ### pg_cron / pg_net 잡 정의 (미확정)
 
 이전 가능성 원칙에 따라 스케줄 로직 본체는 앱 API 엔드포인트에 둔다. pg_cron은 트리거만 한다.
 
 ```sql
--- 제안: 5분마다 알림 잡 트리거 (미확정 — 주기는 backend와 조율 필요)
+-- 제안: 5분마다 알림 잡 트리거 (미확정 — [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림 잡]]과
+-- 5분 창 방식으로 통일함, 주기 자체의 최종 확정은 backend와 조율)
 select cron.schedule(
   'notify-job-trigger',
   '*/5 * * * *',
@@ -488,31 +511,74 @@ select cron.schedule(
 
 - 공유 시크릿 헤더로 앱 API가 pg_net 호출만 수락하도록 검증한다(구체 헤더명·검증 로직은
   backend 설계에서 확정).
-- **"지금 알림 받을 사용자" 선정 (제안)**: pg_cron이 호출하는 앱 API 엔드포인트 내부에서
-  `notify_settings`를 이렇게 조회한다(SQL은 예시이며 실제 구현은 backend가 정한다).
+- **"지금 알림 받을 사용자" 선정 (제안, [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림 잡]]의
+  5분 창 방식과 통일)**: pg_cron 트리거는 `*/5 * * * *`(5분 정각 실행, Vercel Cron과 달리 창
+  안 임의 시점이 아니라 정확히 그 시각에 실행됨)를 전제로 한다. `/api/jobs/notify`는 "직전
+  실행 이후 지금까지" 5분 창 안에 `notify_time`이 들어오는 사용자를 고른다(pg_cron이 호출하는
+  앱 API 엔드포인트 내부에서 조회, SQL은 예시이며 실제 구현은 backend가 정한다).
 
   ```sql
-  -- 제안: notify_time이 Asia/Seoul 기준 현재 시각과 (트리거 주기 오차 범위 내로) 일치하고
-  -- enabled = true인 사용자를 고른다. 트리거 주기가 5분이면 5분 단위로 맞춰 비교한다.
+  -- 제안: Asia/Seoul 기준 현재 시각의 직전 5분 창 (notify_time, notify_time + 5분] 안에
+  -- 드는 사용자를 고른다. time 타입은 24시 경계에서 모듈러 연산되므로(예: 23:58 + 5분 =
+  -- 00:03), 창이 자정을 넘어가는 경우(윗값 < notify_time)를 OR로 따로 처리한다.
   select ns.user_id
   from notify_settings ns
   join users u on u.id = ns.user_id
   where ns.enabled = true
     and u.suspended_at is null
-    and date_trunc('minute', ns.notify_time)
-        = date_trunc('minute', (now() at time zone ns.timezone)::time);
+    and (
+      -- 창이 자정을 넘지 않는 일반 경우
+      (
+        (ns.notify_time + interval '5 minutes')::time > ns.notify_time
+        and (now() at time zone ns.timezone)::time
+            > ns.notify_time
+        and (now() at time zone ns.timezone)::time
+            <= (ns.notify_time + interval '5 minutes')::time
+      )
+      or
+      -- notify_time이 23:55~23:59:59라 창이 자정을 넘는 경우 (예: 23:57 → 00:02)
+      (
+        (ns.notify_time + interval '5 minutes')::time <= ns.notify_time
+        and (
+          (now() at time zone ns.timezone)::time > ns.notify_time
+          or (now() at time zone ns.timezone)::time
+             <= (ns.notify_time + interval '5 minutes')::time
+        )
+      )
+    );
   ```
 
   - `u.suspended_at is null` 조건은 정지된 계정에 알림을 보내지 않기 위한 제안이다.
-
   - `timezone` 컬럼이 항상 `'Asia/Seoul'`로 고정이므로 이 쿼리는 사실상 Asia/Seoul 기준
     비교이지만, 컬럼을 참조해 두어 나중에 사용자별 시간대를 늘려야 할 때(현재는 계획 없음)
     스키마 변경 없이 확장 가능하다.
-  - 트리거 주기(5분)와 비교 정밀도(분 단위)를 맞추는 정확한 조건식은 미확정 — backend가
-    구현 단계에서 확정한다.
+  - **잡 실행이 늦거나 겹쳐 같은 사용자가 두 번 이상의 5분 창에 걸쳐 뽑혀도** 실제 중복 발송은
+    `notify_logs`의 `unique(user_id, notice_id)` 제약과 `INSERT ... ON CONFLICT DO NOTHING`
+    선점(위 `notify_logs` 절)이 막는다 — 이 쿼리는 "후보 선정"만 책임지고, "실제로 한 번만
+    보낸다"는 보장은 `notify_logs` 쪽 책임으로 분리한다(제안).
+  - 자정 경계를 포함한 정확한 조건식과 pg_cron 실행이 지연될 때의 창 보정(예: 5분보다 오래
+    걸린 실행 사이의 빈 구간)은 backend 구현 단계에서 최종 확정한다.
 - collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)을 기본안으로 제안한다. Vercel Cron은
-  이전 가능성 원칙 3에 따라 쓰지 않는다. 주기는 미확정(수집 대상 게시판이 아직 없어 확인 항목 1과
-  연결).
+  이전 가능성 원칙 3에 따라 쓰지 않는다. 주기는 하루 1회(미확정 제안) — 게시판이 관공서 공지
+  게시판이라 실시간성 요구가 낮고, 무료 티어 리소스(pg_net 호출, Vercel 함수 실행)를 아끼기
+  위함이다. 시각은 사용자 트래픽이 적은 새벽(예: Asia/Seoul 04:00, 미확정 제안)으로 잡아 알림
+  잡보다 충분히 먼저 끝나게 한다.
+  ```sql
+  -- 제안(미확정): 매일 새벽 1회 수집 잡 트리거 (UTC 19:00 = Asia/Seoul 04:00)
+  select cron.schedule(
+    'collect-job-trigger',
+    '0 19 * * *',
+    $$
+    select net.http_post(
+      url := '앱 API URL(미확정, 환경변수로 관리)',
+      headers := jsonb_build_object(
+        'content-type', 'application/json',
+        'x-scheduler-secret', '공유 시크릿(미확정, 환경변수로 관리, 문서에 값 기록 금지)'
+      )
+    );
+    $$
+  );
+  ```
 - UNO Q 전환 시 트리거만 `리눅스 cron + curl`로 교체하고 잡 로직(앱 API)은 그대로 둔다
   ([[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO Q)]]).
 
@@ -583,8 +649,10 @@ select cron.schedule(
   [[anyang-service-scope]] (프로젝트 문서 확인 항목 2).
 - 알림 시각 자유/고정 여부 — 해결(2026-09-27, user): 자유 설정 + on/off, 시간대는 Asia/Seoul
   고정. [[anyang-service-scope]] (프로젝트 문서 확인 항목 3).
-- 수집 대상 게시판에 따른 notices 갱신·중복 판정 세부, collect-job 주기 (확인 항목 1과 연결) —
-  미해결.
+- 수집 대상 게시판 — 해결(2026-09-27, user): 안양시 청년 게시판 1개로 확정
+  ([[anyang-service-scope]]). 그 게시판의 실제 갱신 패턴(같은 글 수정 여부)에 따른 notices
+  갱신·중복 판정 세부는 여전히 미해결(위 `notices` 절 참고) — 운영하며 관찰이 필요하다.
+  collect-job 주기는 하루 1회(미확정 제안, 위 pg_cron 절 참고)로 남겨뒀다.
 - 처리방침·동의 화면 — 해결(2026-09-27, user): 채택. 가입 시 필수 동의 화면 + 동의 시각
   기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)는 구조 자체가
   아직 (미확정)이다.
