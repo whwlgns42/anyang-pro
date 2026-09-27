@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { pool } from "@/lib/db";
 import { requireUser } from "@/lib/require-auth";
 import { maskPii } from "@/lib/mask-pii";
@@ -224,9 +224,18 @@ export async function POST(request: NextRequest) {
 
   const [clientStream, captureStream] = deepseekRes.body.tee();
   const conversationIdForStorage = conversationId;
-  consumeAndStore(captureStream, conversationIdForStorage, authResult.userId).catch((err) => {
-    console.error("chat: failed to store assistant message", err);
-  });
+  const runConsumeAndStore = () =>
+    consumeAndStore(captureStream, conversationIdForStorage, authResult.userId).catch((err) => {
+      console.error("chat: failed to store assistant message", err);
+    });
+  // Vercel 서버리스 함수는 응답을 반환하면 곧바로 종료될 수 있어, await 없는 fire-and-forget
+  // 호출은 저장이 끝나기 전에 함수가 잘릴 위험이 있다. after()로 응답 이후에도 완료를 보장한다.
+  // 요청 스코프 밖(유닛 테스트 등)에서는 after()가 던지므로 기존 fire-and-forget으로 폴백한다.
+  try {
+    after(runConsumeAndStore);
+  } catch {
+    void runConsumeAndStore();
+  }
 
   // 3-2절 — 인용 이벤트를 DeepSeek 청크보다 먼저, 대화당 1회만 보낸다. 빈 목록도 `data: []`로 전송.
   const citationsEvent = `event: citations\ndata: ${JSON.stringify(citations)}\n\n`;

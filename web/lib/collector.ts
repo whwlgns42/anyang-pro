@@ -100,6 +100,11 @@ export async function runCollectJob(
       const existing = await pool.query(`select id from notices where content_hash = $1`, [hash]);
       if (existing.rows.length > 0) continue;
 
+      const existingBySourceUrl = await pool.query<{ id: string }>(
+        `select id from notices where source_url = $1`,
+        [item.url],
+      );
+
       await pool.query(
         `insert into notices (source_url, title, body, content_hash, published_at)
          values ($1, $2, $3, $4, $5)
@@ -108,6 +113,13 @@ export async function runCollectJob(
                published_at = excluded.published_at, collected_at = now()`,
         [item.url, title, detail.body, hash, item.publishedAt],
       );
+
+      if (existingBySourceUrl.rows.length > 0) {
+        // 5절 흐름 5 — 변경된 공지는 재임베딩 큐에 다시 올라야 한다. notice_chunks.embedding은
+        // NOT NULL이라 null로 되돌릴 수 없으므로, 기존 청크를 지워 embed-job의 "청크 없는
+        // 공지" 대기열에 다시 걸리게 한다.
+        await pool.query(`delete from notice_chunks where notice_id = $1`, [existingBySourceUrl.rows[0].id]);
+      }
       collectedCount++;
     }
 

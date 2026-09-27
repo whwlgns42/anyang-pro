@@ -23,3 +23,11 @@ export async function sendPushNotification(sub: PushSubscriptionRecord, payload:
   ensureConfigured();
   await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
 }
+
+// Web Push 표준: 410(Gone)/404(Not Found)는 브라우저·OS가 구독을 이미 폐기했다는 뜻이라
+// 재시도해도 절대 성공하지 않는다. 호출부가 이 상태 코드로 죽은 구독을 지울 수 있게 판별만
+// 제공한다(설계 8절에 명시는 없으나 Web Push 표준 처리).
+export function isGoneSubscriptionError(err: unknown): boolean {
+  const status = (err as { statusCode?: number } | null)?.statusCode;
+  return status === 410 || status === 404;
+}

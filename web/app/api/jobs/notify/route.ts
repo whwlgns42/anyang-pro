@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requireSchedulerSecret } from "@/lib/scheduler-auth";
-import { sendPushNotification } from "@/lib/web-push";
+import { sendPushNotification, isGoneSubscriptionError } from "@/lib/web-push";
 
 // anyang-backend-api 7절 — 알림 잡. 시각 창 매칭 + 코사인 유사도 + notify_logs pending 선점.
 const SIMILARITY_THRESHOLD = 0.75; // 설계 제안값(미확정)
@@ -72,9 +72,25 @@ async function sendToAllDevices(userId: string, noticeId: string): Promise<void>
   ]);
   const payload = JSON.stringify({ title: noticeRows[0]?.title ?? "새 공지", notice_id: noticeId });
 
+  // 기기 1대 실패로 나머지 기기 전송 시도가 막히지 않게 모든 기기를 끝까지 시도한다. 410/404
+  // (Gone/Not Found)는 표준 Web Push 처리로 구독을 지우고 "실패"로 세지 않는다 — 그 외 오류는
+  // 기존과 동일하게 이 (사용자, 공지) 쌍을 실패로 표시한다(전체 성공해야 성공, 기존 판정 유지).
+  let lastError: unknown;
+  let goneCount = 0;
   for (const device of devices) {
-    await sendPushNotification(device, payload);
+    try {
+      await sendPushNotification(device, payload);
+    } catch (err) {
+      if (isGoneSubscriptionError(err)) {
+        await pool.query(`delete from push_subscriptions where endpoint = $1`, [device.endpoint]);
+        goneCount++;
+        continue;
+      }
+      lastError = err;
+    }
   }
+  if (lastError) throw lastError;
+  if (goneCount === devices.length) throw new Error("all push subscriptions were gone");
 }
 
 export async function POST(request: Request) {

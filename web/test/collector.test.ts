@@ -137,6 +137,69 @@ describe("runCollectJob", () => {
     expect(insertCall).toBeUndefined();
   });
 
+  it("deletes existing notice_chunks when a known source_url's content changes (re-embed queue)", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
+      if (text.includes("select id from notices where content_hash")) return { rows: [] }; // hash changed
+      if (text.includes("select id from notices where source_url")) return { rows: [{ id: "existing-notice" }] };
+      return { rows: [] };
+    });
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).includes("robots.txt")) return new Response("Not Found", { status: 404 });
+      if (String(url).includes("selectBbsNttList")) {
+        return new Response(
+          '<table class="p-table"><tbody><tr><td>1</td>' +
+            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
+            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
+          { status: 200 },
+        );
+      }
+      return new Response(
+        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">수정된 본문</td></tr></tbody></table>',
+        { status: 200 },
+      );
+    });
+
+    const result = await runCollectJob("scheduled", null);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.collectedCount).toBe(1);
+
+    const deleteCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("delete from notice_chunks"));
+    expect(deleteCall?.[1]).toEqual(["existing-notice"]);
+  });
+
+  it("does not delete notice_chunks for a brand-new source_url", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
+      if (text.includes("select id from notices where content_hash")) return { rows: [] };
+      if (text.includes("select id from notices where source_url")) return { rows: [] }; // new notice
+      return { rows: [] };
+    });
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (String(url).includes("robots.txt")) return new Response("Not Found", { status: 404 });
+      if (String(url).includes("selectBbsNttList")) {
+        return new Response(
+          '<table class="p-table"><tbody><tr><td>1</td>' +
+            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
+            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
+          { status: 200 },
+        );
+      }
+      return new Response(
+        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">본문</td></tr></tbody></table>',
+        { status: 200 },
+      );
+    });
+
+    const result = await runCollectJob("scheduled", null);
+    expect(result.ok).toBe(true);
+
+    const deleteCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("delete from notice_chunks"));
+    expect(deleteCall).toBeUndefined();
+  });
+
   it("treats a 404 robots.txt as no restrictions (proceeds to collect)", async () => {
     queryMock.mockImplementation(async (sql: string) => {
       const text = String(sql);

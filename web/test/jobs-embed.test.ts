@@ -50,10 +50,10 @@ describe("POST /api/jobs/embed", () => {
     expect(queryMock).not.toHaveBeenCalled();
   });
 
-  it("embeds notices missing notice_chunks and inserts chunk rows", async () => {
+  it("embeds notices missing notice_chunks (title+body combined) and inserts chunk rows", async () => {
     queryMock.mockImplementation(async (sql: string) => {
       if (String(sql).includes("not exists")) {
-        return { rows: [{ id: "notice-1", body: "짧은 공지 본문" }] };
+        return { rows: [{ id: "notice-1", title: "공지 제목", body: "짧은 공지 본문" }] };
       }
       return { rows: [] };
     });
@@ -67,7 +67,42 @@ describe("POST /api/jobs/embed", () => {
 
     const insertCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("insert into notice_chunks"));
     expect(insertCall).toBeDefined();
-    expect(insertCall?.[1]).toEqual(["notice-1", "짧은 공지 본문", JSON.stringify([0.1, 0.2]), "gemini-embedding-001"]);
+    expect(insertCall?.[1]).toEqual([
+      "notice-1",
+      "공지 제목\n\n짧은 공지 본문",
+      JSON.stringify([0.1, 0.2]),
+      "gemini-embedding-001",
+    ]);
+  });
+
+  it("skips a failing notice and continues embedding the rest (no whole-queue abort)", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("not exists")) {
+        return {
+          rows: [
+            { id: "notice-fail", title: "실패 공지", body: "본문1" },
+            { id: "notice-ok", title: "성공 공지", body: "본문2" },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    embedBatchMock
+      .mockRejectedValueOnce(new Error("gemini down"))
+      .mockResolvedValueOnce([{ embedding: [0.3, 0.4], model: "gemini-embedding-001" }]);
+
+    const res = await POST(makeRequest("secret"));
+    const json = (await res.json()) as { processed_notices: number; embedded_chunks: number };
+    expect(json.processed_notices).toBe(2);
+    expect(json.embedded_chunks).toBe(1);
+
+    const insertCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("insert into notice_chunks"));
+    expect(insertCall?.[1]).toEqual([
+      "notice-ok",
+      "성공 공지\n\n본문2",
+      JSON.stringify([0.3, 0.4]),
+      "gemini-embedding-001",
+    ]);
   });
 
   it("does nothing when no notices are pending", async () => {
