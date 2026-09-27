@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -12,7 +12,7 @@ owner: frontend
 Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로필) → 채팅/추천 공지 피드를
 중심으로, 알림 설정·"AI가 기억하는 내 정보"·대화 히스토리 목록 화면을 둔다(모두
 [[anyang-service-scope]]로 채택 확정). API는 모두 [[anyang-backend-api]]를 근거로 삼는다.
-화면 포함 여부는 확정됐고, 세부 구조·문구·레이아웃 값은 여전히 `(미확정)`이며 사용자 설계
+화면 포함 여부는 확정됐고, 세부 구조·문구·레이아웃 값은 여전히 ``이며 사용자 설계
 승인으로 확정된다. 비밀번호 재설정 화면은 1차 출시에서 제외로 **확정**됐다
 ([[anyang-service-scope]], user, 2026-09-27) — 별도 화면을 만들지 않고, 로그인 화면에
 "비밀번호를 잊었다면 Google로 로그인" 안내로 대체한다(1절). `/admin` 관리자 화면 4종(공지
@@ -52,7 +52,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   - 계정 탈퇴는 `DELETE /api/account`([[anyang-backend-api#1-3. 사용자 탈퇴 API (제안, 미확정)]])로
     처리하고, 탈퇴해도 동의 기록은 증빙용으로 1년간 보관된 뒤 삭제된다는 원칙(보관 기간
     **확정**, [[anyang-service-scope]], user, 2026-09-27,
-    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 참고)에
+    [[anyang-database-schema#consents — 가입 시 개인정보 필수 동의 기록]] 참고)에
     따라 8-1절 화면을 둔다.
 - 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은 [[anyang-service-scope]]
   "프로필 선택지" 행(user, 2026-09-27)에서 확정됐다. 값 목록은 그 결정 문서를 원본으로 삼고
@@ -117,7 +117,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
     `/consent` 화면에도 탈퇴 경로(8-1절)를 함께 제공한다 — `DELETE /api/account`는 재동의
     필요 상태에서도 호출 가능하다(backend 1절 예외).
   - `ADMIN_ONLY` → `/admin/*` 전용(아래 "관리자 가드" 참고), 관리자가 아니라는 안내 후
-    `/chat`으로 보낸다(미확정).
+    `/chat`으로 보낸다.
   - `ADMIN_EMAIL_RESERVED`는 이 공통 가드가 아니라 1절 가입 화면에서만 인라인 오류로
     처리한다(가입 시도 응답이라 리다이렉트 대상이 없음).
 - **관리자 가드 (확정 원칙, [[anyang-service-scope]], user, 2026-09-27)**: 관리자 판정은
@@ -136,14 +136,14 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 ### 1. 로그인/가입 화면 (`/login`, 미확정)
 
-- 구성 요소(미확정): "Google로 계속하기" 버튼(OAuth 리다이렉트), 이메일·비밀번호 입력 폼(로그인),
+- 구성 요소: "Google로 계속하기" 버튼(OAuth 리다이렉트), 이메일·비밀번호 입력 폼(로그인),
   "계정이 없다면 가입" 전환 링크 → 같은 화면에서 폼 모드만 전환(가입 시 비밀번호 확인 입력 추가,
   미확정). 비밀번호 입력 아래에 "비밀번호를 잊었다면 Google로 로그인" 안내 문구(제안, 미확정
   문구)를 둔다 — 별도 비밀번호 재설정 화면·링크는 만들지 않는다(1차 출시 제외 확정,
   [[anyang-backend-api#1-1. 이메일 인증·비밀번호 재설정 — verification_tokens 미사용에 따른 정리 (확정)]]).
   Credentials 가입 계정은 비밀번호를 잊으면 이 서비스 안에서 복구 수단이 없다는 한계가 있다
   (backend 1-1절).
-- 가입 흐름(미확정): 이메일·비밀번호 입력 → 동의 체크박스(`/consent` 화면, 7절 참고)를 거쳐
+- 가입 흐름: 이메일·비밀번호 입력 → 동의 체크박스(`/consent` 화면, 7절 참고)를 거쳐
   체크된 상태로 `POST /api/auth/register`(body 형식은 backend
   [[anyang-backend-api#1. 인증 (Auth.js v5)]]의 `{ email, password, consents: {
   collection_use, overseas_transfer } }`를 그대로 따른다 — 값은 여기서 복제하지 않는다) 호출
@@ -152,7 +152,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   `{ error: "ADMIN_EMAIL_RESERVED" }`([[anyang-backend-api#1-4. 403 응답 에러 코드 (제안, 미확정)]],
   관리자 이메일로 비밀번호 가입을 시도한 경우) 시에도 인라인 오류로 "이 이메일은 비밀번호로
   가입할 수 없습니다. Google로 로그인해 주세요"(제안, 미확정 문구)를 표시한다.
-- 로그인 흐름(미확정): Auth.js Credentials 로그인 → 성공 시 프로필 존재 여부에 따라 `/chat`
+- 로그인 흐름: Auth.js Credentials 로그인 → 성공 시 프로필 존재 여부에 따라 `/chat`
   또는 `/onboarding`. 401 시 "이메일 또는 비밀번호가 올바르지 않습니다"(미확정 문구).
 - **정지된 계정 로그인**(제안, 미확정 문구 — [[anyang-backend-api#1-2. 정지 계정 제한 방식]]
   기준, 에러 코드는 [[anyang-backend-api#1-4. 403 응답 에러 코드 (제안, 미확정)]]의
@@ -165,7 +165,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   안내 화면으로 돌려보낸다(세션은 종료하지 않는다, 제안, 미확정). 정지 안내 화면에는 항상
   탈퇴 경로(8-1절) 링크를 함께 제공한다 — `DELETE /api/account`는 정지 상태에서도 호출
   가능하다(backend 1-2절 예외).
-- Google 로그인 흐름(미확정): Auth.js `signIn('google')` → 콜백 후 신규 사용자는 동의 여부를
+- Google 로그인 흐름: Auth.js `signIn('google')` → 콜백 후 신규 사용자는 동의 여부를
   판별해(제안 — `GET /api/profile` 401 아닌 403 등 동의 필요 신호 기준, backend 1절 참고)
   미동의 상태면 `/consent`로 보내 체크박스 동의 후 `POST /api/auth/consent`(body는 이메일
   가입과 같은 `{ consents: { collection_use, overseas_transfer } }`, backend 1절) 호출 →
@@ -264,7 +264,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   재임베딩 후 응답(backend 2-3절). 재임베딩 실패(5xx) 시 텍스트가 반영되지 않았다는 오류
   메시지 표시(미확정 문구), 화면 값은 이전 값으로 되돌린다(제안, 미확정).
 - 삭제: `DELETE /api/preferences/:id` → 성공 시 목록에서 제거.
-- 빈 목록일 때 안내 문구(미확정): "아직 대화에서 기억한 내용이 없어요."
+- 빈 목록일 때 안내 문구: "아직 대화에서 기억한 내용이 없어요."
 
 ### 7. 개인정보 동의 화면 (`/consent`)
 
@@ -304,7 +304,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   `GET /api/conversations/:id/messages`로 과거 메시지를 불러와 `/chat`에서 이어서 연다
   (제안, 미확정 — 예: `/chat?conversation_id=...` 쿼리 또는 상태 전달 방식은 미확정).
 - 새 대화 시작 버튼(제안, 미확정) — `/chat`으로 이동하며 `conversation_id` 없이 진입.
-- 빈 목록일 때 안내 문구(미확정): "아직 대화 기록이 없어요."
+- 빈 목록일 때 안내 문구: "아직 대화 기록이 없어요."
 
 ### 8-1. 계정 탈퇴 (`/settings/account`, 신규 반영)
 
@@ -314,7 +314,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 - 안내 문구(제안, 미확정): 탈퇴하면 프로필·대화·기억·알림 설정 등 계정 데이터는 즉시
   삭제되지만, 동의 기록(`consents`)은 증빙용으로 1년간 보관된 뒤 삭제된다는 점(보관 기간
   **확정**, [[anyang-service-scope]], user, 2026-09-27,
-  [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 참고)을
+  [[anyang-database-schema#consents — 가입 시 개인정보 필수 동의 기록]] 참고)을
   확인 다이얼로그 또는 화면 문구에 표시한다.
 - 탈퇴 성공 시 세션이 종료되고 `/login`으로 이동한다(backend 1-3절 — 세션 쿠키 무효화).
 - 이 화면의 정확한 배치(별도 페이지 vs 알림 설정 화면 하단 등)는 미확정 — 1차 제안은 별도
@@ -329,7 +329,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 - **고지 항목에 반영해야 할 것(제안, 문구는 법률 검토 후 확정)**:
   - 탈퇴 시 동의 기록은 즉시 삭제되지 않고 증빙용으로 1년간 보관된 뒤 삭제된다(보관 기간
     **확정**, [[anyang-service-scope]], user, 2026-09-27,
-    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 참고).
+    [[anyang-database-schema#consents — 가입 시 개인정보 필수 동의 기록]] 참고).
   - 수집 실행 이력·외부 API 사용량 기록은 90일 보존 후 삭제된다(**확정**,
     [[anyang-service-scope]], user, 2026-09-27). 알림 발송 로그는 중복 발송 방지 목적으로
     삭제 대상에서 제외된다.
@@ -417,11 +417,11 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 - 날짜 범위 선택 UI는 12절과 동일 패턴(제안, 미확정).
 - 인증 필요, 관리자만.
 
-### PWA — manifest·서비스워커 (미확정)
+### PWA — manifest·서비스워커
 
 - `app/manifest.ts`(Next.js App Router 표준 방식, 별도 라이브러리 불필요 — 이미 프레임워크
   기능): `name`, `short_name`, `icons`(192/512px, 미확정 — 디자인 자산 없음), `start_url: '/'`,
-  `display: 'standalone'`, `theme_color`/`background_color`(미확정).
+  `display: 'standalone'`, `theme_color`/`background_color`.
 - 서비스워커: Web Push 수신·표시(`push` 이벤트 → `self.registration.showNotification`)와
   클릭 시 앱 포커스/열기(`notificationclick`)만 담당한다(제안, 미확정). 오프라인 캐싱
   전략(프리캐시 자산 목록 등)은 이번 요청 범위에 없다 — 요청되지 않은 오프라인 지원까지
@@ -429,7 +429,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 - 서비스워커 등록 위치(제안, 미확정): 루트 레이아웃 클라이언트 컴포넌트에서
   `navigator.serviceWorker.register('/sw.js')` 1회 호출. Vercel 전용 기능이 아니라 표준
   Web API만 사용 — 이전 가능성 원칙과 충돌 없음.
-- VAPID 공개키는 서버 환경변수 `VAPID_PUBLIC_KEY`([[anyang-backend-api#9. 환경변수 목록 (미확정)]])를
+- VAPID 공개키는 서버 환경변수 `VAPID_PUBLIC_KEY`([[anyang-backend-api#9. 환경변수 목록]])를
   클라이언트에 안전하게 노출하는 방법(Next.js `NEXT_PUBLIC_` 환경변수 또는 API로 전달, 미확정)이
   필요 — 공개키는 비밀값이 아니므로 노출 자체는 문제 없다(제안).
 
@@ -507,7 +507,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
-1. `occupation_type` 온보딩 입력 컴포넌트(select vs 라디오 그룹) — 2절에 제안(미확정)만
+1. `occupation_type` 온보딩 입력 컴포넌트(select vs 라디오 그룹) — 2절에 제안만
    적었다. 설계 승인으로 확정된다.
 
 (2026-09-27 해결: 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은

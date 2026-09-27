@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -20,12 +20,12 @@ owner: frontend
 [[anyang-service-scope]]로 확정됐다(2026-09-27). 프로필 코드값 셋(`gender`,
 `occupation_type`, `enrollment_status`)도 [[anyang-service-scope]] "프로필 선택지" 행(user,
 2026-09-27)에서 확정됐다. `occupation_type`의 온보딩 입력 컴포넌트(select vs 라디오, 8개
-선택지 때문에 나온 제안)만 여전히 (미확정)이며 [[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)]]
-설계 승인으로 확정된다.
+선택지 때문에 나온 제안)는 설계 승인(2026-09-27)으로 네이티브 select로 확정됐다
+([[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)]]).
 
 ## Details
 
-### 작업 단위 (모두 [[anyang-frontend-screens]] 승인 후 착수, 값은 그 문서 기준 미확정)
+### 작업 단위 (모두 [[anyang-frontend-screens]] 승인 후 착수, 값은 그 문서 승인으로 확정됨)
 
 1. **공통 레이아웃·인증 가드** — 하단 탭, 로그인/온보딩/동의 리다이렉트 규칙, 403 응답 코드
    (`ACCOUNT_SUSPENDED`/`CONSENT_REQUIRED`/`ADMIN_ONLY`, backend 1-4절) 분기 처리. 정지는
