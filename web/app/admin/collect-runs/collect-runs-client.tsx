@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../_lib/api-fetch";
+import { NoticesTab } from "./notices-tab";
 
 type CollectRun = {
   id: string;
@@ -14,14 +15,13 @@ type CollectRun = {
   triggered_by: string | null;
 };
 
-// anyang-frontend-screens 11절: 실행 이력 + 수동 수집 실행(최대 300초, 진행 상태 표시).
-// 공지 숨김/해제(PATCH /api/admin/notices/:id/hide|unhide)는 대상을 고를 목록 API
-// (예: GET /api/admin/notices)가 아직 없어 이번 라운드에서는 만들지 않는다 — 보고에
-// "backend 조율 필요"로 남긴다.
+// anyang-frontend-screens 11절: 실행 이력 + 수동 수집 실행(최대 300초, 진행 상태 표시) +
+// "공지 목록" 탭(확인 항목 23 반영, 설계 승인 2026-09-28 — 숨김/해제는 notices-tab.tsx).
 export function CollectRunsClient() {
   const [runs, setRuns] = useState<CollectRun[] | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"runs" | "notices">("runs");
 
   async function load() {
     const res = await apiFetch("/api/admin/collect-runs");
@@ -44,36 +44,58 @@ export function CollectRunsClient() {
     await load();
   }
 
-  if (runs === null) {
-    return (
-      <main className="page">
-        <p className="hint-text">불러오는 중...</p>
-      </main>
-    );
-  }
-
   return (
     <main className="page">
       <h1>공지 수집 관리</h1>
-      <button type="button" onClick={handleRunNow} disabled={running} style={{ marginBottom: 12 }}>
-        {running ? "수집 실행 중... (최대 5분)" : "지금 수집 실행"}
-      </button>
-      {error && (
-        <p className="error-text" role="alert">
-          {error}
-        </p>
+
+      <div role="tablist" aria-label="공지 수집 관리 탭" className="tab-row">
+        <button
+          type="button"
+          className={tab === "runs" ? "" : "secondary"}
+          onClick={() => setTab("runs")}
+          aria-pressed={tab === "runs"}
+        >
+          실행 이력
+        </button>
+        <button
+          type="button"
+          className={tab === "notices" ? "" : "secondary"}
+          onClick={() => setTab("notices")}
+          aria-pressed={tab === "notices"}
+        >
+          공지 목록
+        </button>
+      </div>
+
+      {tab === "runs" ? (
+        runs === null ? (
+          <p className="hint-text">불러오는 중...</p>
+        ) : (
+          <>
+            <button type="button" onClick={handleRunNow} disabled={running} style={{ marginBottom: 12 }}>
+              {running ? "수집 실행 중... (최대 5분)" : "지금 수집 실행"}
+            </button>
+            {error && (
+              <p className="error-text" role="alert">
+                {error}
+              </p>
+            )}
+            {runs.length === 0 && <p className="hint-text">아직 수집 실행 기록이 없어요.</p>}
+            {runs.map((run) => (
+              <div className="card" key={run.id}>
+                <strong>{new Date(run.started_at).toLocaleString()}</strong>
+                <p className="hint-text">
+                  트리거: {run.trigger_type} · 상태: {run.status} · 수집 건수:{" "}
+                  {run.collected_count ?? "-"}
+                </p>
+                {run.error_summary && <p className="error-text">{run.error_summary}</p>}
+              </div>
+            ))}
+          </>
+        )
+      ) : (
+        <NoticesTab />
       )}
-      {runs.length === 0 && <p className="hint-text">아직 수집 실행 기록이 없어요.</p>}
-      {runs.map((run) => (
-        <div className="card" key={run.id}>
-          <strong>{new Date(run.started_at).toLocaleString()}</strong>
-          <p className="hint-text">
-            트리거: {run.trigger_type} · 상태: {run.status} · 수집 건수:{" "}
-            {run.collected_count ?? "-"}
-          </p>
-          {run.error_summary && <p className="error-text">{run.error_summary}</p>}
-        </div>
-      ))}
     </main>
   );
 }

@@ -81,7 +81,7 @@ export default function ConsentFormInner() {
           동의하고 계속하기
         </button>
       </form>
-      <p className="hint-text" style={{ marginTop: 16 }}>
+      <p className="hint-text hint-text--spaced">
         동의하지 않고 <a href="/settings/account">탈퇴</a>할 수도 있습니다.
       </p>
     </main>

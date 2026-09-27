@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -24,7 +24,7 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 [[anyang-backend-api#3-2. 채팅 인용 공지 스트림 계약 (신규, 제안, 미확정 — 확인 항목 22 반영)]]의
 `event: citations` 계약에 맞춰 표시 필드·위치·빈 목록 처리를 구체화했고, 관리자 공지 수집
 관리(11절)에 `GET /api/admin/notices`([[anyang-backend-api#13-1. 공지 수집 관리]]) 기반 "공지
-목록" 탭을 추가했다. 둘 다 값은 `(미확정)`이며 재승인 대상이다.
+목록" 탭을 추가했다. 둘 다 값은 ``이며 재승인 대상이다.
 
 ## Context
 

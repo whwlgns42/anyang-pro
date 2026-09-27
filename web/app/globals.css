@@ -287,6 +287,10 @@ button.danger:hover:not(:disabled) {
   line-height: 1.5;
 }
 
+.hint-text--spaced {
+  margin-top: 16px;
+}
+
 .card {
   display: block;
   border: 1px solid var(--border);
@@ -365,6 +369,42 @@ a.card:hover {
   overflow-y: auto;
   flex: 1;
   margin-bottom: 12px;
+}
+
+/* anyang-frontend-screens 3절 인용 공지 카드: AI 말풍선 위, 세로 나열(모바일 폭 기준 YAGNI).
+   .chat-turn이 각 메시지(카드 행 + 말풍선)를 감싸 role별 정렬을 유지한다. */
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.chat-turn--user {
+  align-items: flex-end;
+}
+
+.citation-row {
+  max-width: 85%;
+  margin-bottom: 6px;
+}
+
+.citation-row .hint-text {
+  margin: 0 0 4px;
+}
+
+.citation-card {
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+
+.citation-card strong {
+  font-size: 0.875rem;
+  margin-bottom: 2px;
+}
+
+.citation-card p {
+  font-size: 0.75rem;
 }
 
 .bubble {
