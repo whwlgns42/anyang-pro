@@ -41,7 +41,8 @@
 
 ## Conversations
 
-- [[2026-09-27_anyang-design-approval-wait]] — 안양 비서 인수인계: 설계 승인 대기, 승인 전 받을 답, 다음 할 일
+- [[2026-09-27_anyang-implementation-paused]] — 안양 비서 인수인계: 설계 승인 후 구현 중단(database 완료), 사용자 결정 대기·준비 항목, 재개 방법
+- [[2026-09-27_anyang-design-approval-wait]] — (superseded, archive 이동 대상) 안양 비서 설계 승인 대기 인수인계
 
 ## Design
 

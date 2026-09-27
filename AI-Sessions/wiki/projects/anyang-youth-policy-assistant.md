@@ -9,7 +9,7 @@ owner: pm
 
 ## Summary
 
-안양시 청년정책 공지 중 사용자 프로필·대화 이력에 맞는 것만 골라 주고, 사용자가 정한 시각에 새 공지를 Web Push로 알리는 PWA 웹앱이다. 현재 단계: 설계(수정 완료, 사용자 승인 대기).
+안양시 청년정책 공지 중 사용자 프로필·대화 이력에 맞는 것만 골라 주고, 사용자가 정한 시각에 새 공지를 Web Push로 알리는 PWA 웹앱이다. 현재 단계: 구현 중단(설계 승인 2026-09-27, database 구현 완료).
 
 ## Context
 
@@ -42,6 +42,8 @@ owner: pm
 - 2026-09-27: 사용자가 남은 항목(9·14·15·16·18·19·20·21)에 권장안으로 답함. [[anyang-service-scope]] 갱신, 설계 수정 라운드(database → backend → frontend) 완료. 이어서 14(1년 보관)·19(코드 식별자) 사용자 확정, database·frontend 반영. 설계 결정용 미해결 항목 없음(7·13은 배포·전환 시점). 설계 문서 5종 재승인 대기.
 - 2026-09-27: 승인 전 재점검(메인 세션) 반영. 사용자 결정: 채팅 메시지 Gemini 임베딩 허용(정규식 가림) — [[anyang-ai-models-data-transfer]]. 설계 수정(database → backend → frontend): 탈퇴 예외 경로, 관리자 판정은 Google 로그인 계정만, 403 에러 코드, 알림 쿼리 5분 창·자정 경계, 알림 켠 시각 이후 공지만, 프로필 비임베딩, 수집 잡 하루 1회, 옛 문구 정리.
 - 2026-09-27: 2차 재점검(메인 세션) 반영. 관리자 판정은 이번 세션의 로그인 방식(JWT provider=google) 기준, ADMIN_EMAILS 이메일의 이메일 가입 거부, 이메일 계정 연결 정책(자동 연결 off + 안내, 제안), enabled_at 생성 시 채움·null이면 발송 제외, 정지 사용자는 로그인 허용·제한 상태, 스케줄러 헤더 `x-scheduler-secret` 통일, 개인정보 가림을 DeepSeek·선호 문장 전송에도 적용.
+- 2026-09-27: 사용자 설계 승인(5종, 기준 커밋 `ef51d3c`). 구현 단계 시작(database → backend → frontend → code-review). 외부 자원(개발용 Supabase `DATABASE_URL`, Google OAuth 클라이언트, DeepSeek·Gemini API 키, VAPID 키, `ADMIN_EMAILS`)은 사용자 준비 필요.
+- 2026-09-27: database 구현 완료(`df067cd`, 앱 위치 `web/` pm 결정). backend 1차 시작 직후 사용자 지시로 작업 전체 중단(산출물 없음). frontend·code-review 미착수. 인수인계 [[2026-09-27_anyang-implementation-paused]].
 
 ### 설계 문서 (status: draft, 사용자 승인 대기)
 
@@ -77,7 +79,13 @@ owner: pm
 
 ## 승인된 설계
 
-(아직 없음)
+기준 커밋 `ef51d3c`. 문서 안의 (미확정) 제안값도 함께 확정. 확정하지 않겠다고 한 값 없음.
+
+- [[anyang-database-schema]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-09-27, 승인자 user
 
 ## Jev 도입 제안
 
@@ -97,3 +105,4 @@ owner: pm
 - [[glossary]]
 - [[anyang-service-scope]]
 - [[2026-09-27_anyang-design-approval-wait]]
+- [[2026-09-27_anyang-implementation-paused]]

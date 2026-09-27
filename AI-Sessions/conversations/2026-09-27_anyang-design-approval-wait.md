@@ -1,7 +1,7 @@
 ---
 type: handoff
 date: 2026-09-27
-status: active
+status: superseded
 owner: pm
 ---
 
@@ -41,6 +41,8 @@ owner: pm
 3. 승인이면 pm이 "승인된 설계" 절에 기록한 뒤 `단계: 구현`으로 분배한다.
 
 ## Links
+
+- [[2026-09-27_anyang-implementation-paused]] — 이 문서를 대체(설계 승인 후 구현 중단). 이 문서는 archive 이동 대상
 
 - [[anyang-youth-policy-assistant]]
 - [[anyang-service-scope]]
