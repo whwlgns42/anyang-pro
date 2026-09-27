@@ -73,8 +73,10 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
   정지는 로그인 계정(`users`) 단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.
 - **계정 삭제**는 이 컬럼과 무관하게 기존 cascade 정책(위 각 테이블 `on delete cascade`)을 그대로
   따른다 — `users` 행 삭제 시 profiles/accounts/credentials/conversations/push_subscriptions/
-  notify_settings/user_preferences가 함께 삭제된다. `consents`는 위 "회원 탈퇴 시 삭제/보존
-  여부" 미확정과 연결(아래 변경 없음).
+  notify_settings/user_preferences가 함께 삭제된다. `consents`만 예외다 — `on delete set null`이므로
+  `users` 행이 삭제돼도 `consents` 행은 남는다(증빙 보관 목적, 아래 `consents` 절 참고). 탈퇴
+  처리 순서(애플리케이션 책임, 제안): ① `consents.withdrawn_at` 채우기 → ② `users` 행 삭제(나머지
+  cascade 테이블은 이때 함께 삭제됨).
 
 #### accounts (미확정) — OAuth 연동, Auth.js 어댑터 규격 기본안
 
@@ -117,8 +119,8 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
 |---|---|---|
 | user_id | uuid, PK, FK → users.id, on delete cascade | |
 | birth_year | smallint, null 허용 | 나이대 계산용. 생년월일 전체 저장은 개인정보 최소화 관점에서 비권장(제안) |
-| gender | text, null 허용 | 선택값. 코드값 셋은 미확정 |
-| occupation_type | text, null 허용 | 직군. 코드값 셋은 미확정 |
+| gender | text, null 허용 | 선택값. 코드값 셋(미확정, 제안): `male`/`female`/`unspecified`(응답 안 함) |
+| occupation_type | text, null 허용 | 직군. 코드값 셋(미확정, 제안): `student`/`job_seeker`/`employee`/`self_employed`/`freelancer`/`unemployed`/`other` |
 | enrollment_status | text, null 허용 | 재학/재직 여부([[glossary]]). 코드값 셋(예: `student`/`employed`/`neither`)은 미확정 |
 | updated_at | timestamptz | |
 
@@ -127,8 +129,24 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
   2. 항목을 더 늘려야 하면 `ALTER TABLE ADD COLUMN`(되돌릴 수 있는 마이그레이션)으로 추가한다.
     단, 항목 범위 자체를 늘리는 것은 [[anyang-service-scope]] 확정을 뒤집는 것이므로 설계 변경
     절차(재승인)를 거친다.
+- **코드값 선택지 (미확정 제안값, 근거)**: `enrollment_status`는 위 표의
+  `student`/`employed`/`neither` 예시를 그대로 유지한다.
+  - `gender`(미확정, 제안): `male`/`female`/`unspecified`. 개인정보 최소화 원칙상 강제 응답을
+    피해야 하므로 "응답 안 함"(`unspecified`)을 포함한다.
+  - `occupation_type`(미확정, 제안): `student`(학생)/`job_seeker`(구직자)/`employee`(직장인)/
+    `self_employed`(자영업자)/`freelancer`(프리랜서)/`unemployed`(무직)/`other`(기타) 7개.
+    안양시 청년정책 공고가 통상 구분하는 대상(재학생, 취업준비생, 재직자, 자영업·프리랜서,
+    미취업)을 근거로 5~8개 범위 안에서 구성했다. `enrollment_status`(재학/재직 여부)와 일부
+    의미가 겹치지만([[glossary]]), 정책 공고문은 재학/재직 여부와 별개로 직군(예: 프리랜서
+    vs 일반 직장인)을 구분해 자격 조건을 거는 경우가 있어 별도 항목으로 유지한다(제안 근거).
+  이 코드값들은 다른 설계 값과 마찬가지로 설계 승인으로 확정되며, 승인 전까지는 `(미확정)`
+  표시를 유지한다([[anyang-service-scope]], user, 2026-09-27).
 
-#### notices (미확정)
+#### notices (미확정) — 공지 자격요건 구조화 컬럼 없음(확정)
+
+공지 자격요건(연령·직군 등 조건)을 구조화된 컬럼으로 저장하지 않는 것은 1차 출시 범위로
+확정됐다([[anyang-service-scope]], user, 2026-09-27). 아래 표에 그런 컬럼을 두지 않는다 —
+자격요건 판단은 `body`(본문 텍스트)와 벡터 검색·LLM 판단에 맡긴다(애플리케이션 책임).
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -217,28 +235,51 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
 #### consents (미확정) — 가입 시 개인정보 필수 동의 기록
 
 가입 시(Google·이메일 모두) 개인정보 필수 동의 화면을 두고 동의 시각을 기록하는 것은 확정
-([[anyang-service-scope]], user, 2026-09-27). 아래 테이블 구조·컬럼은 이 확정을 담기 위한
-제안이며 그 자체는 (미확정)이다.
+([[anyang-service-scope]], user, 2026-09-27). 동의 항목을 "수집·이용"(collection_use)과
+"국외 이전"(overseas_transfer)으로 분리해 각각 받는 것, 처리방침 개정 시 재동의를 강제하는 것,
+탈퇴 후에도 동의 기록을 즉시 삭제하지 않고 증빙용으로 일정 기간 보관하는 것도 확정
+([[anyang-service-scope]], user, 2026-09-27). 아래 테이블 구조·컬럼 자체는 이 확정을 담기
+위한 제안이며 (미확정)이다.
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | id | uuid, PK | |
-| user_id | uuid, FK → users.id, on delete cascade | |
-| policy_version | text, not null | 동의 시점의 개인정보 처리방침 버전(문구가 바뀌면 재동의가 필요한지 추적하기 위함, 버전 관리 방식은 미확정) |
+| user_id | uuid, FK → users.id, on delete set null | 아래 "탈퇴 후 보관" 참고. cascade가 아니다 |
+| consent_type | text, not null | `collection_use`(수집·이용) 또는 `overseas_transfer`(국외 이전). [[glossary]]의 consent-type. 값 셋은 이 두 개로 고정(제안) |
+| policy_version | text, not null | 동의 시점의 개인정보 처리방침 버전 문자열(제안, 예: 날짜 기반 `2026-09-27`). 버전 부여 방식은 미확정 — backend 조율 필요 |
 | consented_at | timestamptz, not null, default now() | 동의 시각 |
+| withdrawn_at | timestamptz, null 허용 | 계정 탈퇴 시각. 사용자 삭제 처리 시 이 컬럼에 탈퇴 시각을 채우고 나서 `users` 행을 삭제한다(애플리케이션 책임, 아래 "탈퇴 후 보관" 참고) |
 | ip_address | inet, null 허용 | 동의 시점 IP 기록 여부(제안) — 민감정보 최소화 원칙과 배치되므로 필요성 자체가 미확정 |
 
-- 가입 흐름(회원가입 폼)에서 필수 체크박스 동의를 받는 즉시 1행을 남기는 방식(제안). 동의 항목이
-  여러 개(예: 개인정보 수집·이용 / 국외 이전)로 나뉘는지, 한 번의 동의로 묶는지는 미확정 —
-  나뉘면 `consent_type` 컬럼 추가가 필요하다(되돌릴 수 있는 마이그레이션).
-- `users` 테이블에 컬럼(예: `consented_at`)만 두는 대안도 있으나, 동의 이력을 여러 건 남기고
-  방침 개정 시 재동의를 추적하려면 별도 테이블이 낫다는 것이 제안 근거다. 최종 구조는 backend
-  조율 후 설계 승인으로 확정한다.
-- **회원 탈퇴 시 삭제/보존 여부 — 미확정**. 탈퇴한 사용자의 `consents` 행을 `users` cascade로
-  함께 삭제할지, 법적 근거(개인정보보호법상 동의 기록 보존 의무 등)로 별도 보존할지 정해지지
-  않았다. 보존이 필요하면 `user_id` FK를 cascade가 아니라 별도 보존 방식(예: 탈퇴 시 익명화 후
-  유지)으로 바꿔야 하므로 현재 `on delete cascade` 표기는 잠정값이다. pm 프로젝트 문서의
-  "확인이 필요한 항목"에 올린다.
+- 가입 흐름(회원가입 폼)에서 필수 체크박스 동의(수집·이용, 국외 이전 각각)를 받는 즉시 항목별로
+  1행씩(총 2행) 남기는 방식(제안). `consent_type`으로 항목을 구분한다.
+- 인덱스: `(user_id, consent_type, policy_version)` — 특정 사용자가 특정 항목의 현재
+  `policy_version`에 동의했는지 조회할 때 쓴다. unique 제약을 걸지는 제안하지 않는다(재동의 시
+  같은 `policy_version`에 중복 동의를 시도해도 해가 되지 않고, 이력을 여러 건 남기는 것 자체가
+  의도이므로).
+- **처리방침 개정 시 재동의 강제 (확정, 구조는 제안)**: 앱은 "현재 처리방침 버전" 상수를
+  코드/환경변수로 관리한다(DB에 별도 버전 테이블을 두지 않는다 — 과설계 방지, 제안). 사용자가
+  로그인할 때마다 `consent_type`별로 `consented_at`이 가장 최근인 행의 `policy_version`이
+  현재 버전과 같은지 확인하고, 다르면(또는 기록이 없으면) 재동의 화면으로 보낸다(애플리케이션
+  책임, backend 구현 단계에서 확정).
+- `users` 테이블에 컬럼(예: `consented_at`)만 두는 대안도 있으나, 항목별·버전별 이력을 여러 건
+  남기고 재동의를 추적하려면 별도 테이블이 낫다는 것이 제안 근거다. 최종 구조는 backend 조율
+  후 설계 승인으로 확정한다.
+- **탈퇴 후 보관 (확정: 즉시 삭제하지 않고 보관, 보관 기간·정리 방식은 제안)**: 사용자가 탈퇴하면
+  `users` 행을 삭제하기 전에 그 사용자의 모든 `consents` 행에 `withdrawn_at = now()`를 먼저
+  기록한다(애플리케이션 책임). `user_id`는 `on delete set null`이므로 `users` 행이 삭제돼도
+  `consents` 행 자체는 남는다 — 동의 시각·항목·처리방침 버전은 그대로 증빙 자료로 유지되고,
+  어느 사용자였는지 식별 가능한 연결만 끊긴다.
+  - **보관 기간 — 미확정 (제안값)**: 다른 로그성 테이블과 같은 90일을 제안하되, `consents`는
+    법적 증빙 목적이라 로그 테이블보다 긴 기간(예: 1년, 개인정보보호법상 일반적인 열람·동의
+    기록 보존 관행 참고)이 필요할 수 있다. 정확한 기간은 사용자 확인이 필요하다 — 확인이 필요한
+    항목에 올린다.
+  - **보관 만료분 정리 잡 (제안, 되돌릴 수 없는 삭제)**: 보관 기간이 정해지면 `collect_runs` 등과
+    같은 방식(pg_cron 트리거)으로 `delete from consents where withdrawn_at is not null and
+    withdrawn_at < now() - interval '<보관기간>'`을 정기 실행한다(제안 SQL). 이 삭제는 되돌릴 수
+    없으므로, 구현 단계에서 이 정리 잡을 실제로 pg_cron에 등록하려면 지시서에 이 작업에 대한
+    별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서 보고한다(아래 "되돌릴 수
+    없는 마이그레이션 표시" 절에도 반영).
 
 #### push_subscriptions (미확정)
 
@@ -295,20 +336,27 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
 | id | uuid, PK | |
 | user_id | uuid, FK → users.id, on delete cascade | |
 | notice_id | uuid, FK → notices.id, on delete cascade | |
-| sent_at | timestamptz, not null, default now() | |
-| result | text, not null | `success` / `failed`. 값 셋은 제안 |
+| reserved_at | timestamptz, not null, default now() | 발송 전 선점(행 INSERT) 시각. "언제부터 이 (사용자,공지) 조합을 처리 중이었는지" 추적용 |
+| sent_at | timestamptz, null 허용 | 실제 발송(성공/실패 확정) 시각. `pending` 상태에서는 null |
+| result | text, not null, default 'pending' | `pending`(선점됨, 발송 전) / `success` / `failed`. 값 셋은 제안 |
 | error_summary | text, null 허용 | 실패 사유 요약(예: push 구독 만료) |
 
-- **중복 발송 방지 제안 (프로젝트 문서 확인 항목 17과 연결)**: `unique(user_id, notice_id)`
-  제약을 둔다. notify-job은 발송 전에 이 유니크 제약을 이용해 "이미 보낸 적 있는 (사용자, 공지)
-  조합"을 걸러낸다 — 예를 들어 `INSERT ... ON CONFLICT (user_id, notice_id) DO NOTHING`으로
-  먼저 기록을 시도하고, 실제로 삽입된 경우에만 푸시를 전송한다(제안, backend 구현 단계에서
-  정확한 순서 확정). 이렇게 하면 같은 공지를 같은 사용자에게 두 번 보내는 경합 상황도 DB
-  제약으로 막힌다.
+- **중복 발송 방지 + pending 흐름 (제안, 프로젝트 문서 확인 항목 17과 연결)**: `unique(user_id,
+  notice_id)` 제약을 둔다. notify-job은 다음 순서로 처리한다(제안, backend 구현 단계에서
+  정확한 순서 확정).
+  1. `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'pending')
+     ON CONFLICT (user_id, notice_id) DO NOTHING`으로 먼저 행을 선점한다.
+  2. 실제로 삽입된 경우(영향 받은 행 수 1)에만 푸시를 전송한다. 이미 있던 조합이면(영향 받은
+     행 수 0) 건너뛴다 — 같은 공지를 같은 사용자에게 두 번 보내는 경합 상황이 이 단계에서
+     막힌다.
+  3. 전송 결과에 따라 `UPDATE notify_logs SET result = 'success' | 'failed', sent_at = now(),
+     error_summary = ... WHERE user_id = $1 AND notice_id = $2`로 갱신한다.
   - 주의: `result='failed'`인 행도 유니크 제약에 걸리므로, 발송 실패 후 재시도가 필요하면
-    실패 행을 다시 성공으로 갱신(UPDATE)하는 방식으로 처리한다(제안). 재시도 정책 자체(몇 번,
-    언제)는 이 설계 범위 밖이며 backend가 정한다.
-- 인덱스: `unique(user_id, notice_id)`(위), `(sent_at)` — 날짜별 발송·실패 수 집계용.
+    실패 행을 다시 갱신(UPDATE)하는 방식으로 처리한다(제안). `pending`으로 오래 남아있는 행
+    (예: 전송 도중 프로세스가 죽은 경우)의 정리·재시도 정책은 이 설계 범위 밖이며 backend가
+    정한다.
+- 인덱스: `unique(user_id, notice_id)`(위), `(sent_at)` — 날짜별 발송·실패 수 집계용
+  (`sent_at`이 null인 `pending` 행은 이 집계에서 자연히 제외된다).
 - 관리자 화면 "날짜별 발송·실패 수" 집계 쿼리 예시(제안):
   ```sql
   select date_trunc('day', sent_at) as day, result, count(*)
@@ -381,33 +429,35 @@ select count(*) from users where suspended_at is null;
 - 위 쿼리는 `user_id`나 개별 행을 반환하지 않고 개수만 반환하므로 "관리자 화면에서도 개인별
   대화·기억 원문은 보이지 않는다" 원칙과 충돌하지 않는다.
 
-### 로그성 테이블 보존 기간·정리 잡 (미확정, 제안)
+### 로그성 테이블 보존 기간·정리 잡 (보존 기간 확정, 등록은 구현 단계 승인 대상)
 
-- 대상: `collect_runs`, `notify_logs`, `api_usage_logs` — 시간이 지날수록 계속 쌓이기만 하는
-  로그성 테이블. `notices`/`notice_chunks`/`consents`/`user_preferences`는 서비스 핵심 데이터라
-  이 절의 정리 대상이 아니다.
-- 제안 보존 기간: 90일(관리자 화면이 "최근 이력"을 보여주는 용도이면 충분하다는 가정). 정확한
-  기간은 확정되지 않았고 사용자 승인이 필요하다 — 특히 `notify_logs`는 위 "중복 발송 방지"의
-  유니크 제약 근거 데이터이므로, 오래된 행을 지우면 같은 (사용자, 공지) 조합에 다시 알림을
-  보낼 수 있게 된다. 이 부작용을 감수할지는 확인이 필요한 항목으로 올린다.
+- 대상: `collect_runs`, `api_usage_logs` — 90일 보존 후 정리 잡으로 삭제한다(확정,
+  [[anyang-service-scope]], user, 2026-09-27). `notify_logs`는 중복 발송 방지의 유니크 제약
+  근거 데이터이므로 이 정리 대상에서 **제외**한다(확정) — 오래된 행을 지우면 같은 (사용자, 공지)
+  조합에 다시 알림을 보낼 수 있어 서비스 목적과 상충하기 때문이다. `notices`/`notice_chunks`/
+  `consents`/`user_preferences`는 서비스 핵심 데이터(또는 별도 보관 정책, 위 `consents` 절
+  참고)라 이 절의 정리 대상이 아니다.
 - 정리 잡은 위 collect-job/notify-job과 같은 방식(pg_cron이 트리거, 삭제 로직은 앱 API 또는
   단순 SQL)으로 둔다(제안):
   ```sql
-  -- 제안: 매일 새벽 오래된 로그 정리 (보존 기간·주기 모두 미확정)
+  -- 제안: 매일 새벽 오래된 로그 정리 (90일 보존은 확정, 실행 주기·시각은 제안)
   select cron.schedule(
     'cleanup-logs',
     '0 18 * * *', -- UTC 18:00 = Asia/Seoul 03:00
     $$
     delete from collect_runs where started_at < now() - interval '90 days';
-    delete from notify_logs where sent_at < now() - interval '90 days';
     delete from api_usage_logs where requested_at < now() - interval '90 days';
     $$
   );
   ```
 - **되돌릴 수 없는 마이그레이션 아님, but 되돌릴 수 없는 삭제**: 이 정리 잡은 스키마 변경이
   아니라 데이터 삭제를 주기적으로 실행하는 것이다. dev-common.md 규칙상 "데이터 삭제"는
-  되돌릴 수 없는 작업에 해당하므로, 이 정리 잡 자체를 pg_cron에 등록하는 것은 구현 단계에서
-  별도 사용자 승인이 필요하다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
+  되돌릴 수 없는 작업에 해당한다. 90일 보존·정리 잡 등록 자체는 사용자 승인됨(user, 2026-09-27,
+  [[anyang-service-scope]]) — 다만 dev-common.md 규칙상 되돌릴 수 없는 마이그레이션은 실행
+  단계에서도 그 마이그레이션에 대한 사용자 승인이 지시서에 별도로 적혀 있어야 실행할 수 있다.
+  구현 단계 지시서에 이 잡 등록에 대한 승인이 적혀 있지 않으면 등록하지 않고 멈춰서 보고한다
+  (아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영). `consents` 보관 만료분 정리 잡은
+  보존 기간 자체가 아직 미확정이므로 별도다(위 `consents` 절 참고).
 
 ### pg_cron / pg_net 잡 정의 (미확정)
 
@@ -475,9 +525,12 @@ select cron.schedule(
   삭제, 데이터 삭제, 타입 축소)은 없다.
 - 구현 단계에서 재임베딩 절차 중 "기존 임베딩 컬럼 삭제"(모델 교체 시)는 되돌릴 수 없는
   마이그레이션이다. 실행 전 별도 사용자 승인이 필요하다(dev-common.md 규칙 4단계).
-- 위 "로그성 테이블 보존 기간·정리 잡"의 `cleanup-logs` pg_cron 등록(주기적 데이터 삭제)도
-  되돌릴 수 없는 작업이다. 구현 단계에서 이 잡을 실제로 등록하려면 지시서에 이 작업 항목에
-  대한 별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서 보고한다.
+- 위 "로그성 테이블 보존 기간·정리 잡"의 `cleanup-logs` pg_cron 등록(`collect_runs`/
+  `api_usage_logs` 90일 삭제)은 되돌릴 수 없는 작업이지만 90일 보존 자체는 사용자 승인됨(user,
+  2026-09-27). 구현 단계 지시서에 이 잡 등록에 대한 승인이 별도로 적혀 있어야 실제로 등록한다.
+  없으면 등록하지 않고 멈춰서 보고한다.
+- `consents` 보관 만료분 정리 잡(위 `consents` 절)도 되돌릴 수 없는 삭제다. 이쪽은 보존 기간
+  자체가 아직 미확정이라 승인 대상도 아니다 — 보존 기간이 먼저 확정된 뒤 별도 승인을 받는다.
 
 ## 테스트 방법 (제안)
 
@@ -490,9 +543,10 @@ select cron.schedule(
 - 제약 확인 쿼리 예시:
   - unique 확인: `SELECT content_hash, count(*) FROM notices GROUP BY content_hash HAVING count(*) > 1;` (0행이어야 함)
   - FK cascade 확인: 테스트 사용자 삭제 후 해당 user_id를 가진 profiles/accounts/credentials/
-    conversations/push_subscriptions/notify_settings/user_preferences/consents 행이 함께
-    삭제됐는지 확인(단, `consents`의 cascade 삭제 여부는 위 "회원 탈퇴 시 삭제/보존" 미확정이
-    풀리면 바뀔 수 있다).
+    conversations/push_subscriptions/notify_settings/user_preferences 행이 함께 삭제됐는지
+    확인한다. `consents`는 반대로 확인한다 — `withdrawn_at`을 먼저 채운 뒤 `users` 행을
+    삭제하고, `consents` 행이 삭제되지 않고 `user_id`만 null로 바뀌었는지 확인한다(위
+    `consents` 절, `on delete set null`).
 - 인덱스 확인: `EXPLAIN ANALYZE`로 벡터 유사도 검색 쿼리가 HNSW 인덱스를 쓰는지(`Index Scan using ... hnsw`)
   확인한다. 데이터가 적을 때는 planner가 seq scan을 고를 수 있어 테스트 데이터가 어느 정도
   있어야 유효하다.
@@ -500,13 +554,20 @@ select cron.schedule(
   `net.http_post` 응답 상태코드를 확인한다.
 - 공지 숨김 확인: 테스트 공지를 `hidden_at`으로 숨긴 뒤, 추천·벡터 검색 쿼리 결과에 해당
   공지가 나오지 않는지 확인한다.
-- 알림 중복 발송 방지 확인: 같은 (user_id, notice_id)로 `notify_logs`에 두 번 INSERT를 시도해
-  `unique(user_id, notice_id)` 제약이 두 번째 삽입을 막는지(`ON CONFLICT DO NOTHING` 시
-  실제 행이 추가되지 않는지) 확인한다.
+- 알림 중복 발송 방지 + pending 흐름 확인: 같은 (user_id, notice_id)로 `notify_logs`에
+  `INSERT ... ON CONFLICT DO NOTHING`을 두 번 시도해 첫 번째만 `pending` 행을 만들고 두 번째는
+  삽입되지 않는지 확인한다. 이어서 `UPDATE ... SET result = 'success', sent_at = now()`가
+  정상 반영되는지 확인한다.
 - 계정 정지 확인: 테스트 사용자를 `suspended_at`으로 정지시킨 뒤, notify-job 대상 선정 쿼리
   결과에서 제외되는지 확인한다.
-- 로그 정리 잡 확인(승인 후 구현 시): 오래된 `sent_at`/`started_at`/`requested_at` 값을 가진
-  테스트 행을 넣고 `cleanup-logs` 잡 실행 후 삭제됐는지 확인한다.
+- 로그 정리 잡 확인(승인 후 구현 시): 오래된 `started_at`/`requested_at` 값을 가진
+  `collect_runs`/`api_usage_logs` 테스트 행을 넣고 `cleanup-logs` 잡 실행 후 삭제됐는지
+  확인한다. `notify_logs`는 이 잡 대상이 아니므로 그대로 남는지도 함께 확인한다.
+- 동의 재동의 강제 확인: 특정 `consent_type`에 옛 `policy_version`으로만 동의한 사용자 계정을
+  만든 뒤, "현재 버전과 다르면 재동의 화면으로 보낸다" 판정 로직(애플리케이션)이 그 사용자를
+  재동의 대상으로 분류하는지 확인한다.
+- 동의 기록 보관 확인(보관 기간 확정 후): 탈퇴 처리 시 `consents.withdrawn_at`이 채워지고
+  `user_id`가 null이 되는지, 보관 기간이 지난 뒤 정리 잡이 실행되면 그 행이 삭제되는지 확인한다.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -519,17 +580,41 @@ select cron.schedule(
 - 처리방침·동의 화면 — 해결(2026-09-27, user): 채택. 가입 시 필수 동의 화면 + 동의 시각
   기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)는 구조 자체가
   아직 (미확정)이다.
-- 회원 탈퇴 시 동의 기록(`consents`) 삭제/보존 여부 — 미해결. 아래 미해결 질문 참고.
+- 동의 항목 분리(수집·이용 / 국외 이전) — 해결(2026-09-27, user): 각각 별도로 받는다.
+  [[anyang-service-scope]]. `consents.consent_type`으로 반영(위 참고, 구조 자체는 미확정).
+- 처리방침 개정 시 재동의 — 해결(2026-09-27, user): 강제한다. [[anyang-service-scope]].
+  `policy_version` 비교 방식(위 `consents` 절)으로 반영(구조 자체는 미확정).
+- 회원 탈퇴 시 동의 기록(`consents`) 삭제/보존 여부 — 해결(2026-09-27, user): 즉시 삭제하지
+  않고 증빙용으로 보관 후 삭제. [[anyang-service-scope]]. `on delete set null` +
+  `withdrawn_at`으로 반영(위 `consents` 절). **보관 기간 숫자 — 미해결(미확정 제안값)**: 90일
+  (로그 테이블과 동일) vs 더 긴 기간(예: 1년, 법적 증빙 성격 고려) 중 사용자 확인 필요.
 - 관리자 기능 — 해결(2026-09-27, user): 역할 컬럼 없이 `ADMIN_EMAILS`, 기능 범위 ①~④
   확정. [[anyang-service-scope]]. 이를 담을 `collect_runs`/`notify_logs`/`api_usage_logs`
   테이블 구조, `notices.hidden_at`/`users.suspended_at` 컬럼은 구조 자체가 아직 (미확정)이다.
-- 로그성 테이블(`collect_runs`/`notify_logs`/`api_usage_logs`) 보존 기간과 정리 잡 등록 여부 —
-  미해결. 특히 `notify_logs` 삭제가 중복 발송 방지 제약과 상충할 수 있음(위 "로그성 테이블
-  보존 기간·정리 잡" 참고).
-- "구독 수" 집계 기준(`notify_settings.enabled=true` 수 vs `push_subscriptions` 행 수) — 미해결,
-  backend 조율 필요.
-- 공지 숨김을 쿼리 조건으로 처리할지, `notice_chunks` 물리 삭제로 처리할지 — 미해결(기본안은
-  쿼리 조건), backend 조율 필요.
+- 로그성 테이블 보존 기간과 정리 잡 등록 여부 — 해결(2026-09-27, user): `collect_runs`/
+  `api_usage_logs`는 90일 보존 후 정리 잡 등록(등록 자체는 승인됨, 구현 단계에서 실제
+  실행). `notify_logs`는 중복 발송 방지에 쓰이므로 삭제 대상에서 제외. [[anyang-service-scope]].
+- 알림 발송 로그 pending 상태 — 해결(2026-09-27, user): `notify_logs`에 발송 전 `pending`
+  상태를 둔다. [[anyang-service-scope]]. `result` 값 셋과 `INSERT ... ON CONFLICT DO
+  NOTHING` 선점 흐름으로 반영(위 `notify_logs` 절).
+- 공지 자격요건 구조화 컬럼 — 해결(2026-09-27, user): 1차 출시에서 만들지 않는다.
+  [[anyang-service-scope]]. 위 `notices` 절 제목에 명시.
+- 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 설계 승인으로 확정한다.
+  [[anyang-service-scope]]. `gender`(`male`/`female`/`unspecified`)와 `occupation_type`
+  (`student`/`job_seeker`/`employee`/`self_employed`/`freelancer`/`unemployed`/`other`)
+  제안값을 위 `profiles` 절에 추가했다(근거는 그 절 참고) — 설계 승인 전까지 (미확정) 유지.
+- 비밀번호 재설정 1차 출시 제외 — 해결(2026-09-27, user): 제외. [[anyang-service-scope]].
+  관련 테이블(`verification_tokens` 등) 없음을 재확인 — 이 문서에 그런 테이블이 없다.
+- 수집 대상 게시판에 따른 notices 갱신·중복 판정 세부, collect-job 주기 (확인 항목 1과 연결) —
+  미해결.
+- "구독 수" 집계 기준 — 해결(backend): `notify_settings.enabled=true` 수와
+  `push_subscriptions` 행 수 둘 다 반환하는 것으로 채택
+  ([[anyang-backend-api#13-2. 알림 발송 현황]]).
+- 공지 숨김을 쿼리 조건으로 처리할지, `notice_chunks` 물리 삭제로 처리할지 — 해결(backend):
+  쿼리 조건(`notices.hidden_at is null`)을 기본안으로 채택
+  ([[anyang-backend-api#5. 공지 수집기 (Collector)]]).
+- `consents.policy_version` 부여 방식(날짜 기반 문자열 등)과 "현재 처리방침 버전" 상수 관리
+  위치 — 미해결, backend 조율 필요.
 
 ## Links
 

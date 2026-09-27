@@ -13,10 +13,12 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 중심으로, 알림 설정·"AI가 기억하는 내 정보"·대화 히스토리 목록 화면을 둔다(모두
 [[anyang-service-scope]]로 채택 확정). API는 모두 [[anyang-backend-api]]를 근거로 삼는다.
 화면 포함 여부는 확정됐고, 세부 구조·문구·레이아웃 값은 여전히 `(미확정)`이며 사용자 설계
-승인으로 확정된다. 비밀번호 재설정 화면은 기능 자체가 미확정이라 이 문서에서 확정 설계하지
-않는다. `/admin` 관리자 화면 4종(공지 수집 관리·알림 발송 현황·사용자 관리·통계·외부 API
-사용량)도 채택 확정([[anyang-service-scope]], user, 2026-09-27)이며, 세부는 이 문서의
-10~13절에서 다룬다.
+승인으로 확정된다. 비밀번호 재설정 화면은 1차 출시에서 제외로 **확정**됐다
+([[anyang-service-scope]], user, 2026-09-27) — 별도 화면을 만들지 않고, 로그인 화면에
+"비밀번호를 잊었다면 Google로 로그인" 안내로 대체한다(1절). `/admin` 관리자 화면 4종(공지
+수집 관리·알림 발송 현황·사용자 관리·통계·외부 API 사용량)도 채택 확정
+([[anyang-service-scope]], user, 2026-09-27)이며, 세부는 이 문서의 10~13절에서 다룬다.
+계정 탈퇴 화면(`/settings/account`, 8-1절)도 이번 반영으로 추가됐다.
 
 ## Context
 
@@ -30,15 +32,28 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   - 추천 공지 목록/상세, 알림 설정·기억·히스토리 엔드포인트가 backend 문서에 반영됐다(엔드포인트
     형태는 여전히 제안·미확정이지만 화면 채택 자체는 확정, [[anyang-service-scope]], user,
     2026-09-27).
-  - 가입 동의는 이메일 가입 시 `POST /api/auth/register`의 `consent: true`, Google 로그인 시
-    신규 사용자에 한해 별도 `POST /api/auth/consent` 호출로 처리한다(backend 1절). 동의 전
-    사용자는 다른 API가 403을 반환하므로, 프런트는 동의가 끝나기 전 온보딩·채팅 등으로
-    진행시키지 않는다.
+  - 가입 동의는 "수집·이용"(`collection_use`)과 "국외 이전"(`overseas_transfer`) 체크박스
+    2개로 분리해 각각 받는 것으로 **확정**됐다([[anyang-service-scope]], user, 2026-09-27).
+    이메일 가입 시 `POST /api/auth/register`의
+    `consents: { collection_use: true, overseas_transfer: true }`, Google 로그인 시 신규
+    사용자에 한해 별도 `POST /api/auth/consent`(같은 `consents` body)로 처리한다(backend 1절).
+    둘 다 체크해야 제출 가능하다. 동의 전 사용자는 다른 API가 403을 반환하므로, 프런트는
+    동의가 끝나기 전 온보딩·채팅 등으로 진행시키지 않는다.
+  - **처리방침 개정 시 재동의 강제**로 **확정**됐다([[anyang-service-scope]], user,
+    2026-09-27). 인증 필요 API가 재동의 필요 403(backend 1절 "재동의 판정 위치")을 돌려주면
+    공통 인증 가드가 이를 감지해 `/consent` 화면(7절, 재사용)으로 보내고, 두 체크박스를 다시
+    체크해 `POST /api/auth/consent`를 재호출한다.
   - 도메인 변경 시 기존 Web Push 구독이 무효화되므로 재구독을 유도하는 UI가 필요하다
     ([[anyang-backend-api#12-1. 커스텀 도메인 연결 절차 (환경 전환 아님, 배포 origin만 교체) — 제안, 미확정]]).
-  - 비밀번호 재설정은 기능 자체가 미확정이므로
-    ([[anyang-backend-api#1-1. 이메일 인증·비밀번호 재설정 — verification_tokens 미사용에 따른 정리 (제안, 결정 필요)]])
-    이 화면을 설계하지 않고 (미확정)으로만 표시한다.
+  - 비밀번호 재설정은 1차 출시 제외로 **확정**됐다
+    ([[anyang-backend-api#1-1. 이메일 인증·비밀번호 재설정 — verification_tokens 미사용에 따른 정리 (확정)]]).
+    별도 화면·엔드포인트를 만들지 않고, 로그인 화면(1절)에 Google 로그인 안내 문구로
+    대체한다.
+  - 계정 탈퇴는 `DELETE /api/account`([[anyang-backend-api#1-3. 사용자 탈퇴 API (제안, 미확정)]])로
+    처리하고, 탈퇴해도 동의 기록은 증빙용으로 일정 기간(보관 기간
+    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 미확정)
+    보관된 뒤 삭제된다는 원칙([[anyang-service-scope]], user, 2026-09-27)에 따라 8-1절 화면을
+    둔다.
 - 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은
   [[anyang-database-schema#profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)]]
   기준으로 여전히 미확정이다. 개인정보 동의 화면의 세부 문구·동의 항목 단일/분리 체크도
@@ -59,18 +74,21 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 6. 알림 설정 (개인 설정)
 7. "AI가 기억하는 내 정보"
 8. 대화 히스토리 목록
+8-1. 계정 탈퇴 (`/settings/account`, 신규 반영)
 9. 개인정보 처리방침 페이지 (정적)
-10. 비밀번호 재설정 — 기능 자체 미확정, 화면 설계 보류
+10. 비밀번호 재설정 — 1차 출시 제외로 **확정**([[anyang-service-scope]], user, 2026-09-27).
+    화면을 만들지 않는다. 로그인 화면(1절)에 안내 문구로 대체.
 11. 관리자 — 공지 수집 관리 (`/admin/collect-runs`, 채택 확정)
 12. 관리자 — 알림 발송 현황 (`/admin/notify-logs`, 채택 확정)
 13. 관리자 — 사용자 관리·통계 (`/admin/users`, 채택 확정)
 14. 관리자 — 외부 API 사용량 (`/admin/api-usage`, 채택 확정)
 
 라우팅(App Router, 미확정 제안): `/login`, `/consent`, `/onboarding`, `/chat`, `/notices`,
-`/notices/[id]`, `/settings/notifications`, `/settings/memory`, `/conversations`,
-`/privacy-policy`. 비밀번호 재설정 라우팅은 기능 확정 전이라 두지 않는다. 관리자 화면은
-`/admin`을 공통 레이아웃(11~14절 하위 탭)으로 두고 `/admin/collect-runs`,
-`/admin/notify-logs`, `/admin/users`, `/admin/api-usage`로 나눈다(미확정 제안).
+`/notices/[id]`, `/settings/notifications`, `/settings/memory`, `/settings/account`,
+`/conversations`, `/privacy-policy`. 비밀번호 재설정 라우팅은 기능 자체가 제외로 확정됐으므로
+두지 않는다. 관리자 화면은 `/admin`을 공통 레이아웃(11~14절 하위 탭)으로 두고
+`/admin/collect-runs`, `/admin/notify-logs`, `/admin/users`, `/admin/api-usage`로
+나눈다(미확정 제안).
 
 ### 공통 레이아웃 (모바일 우선, 미확정)
 
@@ -82,6 +100,12 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   `/login`으로 리다이렉트(제안, 미확정 — Auth.js 세션 확인 기준, [[anyang-backend-api#1. 인증 (Auth.js v5)]]).
 - 온보딩 미완료(프로필 없음) 사용자가 `/chat` 등에 접근하면 `/onboarding`으로 리다이렉트
   (제안, 미확정 — `GET /api/profile` 404/빈 값 기준).
+- **재동의 강제 (확정 원칙, [[anyang-service-scope]], user, 2026-09-27)**: 인증 필요 API
+  호출이 재동의 필요 403(backend 1절 "재동의 판정 위치")을 반환하면 공통 인증 가드가 이를
+  감지해 현재 화면 대신 `/consent`로 리다이렉트한다(제안, 미확정 — 응답 body의 안내 코드
+  기준). `/consent` 화면에서 두 체크박스를 다시 체크해 `POST /api/auth/consent`를 재호출하면
+  원래 가려던 화면(또는 `/chat`, 미확정 — 복귀 경로 저장 여부는 YAGNI로 우선 `/chat` 고정
+  제안)으로 이동한다.
 - **관리자 가드 (확정 원칙, [[anyang-service-scope]], user, 2026-09-27)**: 관리자 판정은
   서버만 한다. `ADMIN_EMAILS` 목록은 서버 환경변수([[anyang-backend-api#13-0. 공통 인가]])
   로만 존재하며, 클라이언트 코드·번들·정적 자산 어디에도 이메일 목록을 넣지 않는다(임포트,
@@ -96,7 +120,11 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 - 구성 요소(미확정): "Google로 계속하기" 버튼(OAuth 리다이렉트), 이메일·비밀번호 입력 폼(로그인),
   "계정이 없다면 가입" 전환 링크 → 같은 화면에서 폼 모드만 전환(가입 시 비밀번호 확인 입력 추가,
-  미확정).
+  미확정). 비밀번호 입력 아래에 "비밀번호를 잊었다면 Google로 로그인" 안내 문구(제안, 미확정
+  문구)를 둔다 — 별도 비밀번호 재설정 화면·링크는 만들지 않는다(1차 출시 제외 확정,
+  [[anyang-backend-api#1-1. 이메일 인증·비밀번호 재설정 — verification_tokens 미사용에 따른 정리 (확정)]]).
+  Credentials 가입 계정은 비밀번호를 잊으면 이 서비스 안에서 복구 수단이 없다는 한계가 있다
+  (backend 1-1절).
 - 가입 흐름(미확정): 이메일·비밀번호 입력 → 동의 체크박스(`/consent` 화면, 7절 참고)를 거쳐
   체크된 상태로 `POST /api/auth/register`({ email, password, consent: true },
   [[anyang-backend-api#1. 인증 (Auth.js v5)]]) 호출 → 성공 시 자동 로그인 후 `/onboarding`으로
@@ -116,9 +144,8 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   미동의 상태면 `/consent`로 보내 체크박스 동의 후 `POST /api/auth/consent`(body 없음) 호출 →
   성공 시 `/onboarding`. 이미 동의한 기존 사용자는 프로필 존재 여부로 `/chat` 또는
   `/onboarding`.
-- 비밀번호 재설정: 기능 자체가 미확정([[anyang-service-scope]], 사용자 확인 대기 — 아래
-  확인이 필요한 항목 참고)이라 이 화면을 설계하지 않는다. 확정되면 별도로
-  backend·frontend를 재조율해 설계를 추가한다.
+- 비밀번호 재설정: 1차 출시 제외로 **확정**됐다([[anyang-service-scope]], user, 2026-09-27).
+  이 화면·엔드포인트·이메일 발송 수단을 만들지 않는다(위 구성 요소 항목의 안내 문구로 대체).
 
 ### 2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)
 
@@ -195,20 +222,25 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 ### 7. 개인정보 동의 화면 (`/consent`)
 
 - 가입 시(Google·이메일 모두) 필수 동의 화면으로 **확정**([[anyang-service-scope]], user,
-  2026-09-27). 미동의 시 가입 불가.
+  2026-09-27). 미동의 시 가입 불가. 처리방침 개정에 따른 재동의(아래) 때도 같은 화면을
+  재사용한다.
 - 배치: 이메일 가입은 가입 폼 제출 전(또는 같은 화면 내 체크박스, 미확정 — 1절 참고),
-  Google 로그인은 신규 사용자의 최초 로그인 직후 온보딩 이전에 노출(1절 참고).
-- 동의 내용(제안, 미확정 문구): 수집 항목(생년·성별·직군·재학/재직 여부)과 수집 목적,
-  DeepSeek(중국 서버에서 대화 처리)·Gemini(임베딩, 무료 티어) 국외 이전 고지
-  ([[anyang-ai-models-data-transfer]] 참고), 처리방침 페이지(`/privacy-policy`, 9절) 링크.
-- 동의 항목을 단일 체크박스로 받을지, 수집·이용 동의 / 국외 이전 동의로 분리할지는
-  **미확정** — database가 제기한 미해결 질문([[anyang-database-schema#확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)]])과
-  같은 항목으로, 사용자 확인 대기 중이다(아래 확인이 필요한 항목 참고). 분리로 정해지면 이
-  화면은 체크박스 그룹으로, 단일로 정해지면 체크박스 하나로 바뀐다(레이아웃 영향은 작다,
-  제안).
-- 체크(들) 완료 후 제출: 이메일 가입은 `POST /api/auth/register`의 `consent: true`로 함께
-  전송, Google 로그인은 `POST /api/auth/consent`(body 없음) 호출 후 `/onboarding` 이동
-  (1절 참고). 미동의 상태로 진행 시도하면 제출 버튼 비활성 또는 인라인 오류(미확정).
+  Google 로그인은 신규 사용자의 최초 로그인 직후 온보딩 이전에 노출(1절 참고). 재동의 진입은
+  공통 인증 가드가 403을 감지해 이 화면으로 리다이렉트한다(공통 레이아웃 절 참고).
+- 동의 항목은 체크박스 **2개로 분리해 각각 필수**로 받는 것으로 **확정**됐다
+  ([[anyang-service-scope]], user, 2026-09-27, backend
+  [[anyang-backend-api#1. 인증 (Auth.js v5)]]):
+  1. "수집·이용" 동의(`collection_use`) — 수집 항목(생년·성별·직군·재학/재직 여부)과 수집
+     목적 고지.
+  2. "국외 이전" 동의(`overseas_transfer`) — DeepSeek(중국 서버에서 대화 처리)·Gemini(임베딩,
+     무료 티어) 국외 이전 고지([[anyang-ai-models-data-transfer]] 참고).
+  두 체크박스 모두 체크해야 제출 가능(하나만 체크 시 제출 불가, 제안 — 버튼 비활성 또는
+  인라인 오류, 미확정). 처리방침 페이지(`/privacy-policy`, 9절) 링크를 함께 둔다.
+- 제출 body(확정 형식, backend 1절): `{ consents: { collection_use: true,
+  overseas_transfer: true } }`. 이메일 가입은 `POST /api/auth/register`의 `consents` 필드로
+  함께 전송, Google 로그인·재동의는 `POST /api/auth/consent`(같은 `consents` body) 호출 →
+  성공 시 신규 가입은 `/onboarding`, 재동의는 원래 화면(또는 `/chat`, 미확정)으로 이동
+  (1절 참고).
 - 세부 법적 문구는 이 설계 범위 밖 — 법률 검토가 필요할 수 있어 추측하지 않는다.
 
 ### 8. 대화 히스토리 목록 (`/conversations`)
@@ -221,12 +253,33 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 - 새 대화 시작 버튼(제안, 미확정) — `/chat`으로 이동하며 `conversation_id` 없이 진입.
 - 빈 목록일 때 안내 문구(미확정): "아직 대화 기록이 없어요."
 
+### 8-1. 계정 탈퇴 (`/settings/account`, 신규 반영)
+
+- `DELETE /api/account`([[anyang-backend-api#1-3. 사용자 탈퇴 API (제안, 미확정)]]) 호출로
+  본인 탈퇴. 되돌릴 수 없는 동작이므로 확인 다이얼로그(네이티브 `window.confirm` 또는 모달,
+  10절 관리자 화면과 같은 패턴, 미확정)를 거친 뒤에만 호출한다(제안).
+- 안내 문구(제안, 미확정): 탈퇴하면 프로필·대화·기억·알림 설정 등 계정 데이터는 즉시
+  삭제되지만, 동의 기록(`consents`)은 증빙용으로 일정 기간(보관 기간
+  [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 미확정)
+  보관된 뒤 삭제된다는 점을 확인 다이얼로그 또는 화면 문구에 표시한다([[anyang-service-scope]],
+  user, 2026-09-27).
+- 탈퇴 성공 시 세션이 종료되고 `/login`으로 이동한다(backend 1-3절 — 세션 쿠키 무효화).
+- 이 화면의 정확한 배치(별도 페이지 vs 알림 설정 화면 하단 등)는 미확정 — 1차 제안은 별도
+  `/settings/account` 페이지.
+
 ### 9. 개인정보 처리방침 페이지 (`/privacy-policy`)
 
 - 정적 콘텐츠 페이지(제안, 미확정) — 수집 항목·목적, DeepSeek·Gemini 국외 이전 고지, 보관·
   삭제 정책 등 실제 문구는 법률 검토 후 확정(이 설계 범위 밖). 로그인 여부와 무관하게
   접근 가능(제안, 미확정).
 - 2절 동의 화면에서 이 페이지로 링크한다.
+- **고지 항목에 반영해야 할 것(제안, 문구는 법률 검토 후 확정)**:
+  - 탈퇴 시 동의 기록은 즉시 삭제되지 않고 증빙용으로 일정 기간(보관 기간
+    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 미확정)
+    보관된 뒤 삭제된다([[anyang-service-scope]], user, 2026-09-27).
+  - 수집 실행 이력·외부 API 사용량 기록은 90일 보존 후 삭제된다(**확정**,
+    [[anyang-service-scope]], user, 2026-09-27). 알림 발송 로그는 중복 발송 방지 목적으로
+    삭제 대상에서 제외된다.
 
 ### 10. 관리자 공통 레이아웃 (`/admin`, 미확정)
 
@@ -285,6 +338,11 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   "삭제" 버튼. 10절의 확인 다이얼로그를 거쳐 각각 `PATCH /api/admin/users/:id/suspend`,
   `.../unsuspend`, `DELETE /api/admin/users/:id` 호출. 성공 시 목록에서 상태 갱신(정지) 또는
   행 제거(삭제).
+- 삭제 확인 다이얼로그 문구(제안, 미확정): 대상 이메일 표시 외에, 1-3절 탈퇴와 같은 처리
+  순서([[anyang-backend-api#13-3. 사용자 관리·통계]] — `consents.withdrawn_at`을 먼저 채운
+  뒤 `users` 행 삭제)를 따르므로 "동의 기록은 증빙용으로 일정 기간 보관된 뒤 삭제되고, 나머지
+  계정 데이터는 즉시 삭제됩니다" 안내를 덧붙인다(8-1절 사용자 본인 탈퇴 안내 문구와 동일
+  취지).
 - 인증 필요, 관리자만.
 
 ### 14. 외부 API 사용량 (`/admin/api-usage`, 미확정)
@@ -316,10 +374,16 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 - **로그인/가입**: Google 로그인 목(mock) 콜백으로 신규/기존 사용자 리다이렉트 분기 확인.
   이메일 중복 가입 시 409 오류 메시지 노출 확인. 잘못된 비밀번호 로그인 시 오류 메시지 확인.
-- **개인정보 동의**: 미체크 상태로 제출 시도 시 진행되지 않는지 확인(제출 버튼 비활성 또는
-  오류). 체크 후 이메일 가입은 `POST /api/auth/register`에 `consent: true`가 담기는지,
-  Google 신규 가입은 `POST /api/auth/consent` 호출 후 `/onboarding`으로 이동하는지 확인.
-  처리방침 페이지 링크 이동 확인.
+- **개인정보 동의**: 체크박스 2개(수집·이용, 국외 이전) 중 1개만 체크한 상태로 제출 시도 시
+  진행되지 않는지 확인(제출 버튼 비활성 또는 오류). 둘 다 체크 후 이메일 가입은
+  `POST /api/auth/register`에 `consents: { collection_use: true, overseas_transfer: true }`가
+  담기는지, Google 신규 가입은 `POST /api/auth/consent`(같은 `consents` body) 호출 후
+  `/onboarding`으로 이동하는지 확인. 처리방침 페이지 링크 이동 확인.
+- **재동의 강제**: 인증 필요 API 응답을 재동의 필요 403으로 목(mock) 처리했을 때 공통 인증
+  가드가 `/consent`로 리다이렉트하는지, 두 체크박스를 다시 체크해 제출하면
+  `POST /api/auth/consent`가 재호출되고 원래 흐름으로 복귀하는지 확인.
+- **비밀번호 찾기 링크 없음**: 로그인 화면에 비밀번호 재설정으로 이동하는 링크나 폼이
+  존재하지 않고, "Google로 로그인" 안내 문구만 표시되는지 확인.
 - **온보딩**: 필수 아님(null 허용) 항목을 비워도 제출 성공 확인. 제출 후 `/chat` 이동 확인.
 - **채팅**: 스트리밍 응답이 토큰 단위로 화면에 이어붙는지 확인(목 SSE 스트림). 공지 인용
   카드 클릭 시 `/notices/[id]`로 이동하는지 확인.
@@ -338,6 +402,9 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   되돌아가는지) 확인, 삭제 후 목록에서 사라지는지 확인. 빈 목록 안내 문구 확인.
 - **대화 히스토리**: 목록이 `updated_at desc` 순으로 오는지 확인. 항목 클릭 시 과거 메시지가
   로드되며 `/chat`에서 이어지는지 확인. 새 대화 시작 버튼이 빈 대화로 진입하는지 확인.
+- **계정 탈퇴 확인**: 탈퇴 버튼 클릭 시 확인 다이얼로그가 뜨는지, 취소 시 `DELETE /api/account`
+  가 호출되지 않는지, 확인 시 호출되고 성공 후 세션이 종료돼 `/login`으로 이동하는지 확인.
+  보관 안내 문구가 표시되는지 확인.
 - **도메인 변경 재구독 유도**: 구독이 없는데 `enabled=true`인 상태를 목으로 만들어 배너가
   뜨는지, 재구독 흐름이 다시 동작하는지 확인.
 - **인증 가드**: 미로그인 상태로 `/chat`, `/notices`, `/settings/notifications` 직접 접근 시
@@ -363,16 +430,12 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
-1. 개인정보 동의 화면(`/consent`)의 세부 문구와 동의 항목을 단일 체크로 받을지, 수집·이용 /
-   국외 이전으로 분리할지 — database가 먼저 제기한 항목
-   ([[anyang-database-schema#확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)]])과
-   같다. 사용자 확인 대기 중 — 결정에 따라 7절 화면의 체크박스 구성이 바뀐다.
-2. 비밀번호 재설정 기능을 이번 범위에 넣을지 — backend가 제기한 항목
-   ([[anyang-backend-api#1-1. 이메일 인증·비밀번호 재설정 — verification_tokens 미사용에 따른 정리 (제안, 결정 필요)]])과
-   같다. 사용자 확인 대기 중 — 넣기로 확정되면 별도 화면 설계가 필요하다(설계 변경).
-3. 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`의 선택지) — database
+1. 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`의 선택지) — database
    설계 승인 시 함께 확정될 예정([[anyang-database-schema#profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)]]).
    확정 전까지 2절 화면은 자리표시자 라벨을 쓴다.
+
+(2026-09-27 해결: 동의 체크박스 분리 여부, 비밀번호 재설정 포함 여부는
+[[anyang-service-scope]] 결정으로 확정됐다 — 7절, 1절, 10절 참고.)
 
 ## Links
 

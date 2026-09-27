@@ -28,9 +28,13 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 ### 작업 단위 (모두 [[anyang-backend-api]] 승인 후 착수, 값은 그 문서 기준 미확정)
 
 1. **인증·동의** — Auth.js v5 설정(Google + Credentials provider, JWT 세션),
-   `/api/auth/register`(동의 게이트 포함), `/api/auth/consent`(Google 로그인 동의).
-   비밀번호 재설정 포함 여부는 미해결 질문(backend 설계 1-1절) — 해결되면 이 단위에 추가.
-   테스트: 로그인/가입/동의/오류 케이스([[anyang-backend-api#테스트 방법]] 1번).
+   `/api/auth/register`(동의 항목 2개 — 수집·이용/국외 이전 — 게이트 포함),
+   `/api/auth/consent`(Google 로그인 동의·재동의 겸용), `POLICY_VERSION` 코드 상수,
+   재동의 판정 미들웨어(1-2절 정지 확인과 같은 위치). 비밀번호 재설정은 1차 출시 제외로
+   해결됨(backend 설계 1-1절) — 이 단위에 포함하지 않는다. 테스트: 로그인/가입/동의/재동의/
+   오류 케이스([[anyang-backend-api#테스트 방법]] 1번).
+1-4. **사용자 탈퇴** — `DELETE /api/account`(1-3절, consents 보관 순서). 1번 의존. 테스트:
+   탈퇴 후 `consents` 보관·`user_id` null 확인.
 2. **프로필 CRUD** — `GET/PUT /api/profile`(4항목: birth_year/gender/occupation_type/
    enrollment_status). 테스트: 인증·본인 확인.
 2-1. **알림 설정** — `GET/PUT /api/notify-settings`. 테스트: 인증·형식 검증.
@@ -45,8 +49,9 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
    준수와 HTML 구조를 실제로 확인해야 한다(구현 전 확인, backend 설계 5절) — 이 확인이
    끝나기 전까지 파서 상세 구현은 보류.
 6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 3번 의존.
-7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출). 3·8번
-   의존. 중복 발송 방지 방식은 database와 후속 조율 필요(backend 설계 7절 미해결 질문).
+7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
+   `notify_logs` pending 선점·정체 재시도 포함). 3·8번 의존. 중복 발송 방지 방식은
+   database·backend 조율 완료(backend 설계 7절).
 8. **Web Push** — `POST/DELETE /api/push/subscribe`, `web-push` 연동.
 9. **스케줄러 공유 시크릿 미들웨어** — `/api/jobs/*` 공통 인증. 4·5·7번이 의존.
 10. **환경변수·배포 설정** — `output: 'standalone'`, Vercel 프로젝트 설정(icn1), 9절 환경변수
@@ -64,12 +69,19 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
     정지 계정 차단(1-2절 미들웨어)은 이 단위에서 함께 구현.
 15. **`api_usage_logs` 기록 래퍼** — DeepSeek(6번)·Gemini(3번) 호출 공통 래퍼에 로그 기록 추가.
     3·6번 의존, 14번이 이 데이터를 조회하므로 14번보다 먼저 끝나야 한다.
+16. **로그 정리 잡 등록(`collect_runs`/`api_usage_logs` 90일)** —
+    [[anyang-database-schema#로그성 테이블 보존 기간·정리 잡]]의 `cleanup-logs` pg_cron
+    SQL을 database가 등록한다(app API 엔드포인트 없음, backend 작업 아님). 이 항목은
+    되돌릴 수 없는 삭제를 주기적으로 실행하는 것이므로, 착수 전 이 구현 단계 지시서에 이
+    잡 등록에 대한 별도 사용자 승인이 적혀 있는지 반드시 확인한다(dev-common 규칙 4,
+    [[anyang-database-schema#되돌릴 수 없는 마이그레이션 표시]]). 승인 기록이 없으면
+    등록하지 않고 멈춰서 보고한다. `notify_logs`는 이 정리 대상이 아니다(확정).
 
 ### 순서 제안
 
-3, 9, 12 → (1, 2, 2-1 병렬 가능) → 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10. 5는
+3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 11은 나머지가 끝난 뒤
-여유 있을 때.
+여유 있을 때. 16은 database 보관 기간 확정과 이 잡 등록에 대한 별도 승인이 먼저 있어야 한다.
 
 ## 테스트 방법
 

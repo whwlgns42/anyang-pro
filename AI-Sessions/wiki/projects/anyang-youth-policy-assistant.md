@@ -39,6 +39,7 @@ owner: pm
 - 2026-09-27: pm 세션 비정상 종료 후 재개. 설계 문서 역링크 보완(database·backend), 인수인계 [[2026-09-27_anyang-design-approval-wait]] 작성.
 - 2026-09-27: 사용자 답변(확인 항목 1·2·3·5·6·10·11·12)을 [[anyang-service-scope]]로 확정, 원칙 5(도메인 나중) 변경. 설계 수정 라운드(database → backend → frontend) 완료, 설계 문서 5종 draft로 재승인 대기. 새 질문 14~19.
 - 2026-09-27: 사용자 새 요청 — 관리자 페이지 추가([[anyang-service-scope]]). 설계 수정 라운드(database → backend → frontend) 완료. 새 질문 20·21.
+- 2026-09-27: 사용자가 남은 항목(9·14·15·16·18·19·20·21)에 권장안으로 답함. [[anyang-service-scope]] 갱신, 설계 수정 라운드(database → backend → frontend) 완료. 남은 사용자 확인: 동의 기록 보관 기간(14). 설계 문서 5종 재승인 대기.
 
 ### 설계 문서 (status: draft, 사용자 승인 대기)
 
@@ -58,19 +59,19 @@ owner: pm
 6. 개인정보 처리방침·동의 화면 — 해결(2026-09-27, user): 가입 시 필수 동의 화면(국외 이전 고지, 동의 시각 기록) + 처리방침 페이지. 세부 문구·기록 방식은 설계 제안값(미확정). [[anyang-service-scope]]
 7. 커스텀 도메인 — 미해결(배포 시점에 결정, user 2026-09-27). 설계는 나중에 붙는다는 전제로 base URL을 환경변수로 받는다. [[anyang-deployment-portability]]
 8. 공식 수치 4건 — 해결(2026-09-27, 메인 세션 웹 확인). 수치와 출처는 [[anyang-backend-api]]에 반영.
-9. 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 게시판 확정(항목 1)에 따라 재검토 대상. 설계 수정 결과를 보고 사용자 확인.
+9. 공지 자격요건 구조화 컬럼 — 해결(2026-09-27, user): 1차 출시에서 안 함. [[anyang-service-scope]]
 10. "AI가 기억하는 내 정보" 화면 — 해결(2026-09-27, user): 넣는다, 조회·수정·삭제. [[anyang-service-scope]]
 11. 대화 히스토리 목록 화면 — 해결(2026-09-27, user): 넣는다. [[anyang-service-scope]]
 12. 인증 부가 테이블 — 해결(2026-09-27, user): 쓰지 않는다. [[anyang-service-scope]]
 13. UNO Q 전환 시 HTTPS 확보 방법(리버스 프록시/터널) — 현재 UNO Q 미사용이라 설계 범위 밖, 전환 시 별도 조사.
-14. 회원 탈퇴 시 동의 기록(`consents`) 삭제 vs 법적 보존 — 현재 설계는 on delete cascade(잠정). database 제기 2026-09-27. [[anyang-database-schema]]
-15. 동의 항목을 단일 체크로 받을지, 수집·이용 / 국외 이전으로 분리할지. database 제기 2026-09-27.
-16. 비밀번호 재설정 기능을 이번 범위에 넣을지(계획서에 없던 항목). 넣으면 이메일 발송 수단도 정해야 한다. 이메일 인증은 backend가 범위 제외로 제안. backend 제기 2026-09-27. [[anyang-backend-api]]
-17. 알림 잡 중복 발송 방지 방식 — database 제안(2026-09-27): `notify_logs`의 `unique(user_id, notice_id)`. 설계 승인으로 확정. [[anyang-database-schema]]
-18. 처리방침 개정 시 재동의 강제 여부(`consents.policy_version`) — backend는 이번엔 만들지 않기로 제안. backend 제기 2026-09-27.
-19. 프로필 코드값 셋(`gender`·`occupation_type`·`enrollment_status` 선택지) — database 설계 승인 때 함께 확정. frontend 제기 2026-09-27. [[anyang-database-schema]]
-20. 로그성 테이블(`collect_runs`·`notify_logs`·`api_usage_logs`) 보존 기간(제안 90일)과 정리 잡(pg_cron, 데이터 삭제라 되돌릴 수 없음) 등록 여부. `notify_logs`를 지우면 오래된 공지가 재발송될 수 있어 항목 17과 함께 판단. database 제기 2026-09-27. [[anyang-database-schema]]
-21. `notify_logs.result`에 `pending`(발송 전) 값을 둘지 — 사용자 결정보다 database·backend 설계 조율 항목. 현재 제안은 `success`/`failed`만. backend 제기 2026-09-27. [[anyang-backend-api]]
+14. 탈퇴 시 동의 기록 — 해결(2026-09-27, user): 즉시 삭제하지 않고 증빙용으로 보관 후 삭제. **보관 기간 숫자는 미해결** — 설계 제안값(미확정)으로 두고 사용자 확인 필요. [[anyang-service-scope]]
+15. 동의 항목 — 해결(2026-09-27, user): "수집·이용"과 "국외 이전"을 분리. [[anyang-service-scope]]
+16. 비밀번호 재설정 — 해결(2026-09-27, user): 1차 출시 제외, Google 로그인으로 대체 안내, 이메일 발송 수단 불필요. [[anyang-service-scope]]
+17. 알림 잡 중복 발송 방지 — `notify_logs`의 `unique(user_id, notice_id)`(database 제안). 설계 승인으로 확정. [[anyang-database-schema]]
+18. 처리방침 개정 시 재동의 — 해결(2026-09-27, user): 강제한다. [[anyang-service-scope]]
+19. 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 따르고 설계 승인으로 확정. `gender`·`occupation_type`은 제안 목록이 없어 database가 추가함 — 승인 때 사용자가 목록을 보고 확정. [[anyang-database-schema]]
+20. 로그 보존 — 해결(2026-09-27, user): 수집 이력·API 사용량 90일 정리 잡 등록, 알림 발송 로그는 삭제 대상에서 제외. [[anyang-service-scope]]
+21. 발송 로그 `pending` 상태 — 해결(2026-09-27, user): 추가. 세부는 database·backend 설계. [[anyang-service-scope]]
 
 ## 승인된 설계
 

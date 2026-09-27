@@ -40,6 +40,7 @@ owner: shared
 | 알림 발송 기록 | notify-log | notify-job이 특정 사용자에게 특정 공지 알림을 보낸 시도 한 건(발송 시각, 결과). 관리자 화면의 "알림 발송 현황" 집계와 중복 발송 방지의 근거 데이터다 |
 | 계정 정지 | account-suspension | 관리자가 사용자 계정의 로그인·서비스 이용을 막은 상태. 계정 삭제와 다르다 |
 | 외부 API 사용 기록 | api-usage-log | DeepSeek·Gemini 같은 외부 AI API 호출 한 건의 기록(제공자, 작업 종류, 시각, 결과, 토큰 수). 관리자 화면의 "외부 API 사용량" 집계 근거 데이터다 |
+| 동의 항목 | consent-type | 가입 시 개인정보 동의를 받는 개별 항목 구분. "수집·이용"(collection_use)과 "국외 이전"(overseas_transfer)을 각각 별도로 받는다([[anyang-service-scope]], user, 2026-09-27) |
 
 ### 미확정 용어
 

@@ -46,6 +46,17 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
   아직 미확정).
 - 이 세션(backend)에는 웹 접근 도구가 없어 수집 대상 게시판의 `robots.txt`와 실제 HTML 구조는
   이번 설계에서 확인하지 못했다 — **구현 전 확인(미확정)**으로 남긴다(5절).
+- 확정([[anyang-service-scope]], user, 2026-09-27, 반영 완료): 동의는 "수집·이용"/"국외
+  이전" 분리 각각 필수(1절), 처리방침 개정 시 재동의 강제(1절), 탈퇴 시 `consents` 즉시
+  삭제 아님·보관 후 삭제(1-3절, 13-3절), 비밀번호 재설정 1차 출시 제외·Google 로그인
+  안내(1-1절). database가 `consents`(`consent_type`/`withdrawn_at`)와
+  `notify_logs`(`pending`/`reserved_at`/`sent_at`) 컬럼을
+  [[anyang-database-schema]]에 이미 반영했다 — 이 문서의 관련 절을 그 구조에 맞춰 갱신했다.
+- 로그 보존(확정, [[anyang-service-scope]], user, 2026-09-27): `collect_runs`/
+  `api_usage_logs` 90일 정리 잡은 pg_cron이 직접 실행하는 SQL(database 소관,
+  [[anyang-database-schema#로그성 테이블 보존 기간·정리 잡]])이라 별도 backend API
+  엔드포인트는 없다. [[anyang-backend-tasks]]에 구현 단계 작업 단위로만 등록해 실행 승인
+  누락을 방지한다. `notify_logs`는 이 정리 대상에서 제외(확정).
 - 커스텀 도메인은 배포 시점에 붙인다([[anyang-deployment-portability]] 원칙 5, user,
   2026-09-27 — 처음부터 커스텀 도메인을 쓰는 원안을 대체). `APP_ORIGIN` 환경변수가 base
   URL·OAuth 리다이렉트·VAPID subject의 유일한 출처이며 코드에 도메인을 하드코딩하지 않는다.
@@ -61,47 +72,65 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 - 비밀번호 해시: `argon2id`(제안, 미확정) — bcrypt보다 GPU 공격 저항이 높다. 파라미터
   (memory/time cost)는 미확정.
 - 전용 엔드포인트(Auth.js가 커버하지 않는 것만):
-  - `POST /api/auth/register` (미확정) — body `{ email, password, consent: true }`.
-    `consent`가 true가 아니면 400으로 거부(가입 완료 불가, [[anyang-service-scope]] 확정).
-    `consent`가 true면 트랜잭션으로 `users` + `credentials` 생성 후 `consents`에 1행
-    기록(`policy_version`, `consented_at`). 이미 가입된 email이면 409.
+  - `POST /api/auth/register` (미확정) — body
+    `{ email, password, consents: { collection_use: true, overseas_transfer: true } }`.
+    동의는 "수집·이용"과 "국외 이전"을 분리해 각각 받는 것이 확정([[anyang-service-scope]],
+    user, 2026-09-27)이므로 body도 항목별 boolean 2개로 받는다. 둘 중 하나라도 `true`가
+    아니면(누락 포함) 400으로 거부(가입 완료 불가). 둘 다 `true`면 트랜잭션으로 `users` +
+    `credentials` 생성 후 `consents`에 **2행**(각 `consent_type`마다 1행,
+    `policy_version=POLICY_VERSION`(아래), `consented_at=now()`) 기록. 이미 가입된 email이면
+    409.
 - **Google 로그인 시 동의**: Auth.js 표준 콜백(`signIn`)에서 `users` 테이블에 없는 신규
   사용자면 로그인을 바로 완료시키지 않고, 프런트가 동의 화면을 먼저 보여준 뒤
-  `POST /api/auth/consent`(미확정, body 없음, 세션 필요)를 호출해 `consents` 행을 남겨야
-  가입이 완료된 것으로 처리한다(제안, 미확정) — Google OAuth 콜백 자체에서 동의를 막을 수
-  없어 "가입 완료" 여부를 `consents` 존재 여부로 판단하는 방식. 동의 전 사용자는 로그인은
-  되지만 다른 API가 403(동의 필요)을 반환한다(제안, 미확정 — 미들웨어에서 `consents` 존재
-  확인).
-- `consents.policy_version` 관리(제안, 미확정): 개인정보 처리방침 문구를 바꿀 때마다
-  `POLICY_VERSION`을 날짜 문자열(예: `"2026-09-27"`)로 갱신하는 상수를 코드에 둔다. 버전이
-  바뀌어도 기존 사용자에게 재동의를 강제하는 기능은 이번 스콥에 넣지 않는다(YAGNI — 방침이
-  실제로 바뀌기 전까지 필요 없음). 방침 개정으로 재동의가 필요해지면 그때 설계를 추가한다.
+  `POST /api/auth/consent`(미확정, 세션 필요)를 호출해 `consents` 행을 남겨야 가입이 완료된
+  것으로 처리한다(제안, 미확정) — Google OAuth 콜백 자체에서 동의를 막을 수 없어 "가입 완료"
+  여부를 두 `consent_type` 모두의 현재 `POLICY_VERSION` 동의 존재 여부로 판단하는 방식.
+  body: `{ consents: { collection_use: true, overseas_transfer: true } }` — 회원가입과
+  같은 형식, 둘 다 `true`가 아니면 400. 이 엔드포인트는 재동의(아래)에도 그대로 재사용한다.
+  동의 전(또는 재동의 전) 사용자는 로그인은 되지만 다른 API가 아래 미들웨어에서
+  403(동의 필요)을 반환한다.
+- **`consents.policy_version` 관리 위치(제안, 채택)**: "현재 처리방침 버전"은 환경변수가
+  아니라 **코드 상수**로 관리한다 — `lib/consent.ts`(미확정 경로)에
+  `export const POLICY_VERSION = "2026-09-27"`(예시, 날짜 문자열) 형태로 단일 값을 둔다.
+  환경변수 대신 코드 상수를 고른 이유(제안): 처리방침 문구를 바꿀 때 코드 리뷰·git 이력으로
+  버전 변경이 함께 추적되고, Vercel 환경변수처럼 배포 환경마다 값이 어긋날 위험이 없다(둘
+  다 재배포가 필요하므로 배포 부담은 같음, YAGNI — 여러 환경에서 다른 버전을 쓸 이유가
+  없다). 회원가입·재동의 API가 `consents` 행을 만들 때 이 상수를 `policy_version`에 그대로
+  쓴다.
+- **재동의 판정 위치(제안, 채택)**: 1-2절의 정지 계정 확인과 같은 인증 필요 API 공통
+  미들웨어(`middleware.ts` 또는 공통 헬퍼, 미확정 이름)에서 `suspended_at` 확인 다음 순서로
+  검사한다 — 로그인 사용자의 `consent_type`(`collection_use`, `overseas_transfer`) 각각에
+  대해 `consented_at`이 가장 최근인 행의 `policy_version`이 현재 `POLICY_VERSION`과 같은지
+  확인한다. 하나라도 다르거나 기록이 없으면 403(재동의 필요, 응답 body에 필요한
+  `consent_type` 목록 포함, 제안)을 반환해 프런트가 재동의 화면으로 보내게 한다. 예외:
+  `/api/auth/*`, `/api/auth/consent` 자신, `/api/admin/*`(관리자는 13-0절 별도 인가)는 이
+  검사에서 제외한다(제안, 미확정). 재동의는 `POST /api/auth/consent`를 그대로 호출해
+  처리한다(위와 동일 엔드포인트 재사용, 새 엔드포인트를 만들지 않는다 — YAGNI).
 - Auth.js 표준 콜백(`signIn`, `session`, `jwt`)에서 `users` 테이블에 없는 신규 Google 로그인
   사용자는 자동 생성(Auth.js 어댑터 기본 동작).
 - 커스텀 도메인은 배포 시점에 붙이므로 `NEXTAUTH_URL`/`AUTH_URL`은 `APP_ORIGIN` 환경변수로
   설정한다(확정 원칙, [[anyang-deployment-portability]] 원칙 5).
 
-### 1-1. 이메일 인증·비밀번호 재설정 — `verification_tokens` 미사용에 따른 정리 (제안, 결정 필요)
+### 1-1. 이메일 인증·비밀번호 재설정 — `verification_tokens` 미사용에 따른 정리 (확정)
 
 `verification_tokens`는 쓰지 않기로 확정됐다([[anyang-service-scope]], user, 2026-09-27).
 이 테이블 없이 두 흐름을 어떻게 처리할지 정리한다.
 
-- **이메일 인증(가입 확인 메일)**: 이번 스콥에서는 만들지 않는다(제안) — 서비스가 상업적
-  피해 위험이 낮은 정책 알림 도구이고, 이메일 인증 없이도 실질적 피해가 적다고 판단. 이메일은
-  가입 시 입력한 값을 검증 없이 신뢰한다(`users.email_verified`는 계속 null로 둔다).
-- **비밀번호 재설정("비밀번호 찾기")**: 원래 계획서·서비스 범위 결정에 이 기능 자체가 명시돼
-  있지 않다. `verification_tokens` 테이블 없이 만들려면 DB에 토큰을 저장하지 않는
-  자체서명(stateless) 링크가 대안이다(제안, 미확정):
-  1. `POST /api/auth/forgot-password` — body `{ email }`. 가입된 이메일이면
-     `AUTH_SECRET`으로 서명한 토큰(이메일 + 만료시각(예: 30분)을 HMAC 서명, 미확정 라이브러리
-     — 예: `jose`)을 담은 링크를 이메일로 전송. 미가입 이메일이어도 200(사용자 존재 여부
-     노출 방지, 제안).
-  2. `POST /api/auth/reset-password` — body `{ token, new_password }`. 서명·만료 검증 후
-     `credentials.password_hash` 갱신. DB에 토큰을 저장하지 않으므로 재사용 방지(1회성
-     보장)는 못 한다 — 만료시간을 짧게 두는 것으로 위험을 줄인다(제안, 한계 인지).
-  3. 이메일 발송 수단(SMTP/서비스)은 미정 — 이 설계 범위 밖, 별도 확인 필요.
-- **결정 필요**: 비밀번호 재설정 기능을 이번 스콥에 넣을지 자체가 계획서에 없던 항목이라
-  backend 판단만으로 확정할 수 없다. pm/사용자 확인이 필요하다(미해결 질문 참고).
+- **이메일 인증(가입 확인 메일)**: 만들지 않는다(제안 유지) — 서비스가 상업적 피해 위험이
+  낮은 정책 알림 도구이고, 이메일 인증 없이도 실질적 피해가 적다고 판단. 이메일은 가입 시
+  입력한 값을 검증 없이 신뢰한다(`users.email_verified`는 계속 null로 둔다).
+- **비밀번호 재설정("비밀번호 찾기") — 1차 출시 제외(확정, [[anyang-service-scope]], user,
+  2026-09-27)**: 비밀번호를 잊은 사용자에게는 Google 로그인으로 대체 안내한다(프런트 화면
+  문구 — frontend 소관). 이에 따라 다음을 이번 스콥에서 제거/제외한다.
+  - `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` 엔드포인트를 만들지
+    않는다(이전 draft의 제안이었으며 폐기).
+  - 이메일 발송 수단(SMTP/서비스)도 이 서비스에는 필요 없다 — 다른 흐름(알림은 Web
+    Push이지 이메일이 아니다)에서도 이메일 발송이 없으므로 이 프로젝트 전체에 이메일 발송
+    인프라를 두지 않는다(YAGNI).
+  - Credentials(이메일·비밀번호) 가입 사용자가 비밀번호를 잊으면 계정 복구 수단이 없다는
+    한계가 생긴다 — Google 로그인 계정으로 새로 가입하거나, 관리자에게 문의해 계정 삭제
+    (13-3절) 후 재가입하는 것이 유일한 우회로다(제안, 한계 인지, frontend 안내 문구에 반영
+    필요 — "frontend 반영 필요"로 보고).
 
 ### 1-2. 정지 계정(`users.suspended_at`) 차단 방식 (제안, 미확정)
 
@@ -118,6 +147,29 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
    계속 접근 가능해지는 문제가 더 크다.
 3. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
    `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택).
+
+### 1-3. 사용자 탈퇴 API (제안, 미확정)
+
+탈퇴 시 동의 기록(`consents`)은 즉시 삭제하지 않고 증빙용으로 보관한 뒤 삭제한다(확정,
+[[anyang-service-scope]], user, 2026-09-27). [[anyang-database-schema#consents (미확정) —
+가입 시 개인정보 필수 동의 기록]]의 "탈퇴 후 보관" 절(`on delete set null` +
+`withdrawn_at`)을 그대로 따른다.
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| DELETE | `/api/account` | 로그인 사용자 본인 탈퇴 |
+
+- 처리 순서(애플리케이션 트랜잭션, 제안):
+  1. `UPDATE consents SET withdrawn_at = now() WHERE user_id = $1 AND withdrawn_at IS NULL`
+  2. `DELETE FROM users WHERE id = $1` — database 문서의 cascade 정책에 따라
+     profiles/accounts/credentials/conversations/push_subscriptions/notify_settings/
+     user_preferences가 함께 삭제된다. `consents`는 `on delete set null`이므로 1번에서
+     `withdrawn_at`을 채운 행이 삭제되지 않고 `user_id`만 null이 된다(증빙 보관).
+  - 1번을 반드시 2번보다 먼저 실행한다 — 순서가 바뀌면 `user_id`가 이미 null이 된 뒤라
+    "이 사용자의 동의 기록"을 특정해 `withdrawn_at`을 채울 수 없다.
+- 인증 필요(세션 없으면 401). 세션 쿠키는 삭제 성공 응답과 함께 무효화(Auth.js 로그아웃
+  처리, 미확정 구현).
+- 탈퇴 확인 다이얼로그는 frontend 소관(제안).
 
 ### 2. 프로필 CRUD
 
@@ -338,20 +390,29 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
     and (now() at time zone timezone)::time
         between (notify_time) and (notify_time + interval '5 minutes')::time;
   ```
-  - **중복 발송 방지 — `notify_logs` 채택(제안, 미확정, database 조율 완료)**: database가
-    추가한 `notify_logs` 테이블의 `unique(user_id, notice_id)` 제약을 그대로 쓴다
-    ([[anyang-database-schema#notify_logs (미확정)]]). 흐름: 매칭된 (사용자, 공지) 쌍마다
-    먼저 `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'success')
-    ON CONFLICT (user_id, notice_id) DO NOTHING`을 실행하고, 실제로 삽입된 경우에만
-    Web Push를 전송한다(삽입 안 됐으면 이미 보낸 것이므로 건너뜀). Push 전송이 실패하면
-    같은 트랜잭션에서 `result`를 `'failed'`로 갱신한다(초기 삽입값을 낙관적으로
-    `'success'`로 넣지 않고, 삽입 시 `'pending'`을 넣은 뒤 전송 결과에 따라 `'success'`/
-    `'failed'`로 UPDATE하는 2단계 방식이 더 정확하다 — `result` 값 셋에 `pending`을
-    추가할지는 database와 재조율 필요, 미확정). 재시도(실패 행을 다시 성공으로 갱신)
-    정책(몇 번, 언제)은 이번 스콥에서는 만들지 않는다(YAGNI — 다음 알림 주기에 새 공지가
-    또 오면 그때 다시 시도되므로 별도 재시도 잡 없이도 서비스가 동작한다). 이렇게 하면 잡이
-    재시도되거나 실행이 겹쳐도 DB 유니크 제약으로 중복 발송이 막힌다(프로젝트 문서 확인
-    항목 17 해결에 반영).
+  - **중복 발송 방지 — `notify_logs` pending 2단계 채택(제안, database 조율 완료)**:
+    database가 확정한 `notify_logs` 구조([[anyang-database-schema#notify_logs
+    (미확정)]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
+    쓴다. 흐름: 매칭된 (사용자, 공지) 쌍마다
+    1. `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'pending')
+       ON CONFLICT (user_id, notice_id) DO NOTHING`으로 먼저 선점한다.
+    2. 실제로 삽입된 경우(영향 받은 행 수 1)에만 Web Push를 전송한다. 삽입 안 됐으면(이미
+       선점된 조합) 3번의 "정체된 pending 재시도" 판단으로 넘어간다.
+    3. 전송 결과에 따라 `UPDATE notify_logs SET result = 'success' | 'failed', sent_at =
+       now(), error_summary = ... WHERE user_id = $1 AND notice_id = $2`로 갱신한다.
+    - **정체된 `pending` 재시도(제안, 미확정 — 프로젝트 문서 확인 항목 17 후속)**: 함수가
+      전송 도중 중단되면 `result='pending'`인 채로 영영 남아 그 사용자는 해당 공지 알림을
+      영구히 못 받는다. 이를 막기 위해 2번에서 삽입이 안 된(이미 있던) 조합을 만나면 기존
+      행의 `reserved_at`을 확인한다 — 잡 트리거 주기(제안 5분)의 2배인 10분(제안, 미확정)
+      보다 오래된 `pending` 행은 정체된 것으로 보고, `UPDATE notify_logs SET reserved_at =
+      now() WHERE user_id = $1 AND notice_id = $2 AND result = 'pending' AND reserved_at <
+      now() - interval '10 minutes'`로 재선점(영향 받은 행 수 1이면 재선점 성공)한 뒤 다시
+      전송을 시도하고 3번과 같이 갱신한다. `result`가 이미 `success`/`failed`인 행은 이
+      재시도 대상이 아니다(그대로 건너뜀 — `failed` 재시도는 이번 스콥에서 만들지 않는다,
+      YAGNI 유지).
+    - 이렇게 하면 잡이 재시도되거나 실행이 겹쳐도 DB 유니크 제약으로 중복 발송이 막히고,
+      프로세스 중단으로 인한 `pending` 장기 잔류도 다음 실행에서 스스로 복구된다(프로젝트
+      문서 확인 항목 17 해결에 반영).
   - `timezone` 컬럼은 항상 `'Asia/Seoul'` 고정([[anyang-database-schema#notify_settings
     (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]).
 - `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 최근 수집된
@@ -380,7 +441,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 | 변수 | 용도 |
 |---|---|
 | `DATABASE_URL` | PostgreSQL 접속(표준, 이전 가능성 원칙 1) |
-| `AUTH_SECRET` | Auth.js JWT 서명 키. 비밀번호 재설정 토큰 서명에도 재사용(1-1절, 제안) |
+| `AUTH_SECRET` | Auth.js JWT 서명 키 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `DEEPSEEK_API_KEY` | DeepSeek API |
 | `GEMINI_API_KEY` | Gemini 임베딩 API |
@@ -539,14 +600,18 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   않는다.
 - `PATCH .../suspend`, `.../unsuspend`는 `users.suspended_at`을 갱신한다. 1-2절의 정지
   차단 방식이 이 값을 기준으로 동작한다.
-- `DELETE /api/admin/users/:id`는 `users` 행을 삭제한다. [[anyang-database-schema#users
-  (미확정)]]의 cascade 정책에 따라 관련 행(profiles/accounts/credentials/conversations/
-  push_subscriptions/notify_settings/user_preferences)이 함께 삭제된다. `consents`
-  cascade 여부는 아직 미확정(프로젝트 문서 확인 항목 14) — 그 질문이 풀리기 전까지는 현재
-  스키마의 cascade 그대로 동작한다. 이 삭제는 관리자 화면의 정식 기능(사용자 삭제 버튼)이지
-  dev-common 3조("파일 삭제는 사용자 승인 후")가 말하는 에이전트의 임의 삭제 작업이
-  아니므로 별도 세션 내 승인 절차는 없다 — 프런트에서 확인 다이얼로그를 두는 것으로
-  충분하다(제안, frontend 소관).
+- `DELETE /api/admin/users/:id`는 1-3절 "사용자 탈퇴 API"와 **같은 2단계 처리 순서**를
+  따른다(제안) — 관리자가 대신 탈퇴시키는 것이므로 삭제 방식이 같아야 한다.
+  1. `UPDATE consents SET withdrawn_at = now() WHERE user_id = $1 AND withdrawn_at IS NULL`
+  2. `DELETE FROM users WHERE id = $1` — [[anyang-database-schema#users (미확정)]]의
+     cascade 정책에 따라 profiles/accounts/credentials/conversations/push_subscriptions/
+     notify_settings/user_preferences가 함께 삭제된다. `consents`는 `on delete set null`
+     이므로 1번에서 `withdrawn_at`을 채운 행이 삭제되지 않고 `user_id`만 null이 된다(증빙
+     보관, [[anyang-service-scope]] 확정 — 즉시 삭제 아님). 이전 draft의 "cascade로 함께
+     삭제"라는 설명은 `consents`에는 더 이상 해당하지 않는다.
+  이 삭제는 관리자 화면의 정식 기능(사용자 삭제 버튼)이지 dev-common 3조("파일 삭제는
+  사용자 승인 후")가 말하는 에이전트의 임의 삭제 작업이 아니므로 별도 세션 내 승인 절차는
+  없다 — 프런트에서 확인 다이얼로그를 두는 것으로 충분하다(제안, frontend 소관).
 - 인증 필요(13-0), 관리자만.
 
 #### 13-4. 외부 API 사용량
@@ -571,9 +636,16 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 - **인증·동의**: Google OAuth 로그인 성공 시 `users` 행 생성/재사용 확인. Credentials 가입 →
   `credentials.password_hash`가 평문이 아닌지 확인. 잘못된 비밀번호로 로그인 시 401.
-  `consent: false`(또는 누락)로 회원가입 시도 시 400, `consents` 행이 생기지 않는지 확인.
-  가입 성공 시 `consents` 행 1개가 생기는지 확인. 비밀번호 재설정(채택 시): 만료된 토큰으로
-  `reset-password` 호출 시 거부되는지 확인.
+  두 동의 항목(`collection_use`, `overseas_transfer`) 중 하나라도 `false`(또는 누락)로
+  회원가입 시도 시 400, `consents` 행이 생기지 않는지 확인. 가입 성공 시 `consents` 행이
+  **2개**(항목별 1개씩) 생기는지 확인. `POLICY_VERSION` 코드 상수를 올린 뒤 옛
+  `policy_version`으로만 동의한 사용자로 인증 필요 API를 호출하면 403(재동의 필요)이 오는지,
+  `POST /api/auth/consent`로 재동의하면 그 뒤 정상 호출되는지 확인. 비밀번호 재설정
+  엔드포인트는 만들지 않으므로 `POST /api/auth/forgot-password` 등 경로가 404/미존재인지
+  확인(제외 확정 반영).
+- **탈퇴**: `DELETE /api/account` 호출 후 `users` 행이 삭제되고, 해당 사용자의 `consents`
+  행은 삭제되지 않은 채 `user_id`가 null·`withdrawn_at`이 채워졌는지 확인. `DELETE
+  /api/admin/users/:id`도 같은 결과인지 확인.
 - **프로필 CRUD**: 미인증 요청 401. 본인 프로필만 GET/PUT 가능(다른 user_id로 접근 시도해
   403/404 확인).
 - **알림 설정**: 미인증 401. `notify_time` 형식이 아닌 값(예: `"25:00"`) PUT 시 400.
@@ -607,9 +679,12 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   403 확인. `unsuspend` 후 다시 정상 동작하는지 확인.
 - **공지 숨김**: `hide` 후 `/api/notices/recommended`·채팅 RAG 검색 결과에 해당 공지가 빠지는지
   확인. `unhide` 후 다시 나오는지 확인.
-- **알림 중복 발송 방지(`notify_logs`)**: 같은 (user_id, notice_id) 쌍으로 알림 잡을 두 번
-  실행해도 Web Push가 한 번만 전송되는지(두 번째 실행에서 `INSERT ... ON CONFLICT DO
-  NOTHING`이 삽입을 막아 전송을 건너뛰는지) 확인.
+- **알림 중복 발송 방지 + pending 선점(`notify_logs`)**: 같은 (user_id, notice_id) 쌍으로
+  `INSERT ... ON CONFLICT DO NOTHING`을 두 번 실행해 첫 번째만 `pending` 행을 만들고 두
+  번째는 삽입되지 않는지(전송을 건너뛰는지) 확인. 전송 후 `UPDATE`로 `success`/`failed`가
+  정상 반영되는지 확인. `reserved_at`을 10분 이전으로 조작한 `pending` 테스트 행을 만든 뒤
+  재선점(`UPDATE ... WHERE reserved_at < now() - interval '10 minutes'`)이 성공하고 전송이
+  재시도되는지 확인. `success`/`failed` 행은 이 재선점 대상이 아닌지도 확인.
 - **수동 수집 실행**: `POST /api/admin/collect-runs` 호출 시 `collect_runs`에
   `trigger_type='manual'`, `triggered_by=<관리자 id>` 행이 생기고 응답이 300초 안에
   오는지(목 서버로 짧게) 확인.
@@ -621,21 +696,27 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - 수집 대상 게시판(확정 URL)의 `robots.txt` 준수 확인과 실제 HTML 구조 확인 — 이 세션에는
   웹 접근 도구가 없어 구현 착수 전 확인이 필요하다(5절). `Disallow`에 걸리면 설계 변경이
   필요하다.
-- 비밀번호 재설정("비밀번호 찾기") 기능 자체를 이번 스콥에 넣을지 — 계획서·서비스 범위
-  결정에 없던 항목이라 backend 판단만으로 확정할 수 없다(1-1절). 넣는다면 이메일 발송
-  수단도 별도로 정해야 한다.
-- 알림 잡 중복 발송 방지 — 해결(2026-09-27, database 제안 + backend 채택): `notify_logs`의
-  `unique(user_id, notice_id)` + `INSERT ... ON CONFLICT DO NOTHING`(7절). 다만
-  `result` 값 셋에 `pending`을 추가할지(전송 전/후 2단계 기록)는 database와 재조율이
-  필요하다(7절, 미해결).
-- 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 게시판 구조 확인 후 재검토(3절 c항,
-  [[anyang-youth-policy-assistant#확인이 필요한 항목]] 9번과 연결).
+- 비밀번호 재설정("비밀번호 찾기") — 해결(2026-09-27, user): 1차 출시 제외, Google 로그인
+  대체 안내(1-1절). 관련 엔드포인트·이메일 발송 인프라 없음.
+- 알림 잡 중복 발송 방지 — 해결(2026-09-27, database 확정 + backend 채택): `notify_logs`의
+  `unique(user_id, notice_id)` + `pending`→`success`/`failed` 2단계 흐름(7절). 정체된
+  `pending` 재시도 임계값(제안 10분)은 backend 제안값이며 (미확정)이다.
+- 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 1차 출시에서 만들지 않는다(확정,
+  [[anyang-service-scope]], user, 2026-09-27). 게시판 구조 확인 후에도 이번 스콥에서는
+  재검토하지 않는다.
 - UNO Q 전환 시 HTTPS 확보 방법(리버스 프록시/터널, 12절 7번) — 이 설계 범위 밖 별도 조사 필요.
-- `consents.policy_version` 관리 방식(날짜 문자열 제안)과 방침 개정 시 재동의 강제 여부는
-  제안값이며 이번 스콥에서는 재동의 강제를 만들지 않는다(1절) — 필요해지면 재검토.
-- 회원 탈퇴 시 `consents` 삭제/보존 여부, 동의 항목을 단일/분리로 받을지는 database가 이미
-  제기한 미해결 질문([[anyang-database-schema#확인이 필요한 항목 (이 문서 관련, pm이
-  프로젝트 문서에 반영)]])이며 backend API 설계는 그 결정에 맞춰 나중에 조정한다.
+- 동의 항목 분리·재동의 강제·탈퇴 시 보관 — 해결(2026-09-27, user): 수집·이용/국외 이전
+  분리(둘 다 필수), 처리방침 개정 시 재동의 강제, 탈퇴 시 즉시 삭제 아님·보관 후 삭제(1절,
+  1-3절). `POLICY_VERSION` 코드 상수 위치(`lib/consent.ts` 등, 미확정 정확한 경로)와
+  재동의 판정 위치(공통 미들웨어, 1절)는 backend 제안이며 설계 승인으로 확정된다.
+- **동의 기록 보관 기간(숫자) — 미해결**: database 문서에서 제기한 채로 남아 있다
+  ([[anyang-database-schema#확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에
+  반영)]]) — 90일(로그 테이블과 동일) vs 더 긴 기간(예: 1년) 중 사용자 확인 필요. 보관 만료분
+  정리 잡은 이 숫자가 정해진 뒤에야 등록할 수 있다.
+- 로그 정리 잡(`collect_runs`/`api_usage_logs` 90일) 등록 — 해결(2026-09-27, user): 보존
+  기간·등록 자체는 승인됨. 실제 pg_cron 등록은 database 소관 SQL이라 이 문서에 API
+  엔드포인트는 없다. [[anyang-backend-tasks]]에 구현 단계 작업 단위로 등록해, 구현 착수
+  지시서에 이 잡 실행에 대한 별도 승인이 적혀 있는지 확인하는 절차를 명시했다.
 
 ## Links
 
