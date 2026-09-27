@@ -98,11 +98,11 @@ export default function LoginPage() {
     <main className="page page--narrow">
       <h1>안양 청년정책 비서</h1>
 
-      <button type="button" onClick={handleGoogle} style={{ width: "100%", marginBottom: 16 }}>
+      <button type="button" onClick={handleGoogle} className="btn-google btn-block secondary">
         Google로 계속하기
       </button>
 
-      <div role="tablist" aria-label="로그인 또는 가입 선택" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div role="tablist" aria-label="로그인 또는 가입 선택" className="tab-row">
         <button
           type="button"
           className={mode === "login" ? "" : "secondary"}
@@ -200,7 +200,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={submitting || (mode === "register" && !canSubmitRegister)}
-          style={{ width: "100%" }}
+          className="btn-block"
         >
           {mode === "login" ? "로그인" : "가입하기"}
         </button>

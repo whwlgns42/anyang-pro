@@ -51,7 +51,7 @@ export function NoticesList() {
         <p className="hint-text">아직 추천할 공지가 없어요.</p>
       )}
       {items.map((item) => (
-        <Link key={item.id} href={`/notices/${item.id}`} className="card" style={{ display: "block" }}>
+        <Link key={item.id} href={`/notices/${item.id}`} className="card">
           <strong>{item.title}</strong>
           <p>{item.excerpt}</p>
         </Link>

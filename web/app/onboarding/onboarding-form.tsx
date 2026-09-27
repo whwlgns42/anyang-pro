@@ -166,15 +166,14 @@ export function OnboardingForm() {
           </p>
         )}
 
-        <button type="submit" disabled={submitting} style={{ width: "100%" }}>
+        <button type="submit" disabled={submitting} className="btn-block">
           저장하고 계속하기
         </button>
         <button
           type="button"
-          className="secondary"
+          className="secondary btn-block"
           onClick={handleSkip}
           disabled={submitting}
-          style={{ width: "100%", marginTop: 8 }}
         >
           나중에 입력
         </button>

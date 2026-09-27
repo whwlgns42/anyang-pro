@@ -77,11 +77,11 @@ export default function ConsentFormInner() {
             {error}
           </p>
         )}
-        <button type="submit" disabled={!canSubmit || submitting} style={{ width: "100%" }}>
+        <button type="submit" disabled={!canSubmit || submitting} className="btn-block">
           동의하고 계속하기
         </button>
       </form>
-      <p style={{ marginTop: 16 }}>
+      <p className="hint-text" style={{ marginTop: 16 }}>
         동의하지 않고 <a href="/settings/account">탈퇴</a>할 수도 있습니다.
       </p>
     </main>

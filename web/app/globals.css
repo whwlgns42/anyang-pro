@@ -1,12 +1,51 @@
-/* ponytail: 최소 공통 스타일. 디자인 시스템·CSS 프레임워크 도입은 이번 요청 범위 밖(YAGNI). */
+/* ponytail: 최소 공통 스타일. 디자인 시스템·CSS 프레임워크 도입은 이번 요청 범위 밖(YAGNI).
+   design-taste-frontend 적용 (2026-09-28): 공공성·신뢰 우선 유틸리티 PWA로 읽어
+   VARIANCE 3 / MOTION 2 / DENSITY 4로 낮게 잡았다 — 마케팅 랜딩이 아니라 채팅·목록 중심
+   실무 화면이라 절제된 톤, 단일 액센트, 낮은 모션을 기본으로 한다. */
 :root {
   color-scheme: light;
-  --fg: #1a1a1a;
+
+  /* 중립 스케일 (zinc 계열) */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-900: #18181b;
+
+  /* 시맨틱 토큰 — 컴포넌트는 이 이름만 참조한다 */
+  --fg: var(--zinc-900);
+  --muted: var(--zinc-500);
   --bg: #ffffff;
-  --border: #d9d9d9;
+  --surface: var(--zinc-50);
+  --border: var(--zinc-200);
+  --border-strong: var(--zinc-300);
+
   --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-fg: #ffffff;
+  --accent-soft: #eff6ff;
+  --accent-soft-border: #bfdbfe;
+
   --danger: #dc2626;
-  --muted: #6b6b6b;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+
+  --warning-bg: #fff7ed;
+  --warning-border: #fdba74;
+
+  /* 모양 일관성 — 카드·입력·버튼은 전부 이 반경만 쓴다 (SHAPE CONSISTENCY LOCK) */
+  --radius: 10px;
+  --radius-sm: 6px;
+
+  --shadow-card: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-card-hover: 0 6px 20px -8px rgba(37, 99, 235, 0.25);
+
+  --motion-fast: 120ms ease;
 }
 
 * {
@@ -16,21 +55,48 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--fg);
-  background: var(--bg);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* 포커스 가시성 (a11y) — 모든 상호작용 요소 공통 */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .app-shell {
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
   padding-bottom: 64px; /* 하단 탭 높이만큼 여백 */
 }
 
 .page {
-  padding: 16px;
+  padding: 20px 16px;
   flex: 1;
 }
 
@@ -40,19 +106,28 @@ body {
 }
 
 h1 {
-  font-size: 1.25rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+
+.page > h1 {
+  margin-bottom: 16px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 14px;
 }
 
 .field label {
   font-size: 0.875rem;
   font-weight: 600;
+  color: var(--zinc-700);
 }
 
 .field input[type="text"],
@@ -63,43 +138,92 @@ h1 {
 .field input[type="date"],
 .field select,
 .field textarea {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   font-size: 1rem;
+  background: var(--bg);
+  color: var(--fg);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
 }
 
 fieldset {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 12px;
+  border-radius: var(--radius);
+  margin: 0 0 14px;
+  padding: 12px 14px 14px;
+}
+
+fieldset legend {
+  padding: 0 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--zinc-700);
 }
 
 .radio-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.radio-row label {
+  font-size: 0.9375rem;
 }
 
 button {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
-  padding: 10px 16px;
-  font-size: 1rem;
+  color: var(--accent-fg);
+  padding: 11px 18px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast),
+    transform 80ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+  background: var(--accent-active);
+  border-color: var(--accent-active);
 }
 
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 button.secondary {
-  background: #fff;
+  background: var(--bg);
   color: var(--accent);
+  border-color: var(--border-strong);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+}
+
+button.secondary:active:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 button.danger {
@@ -107,21 +231,97 @@ button.danger {
   border-color: var(--danger);
 }
 
+button.danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+/* 반복되는 인라인 style={{width:'100%'}} 패턴을 대체하는 유틸리티.
+   연달아 오는 블록 버튼(제출 + 나중에 입력 등)은 자동으로 위 여백을 받는다. */
+.btn-block {
+  width: 100%;
+}
+
+.btn-block + .btn-block {
+  margin-top: 8px;
+}
+
+.btn-google {
+  margin-bottom: 16px;
+}
+
+.tab-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tab-row button {
+  flex: 1;
+}
+
+.chat-header,
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chat-header h1,
+.page-header h1 {
+  margin: 0;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.875rem;
+  font-weight: 500;
+  margin: 4px 0 0;
 }
 
 .hint-text {
   color: var(--muted);
   font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .card {
+  display: block;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 14px;
+  margin-bottom: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+a.card {
+  box-shadow: var(--shadow-card);
+}
+
+a.card:hover {
+  border-color: var(--accent-soft-border);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+
+.card strong {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 .card a {
@@ -135,7 +335,7 @@ button.danger {
   right: 0;
   display: flex;
   border-top: 1px solid var(--border);
-  background: #fff;
+  background: var(--bg);
   max-width: 480px;
   margin: 0 auto;
 }
@@ -143,21 +343,25 @@ button.danger {
 .bottom-nav__item {
   flex: 1;
   text-align: center;
-  padding: 12px 0;
+  padding: 12px 0 14px;
   text-decoration: none;
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-top: 2px solid transparent;
+  transition: color var(--motion-fast), border-color var(--motion-fast);
 }
 
 .bottom-nav__item[aria-current="page"] {
   color: var(--accent);
   font-weight: 700;
+  border-top-color: var(--accent);
 }
 
 .chat-log {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   flex: 1;
   margin-bottom: 12px;
@@ -165,41 +369,68 @@ button.danger {
 
 .bubble {
   max-width: 85%;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
   white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 0.9375rem;
 }
 
 .bubble--user {
   align-self: flex-end;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
+  border-bottom-right-radius: 4px;
 }
 
 .bubble--assistant {
   align-self: flex-start;
-  background: #f1f1f1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
 }
 
 .chat-input-row {
   display: flex;
   gap: 8px;
+  align-items: flex-end;
 }
 
 .chat-input-row textarea {
   flex: 1;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   resize: none;
   font-size: 1rem;
+  font-family: inherit;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.chat-input-row textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
 }
 
 .banner {
   padding: 10px 12px;
-  border-radius: 6px;
-  background: #fff7ed;
-  border: 1px solid #fdba74;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
   margin-bottom: 12px;
   font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

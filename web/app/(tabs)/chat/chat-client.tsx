@@ -101,7 +101,7 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
 
   return (
     <main className="page" style={{ display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="chat-header">
         <h1>채팅</h1>
         <Link href="/conversations">대화 목록</Link>
       </div>
