@@ -41,7 +41,7 @@
 
 ## Conversations
 
-- [[2026-09-27_anyang-implementation-paused]] — 안양 비서 인수인계: 설계 승인 후 구현 중단(database 완료), 사용자 결정 대기·준비 항목, 재개 방법
+- [[2026-09-27_anyang-implementation-paused]] — (superseded, archive 이동 대상) 안양 비서 구현 중단 인수인계. 2026-09-28 재개·완료, 프로젝트 문서로 통합
 - [[2026-09-27_anyang-design-approval-wait]] — (superseded, archive 이동 대상) 안양 비서 설계 승인 대기 인수인계
 
 ## Design
@@ -73,7 +73,7 @@
 
 ## Errors / Lessons
 
-아직 등록된 error 문서가 없습니다.
+- [[anyang-preferences-put-missing-mask-pii]] — 안양 비서: 선호 수정 API가 가림 없이 Gemini로 전송(해결 622962b, embedText 내부 강제 가림)
 
 ## Prompt Library
 

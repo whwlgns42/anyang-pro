@@ -36,3 +36,5 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-27 --:-- | save | jev.py cp949 출력 오류 수정(UTF-8 강제), dev-common 중복 금지에 jev.py dup 단계 추가 | [[scripts/jev]] [[.claude/rules/dev-common]]
 2026-09-27 --:-- | flag | [stale?] dry-run database 에이전트가 새 중복 금지 규칙(jev.py dup)을 따르지 않고 옛 문구를 인용함. 세션 시작 시점 규칙 스냅샷 추정, 새 세션에서 재점검 필요 | .claude/rules/dev-common.md
 2026-09-28 --:-- | save | 안양 비서 구현 중단(사용자 지시): database 구현 완료(df067cd), backend 1차 중지(산출물 없음). 구현 중단 인수인계 작성, 이전 인수인계 superseded | [[2026-09-27_anyang-implementation-paused]] [[2026-09-27_anyang-design-approval-wait]] [[anyang-youth-policy-assistant]]
+2026-09-28 --:-- | save | 스킬 대장 미설치 5종 프로젝트 설치(taste-skill design-taste-frontend, superpowers 6.4.1, ponytail 4.8.4, eli5, archify), archify 설명 정정, claude-skills는 참조용이라 제외 | [[.claude/skills/README]]
+2026-09-28 --:-- | save | 안양 비서 1차 구현·검수 완료: backend 1~3차·추천 공지 보충·프로필 null 수정, frontend A·B, code-review 차단 1건(선호 수정 가림 누락) 수정·재검수 통과. 설계 변경 필요 2건(채팅 인용 카드, 관리자 공지 목록 API)으로 backend-api를 승인된 설계에서 뺌 | [[anyang-youth-policy-assistant]] [[anyang-preferences-put-missing-mask-pii]] [[anyang-backend-api]] [[2026-09-27_anyang-implementation-paused]]

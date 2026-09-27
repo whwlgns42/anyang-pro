@@ -1,11 +1,13 @@
 ---
 type: handoff
 date: 2026-09-27
-status: active
+status: superseded
 owner: pm
 ---
 
 # 안양 청년정책 비서 — 구현 중단 인수인계
+
+> 2026-09-28 구현 재개·완료. 이후 상태는 [[anyang-youth-policy-assistant]] 진행 상태와 "확인이 필요한 항목" 22·23으로 통합했다. 이 문서는 archive 이동 대상.
 
 ## Summary
 
