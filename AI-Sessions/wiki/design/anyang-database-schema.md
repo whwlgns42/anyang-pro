@@ -110,18 +110,21 @@ DB에 세션을 저장하지 않는다. 이 문서에는 `sessions` 테이블을
 - Auth.js 표준 스키마에는 없는 테이블이라 backend가 자체 credentials provider를 쓸 때만 필요.
   backend 조율에서 최종 확정.
 
-#### profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)
+#### profiles (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위와 코드값 셋은 확정)
 
 프로필 항목 범위는 생년·성별·직군·재학/재직 여부 4개로 확정됐다([[anyang-service-scope]],
-user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
+user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다. `gender`/`enrollment_status`/
+`occupation_type`의 코드값 셋도 [[anyang-service-scope#Details]]("프로필 선택지" 행)에서
+user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본으로 삼고 여기서는 중복 기재하지
+않는다. 컬럼 타입(text 등)과 not null 여부 같은 스키마 세부만 이 문서의 제안이다.
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | user_id | uuid, PK, FK → users.id, on delete cascade | |
 | birth_year | smallint, null 허용 | 나이대 계산용. 생년월일 전체 저장은 개인정보 최소화 관점에서 비권장(제안) |
-| gender | text, null 허용 | 선택값. 코드값 셋(미확정, 제안): `male`/`female`/`unspecified`(응답 안 함) |
-| enrollment_status | text, null 허용 | 재학/재직/구직 등 상태([[glossary]]). 코드값 셋(미확정, 제안): `student`(재학)/`employed`(재직)/`job_seeking`(구직 중)/`none`(해당 없음) |
-| occupation_type | text, null 허용 | 업종·직무 성격. `enrollment_status`와 값이 겹치지 않는다. 코드값 셋(미확정, 제안): `it`(IT·소프트웨어)/`manufacturing`(제조)/`service`(서비스)/`public`(공공·비영리)/`self_employed`(자영업)/`other`(기타) |
+| gender | text, null 허용 | 선택값. 코드값 셋은 [[anyang-service-scope#Details]] 확정 참고 |
+| enrollment_status | text, null 허용 | 재학/재직/구직 등 상태([[glossary]]). 코드값 셋은 [[anyang-service-scope#Details]] 확정 참고 |
+| occupation_type | text, null 허용 | 업종·직무 성격. `enrollment_status`와 값이 겹치지 않는다. 코드값 셋은 [[anyang-service-scope#Details]] 확정 참고 |
 | updated_at | timestamptz | |
 
 - 개인정보 최소화 관점 선택지(제안):
@@ -129,24 +132,16 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
   2. 항목을 더 늘려야 하면 `ALTER TABLE ADD COLUMN`(되돌릴 수 있는 마이그레이션)으로 추가한다.
     단, 항목 범위 자체를 늘리는 것은 [[anyang-service-scope]] 확정을 뒤집는 것이므로 설계 변경
     절차(재승인)를 거친다.
-- **코드값 선택지 (모두 미확정 제안값)**: "직군"(`occupation_type`)과 "재학/재직 여부"
-  (`enrollment_status`)는 사용자가 별도 항목으로 정했으므로([[anyang-service-scope]], user,
-  2026-09-27) 코드값이 서로 겹치지 않게 다시 나눴다.
-  - `gender`(미확정, 제안): `male`/`female`/`unspecified`. 개인정보 최소화 원칙상 강제 응답을
-    피해야 하므로 "응답 안 함"(`unspecified`)을 포함한다.
-  - `enrollment_status`(미확정, 제안): 재학·재직·구직 등 "상태"만 담는다 — `student`(재학)/
-    `employed`(재직)/`job_seeking`(구직 중)/`none`(그 외, 해당 없음) 4개.
-  - `occupation_type`(미확정, 제안): 업종·직무 "성격" 분류만 담는다 — `it`(IT·소프트웨어)/
-    `manufacturing`(제조)/`service`(서비스)/`public`(공공·비영리)/`self_employed`(자영업)/
-    `other`(기타) 6개. 재학생·미취업자처럼 직군이 없는 사용자는 이 컬럼이 이미 null 허용이므로
-    값을 넣지 않는다(제안) — null이 "해당 없음"을 의미하므로 별도 `none` 값은 추가하지 않는다.
-    구직자는 상태상 `enrollment_status='job_seeking'`이면서 `occupation_type`은 null(아직
-    특정 업종에 속하지 않음)이 되는 조합을 기본으로 본다(제안).
-  - 두 항목은 서로 다른 축(상태 vs 업종 성격)이라 값이 겹치지 않는다. 다만 두 항목을 함께
-    쓰는 근거(정책 공고가 실제로 이 조합으로 자격 조건을 나눈다는 것)는 확인된 출처가 없는
-    추정이다(미확정, 근거: 추정) — 확인이 필요한 항목에 올린다.
-  이 코드값들은 다른 설계 값과 마찬가지로 설계 승인으로 확정되며, 승인 전까지는 `(미확정)`
-  표시를 유지한다([[anyang-service-scope]], user, 2026-09-27).
+- **코드값 셋 (확정, [[anyang-service-scope]], user, 2026-09-27)**: "직군"(`occupation_type`)과
+  "재학/재직 여부"(`enrollment_status`)는 사용자가 별도 항목으로 정했으므로 코드값이 서로
+  겹치지 않게 나뉘어 있다. 값 목록은 [[anyang-service-scope#Details]]를 참고한다(값 중복
+  기재를 피하기 위해 이 문서에는 옮겨 적지 않는다). 참고로 `enrollment_status`에는 기존
+  제안값 `none` 대신 `other`(기타)가 확정됐고, `job_seeking`은 "구직·미취업"을 뜻한다.
+  재학생·미취업자처럼 직군이 없는 사용자는 `occupation_type` 컬럼이 null 허용이므로 값을 넣지
+  않는다(제안) — null이 "해당 없음"을 의미하므로 별도 코드값을 쓰지 않는다. 구직자는
+  `enrollment_status='job_seeking'`이면서 `occupation_type`은 null인 조합을 기본으로 본다(제안).
+  두 항목을 함께 쓰는 근거(정책 공고가 실제로 이 조합으로 자격 조건을 나눈다는 것)는 확인된
+  출처가 없는 추정이다(근거: 추정) — 스키마 확정과 별개로 남는 참고 메모다.
 
 #### notices (미확정) — 공지 자격요건 구조화 컬럼 없음(확정)
 
@@ -276,16 +271,21 @@ user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다.
   기록한다(애플리케이션 책임). `user_id`는 `on delete set null`이므로 `users` 행이 삭제돼도
   `consents` 행 자체는 남는다 — 동의 시각·항목·처리방침 버전은 그대로 증빙 자료로 유지되고,
   어느 사용자였는지 식별 가능한 연결만 끊긴다.
-  - **보관 기간 — 미확정 (제안값)**: 다른 로그성 테이블과 같은 90일을 제안하되, `consents`는
-    법적 증빙 목적이라 로그 테이블보다 긴 기간(예: 1년, 개인정보보호법상 일반적인 열람·동의
-    기록 보존 관행 참고)이 필요할 수 있다. 정확한 기간은 사용자 확인이 필요하다 — 확인이 필요한
-    항목에 올린다.
-  - **보관 만료분 정리 잡 (제안, 되돌릴 수 없는 삭제)**: 보관 기간이 정해지면 `collect_runs` 등과
-    같은 방식(pg_cron 트리거)으로 `delete from consents where withdrawn_at is not null and
-    withdrawn_at < now() - interval '<보관기간>'`을 정기 실행한다(제안 SQL). 이 삭제는 되돌릴 수
-    없으므로, 구현 단계에서 이 정리 잡을 실제로 pg_cron에 등록하려면 지시서에 이 작업에 대한
-    별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서 보고한다(아래 "되돌릴 수
-    없는 마이그레이션 표시" 절에도 반영).
+  - **보관 기간 — 확정: 1년 ([[anyang-service-scope]], user, 2026-09-27)**: 탈퇴(`withdrawn_at`)
+    후 1년간 보관하고, 이후 정리 잡으로 삭제한다. 다른 로그성 테이블(90일)보다 긴 것은 `consents`가
+    법적 증빙 목적이기 때문이다.
+  - **보관 만료분 정리 잡 (제안 SQL, 되돌릴 수 없는 삭제)**: `collect_runs` 등과 같은 방식
+    (pg_cron 트리거)으로 다음을 정기 실행한다.
+    ```sql
+    -- 제안: 매일 새벽 탈퇴 1년 경과 동의 기록 정리 (1년 보관은 확정, 실행 주기·시각은 제안)
+    delete from consents where withdrawn_at is not null and withdrawn_at < now() - interval '1 year';
+    ```
+    이 삭제는 되돌릴 수 없으므로, 구현 단계에서 이 정리 잡을 실제로 pg_cron에 등록하려면
+    지시서에 이 작업에 대한 별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서
+    보고한다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영). 1년 보관 자체는 이미
+    승인됐지만, dev-common.md 규칙상 되돌릴 수 없는 마이그레이션은 실행 단계에서도 그
+    마이그레이션에 대한 사용자 승인이 지시서에 별도로 적혀 있어야 실행할 수 있다 —
+    `collect_runs`/`api_usage_logs`의 `cleanup-logs` 잡과 같은 취급이다.
 
 #### push_subscriptions (미확정)
 
@@ -535,8 +535,10 @@ select cron.schedule(
   `api_usage_logs` 90일 삭제)은 되돌릴 수 없는 작업이지만 90일 보존 자체는 사용자 승인됨(user,
   2026-09-27). 구현 단계 지시서에 이 잡 등록에 대한 승인이 별도로 적혀 있어야 실제로 등록한다.
   없으면 등록하지 않고 멈춰서 보고한다.
-- `consents` 보관 만료분 정리 잡(위 `consents` 절)도 되돌릴 수 없는 삭제다. 이쪽은 보존 기간
-  자체가 아직 미확정이라 승인 대상도 아니다 — 보존 기간이 먼저 확정된 뒤 별도 승인을 받는다.
+- `consents` 보관 만료분 정리 잡(위 `consents` 절)도 되돌릴 수 없는 삭제다. 1년 보관은 확정됐으나
+  (user, 2026-09-27, [[anyang-service-scope]]), `cleanup-logs`와 마찬가지로 구현 단계 지시서에
+  이 정리 잡 등록에 대한 별도 사용자 승인이 적혀 있어야 실제로 등록한다. 없으면 등록하지 않고
+  멈춰서 보고한다.
 
 ## 테스트 방법 (제안)
 
@@ -591,9 +593,9 @@ select cron.schedule(
 - 처리방침 개정 시 재동의 — 해결(2026-09-27, user): 강제한다. [[anyang-service-scope]].
   `policy_version` 비교 방식(위 `consents` 절)으로 반영(구조 자체는 미확정).
 - 회원 탈퇴 시 동의 기록(`consents`) 삭제/보존 여부 — 해결(2026-09-27, user): 즉시 삭제하지
-  않고 증빙용으로 보관 후 삭제. [[anyang-service-scope]]. `on delete set null` +
-  `withdrawn_at`으로 반영(위 `consents` 절). **보관 기간 숫자 — 미해결(미확정 제안값)**: 90일
-  (로그 테이블과 동일) vs 더 긴 기간(예: 1년, 법적 증빙 성격 고려) 중 사용자 확인 필요.
+  않고 증빙용으로 1년 보관 후 정리 잡으로 삭제. [[anyang-service-scope]]. `on delete set null` +
+  `withdrawn_at`으로 반영(위 `consents` 절). 보관 기간(1년)도 해결됐다 — 정리 잡 등록 자체는
+  구현 단계에서 별도 사용자 승인이 필요하다(위 `consents` 절, "되돌릴 수 없는 마이그레이션 표시" 참고).
 - 관리자 기능 — 해결(2026-09-27, user): 역할 컬럼 없이 `ADMIN_EMAILS`, 기능 범위 ①~④
   확정. [[anyang-service-scope]]. 이를 담을 `collect_runs`/`notify_logs`/`api_usage_logs`
   테이블 구조, `notices.hidden_at`/`users.suspended_at` 컬럼은 구조 자체가 아직 (미확정)이다.
@@ -605,14 +607,12 @@ select cron.schedule(
   NOTHING` 선점 흐름으로 반영(위 `notify_logs` 절).
 - 공지 자격요건 구조화 컬럼 — 해결(2026-09-27, user): 1차 출시에서 만들지 않는다.
   [[anyang-service-scope]]. 위 `notices` 절 제목에 명시.
-- 프로필 코드값 셋 — 해결(2026-09-27, user): 설계 제안값을 설계 승인으로 확정한다.
-  [[anyang-service-scope]]. `gender`/`enrollment_status`/`occupation_type` 제안값은 위
-  `profiles` 절 "코드값 선택지" 메모를 참고(값을 여기 옮겨 적지 않는다 — 중복 방지) —
-  설계 승인 전까지 (미확정) 유지.
+- 프로필 코드값 셋 — 해결(2026-09-27, user): `gender`/`enrollment_status`/`occupation_type`
+  코드값 셋이 [[anyang-service-scope#Details]]("프로필 선택지" 행)에서 확정됐다. 값 목록은
+  그 결정 문서를 원본으로 삼는다(위 `profiles` 절 참고, 중복 기재 방지). 스키마 컬럼 타입
+  자체는 다른 컬럼과 같이 설계 승인 전까지 (미확정)이다.
 - 비밀번호 재설정 1차 출시 제외 — 해결(2026-09-27, user): 제외. [[anyang-service-scope]].
   관련 테이블(`verification_tokens` 등) 없음을 재확인 — 이 문서에 그런 테이블이 없다.
-- 수집 대상 게시판에 따른 notices 갱신·중복 판정 세부, collect-job 주기 (확인 항목 1과 연결) —
-  미해결.
 - "구독 수" 집계 기준 — 해결(backend): `notify_settings.enabled=true` 수와
   `push_subscriptions` 행 수 둘 다 반환하는 것으로 채택
   ([[anyang-backend-api#13-2. 알림 발송 현황]]).
@@ -620,7 +620,8 @@ select cron.schedule(
   쿼리 조건(`notices.hidden_at is null`)을 기본안으로 채택
   ([[anyang-backend-api#5. 공지 수집기 (Collector)]]).
 - `consents.policy_version` 부여 방식(날짜 기반 문자열 등)과 "현재 처리방침 버전" 상수 관리
-  위치 — 미해결, backend 조율 필요.
+  위치 — 해결(backend): 환경변수가 아니라 코드 상수(`lib/consent.ts`(미확정 경로)의
+  `POLICY_VERSION`)로 관리하는 것으로 채택 ([[anyang-backend-api#1. 인증 (Auth.js v5)]]).
 
 ## Links
 

@@ -54,10 +54,9 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
     [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]] 미확정)
     보관된 뒤 삭제된다는 원칙([[anyang-service-scope]], user, 2026-09-27)에 따라 8-1절 화면을
     둔다.
-- 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은
-  [[anyang-database-schema#profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)]]
-  기준으로 여전히 미확정이다. 개인정보 동의 화면의 세부 문구·동의 항목 단일/분리 체크도
-  미확정 — 사용자 확인 대기 중이다(아래 확인이 필요한 항목 참고).
+- 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은 [[anyang-service-scope]]
+  "프로필 선택지" 행(user, 2026-09-27)에서 확정됐다. 값 목록은 그 결정 문서를 원본으로 삼고
+  여기서는 옮겨 적지 않는다. 개인정보 동의 화면의 세부 문구는 법률 검토 후 확정된다(9절 참고).
 - 커스텀 도메인은 나중에 붙는다(user, 2026-09-27). `APP_ORIGIN` 환경변수가 base URL의 유일한
   출처이며 코드에 도메인을 하드코딩하지 않는다. 도메인 변경 절차는
   [[anyang-backend-api#12-1. 커스텀 도메인 연결 절차 (환경 전환 아님, 배포 origin만 교체) — 제안, 미확정]]에 있다.
@@ -151,12 +150,14 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 - 항목: 4개로 **확정**([[anyang-service-scope]], user, 2026-09-27) — `birth_year`, `gender`,
   `occupation_type`, `enrollment_status`([[anyang-database-schema#profiles (미확정 — 컬럼
-  타입·코드값은 설계 승인 전, 항목 범위는 확정)]]). 더 늘어나지 않는다.
+  타입은 설계 승인 전, 항목 범위와 코드값 셋은 확정)]]). 더 늘어나지 않는다.
 - 입력 컴포넌트(미확정, 제안): `birth_year` — 네이티브 `<select>` 또는 `<input type="number">`
-  (연도 범위, YAGNI — 커스텀 날짜 피커 불필요). `gender`, `occupation_type`,
-  `enrollment_status` — 라디오 버튼 그룹(코드값 셋 미확정,
-  [[anyang-database-schema#profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)]]
-  참고 — database가 코드값을 정할 때까지 화면 문구는 자리표시자로 둔다).
+  (연도 범위, YAGNI — 커스텀 날짜 피커 불필요). `gender`, `enrollment_status` — 라디오 버튼
+  그룹. 표시 문구는 [[anyang-service-scope]] "프로필 선택지" 행의 한국어 표시명을 그대로 쓴다.
+  `occupation_type`은 선택지가 8개로 다른 두 항목보다 많아 라디오 그룹 대신 네이티브
+  `<select>`를 쓰는 제안(미확정 — 여덟 개 라디오 버튼이 모바일 화면에서 세로로 길어지는 것을
+  피하기 위함, 설계 승인으로 확정). 표시 문구는 마찬가지로 [[anyang-service-scope]]의 한국어
+  표시명을 쓴다.
 - 제출: `PUT /api/profile`([[anyang-backend-api#2. 프로필 CRUD]]) → 성공 시 `/chat` 이동.
 - 모든 항목 null 허용(database 설계 원칙)이므로 "나중에 입력" 건너뛰기 버튼 포함(미확정,
   건너뛰면 빈 값으로 `PUT` 호출).
@@ -430,9 +431,11 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
-1. 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`의 선택지) — database
-   설계 승인 시 함께 확정될 예정([[anyang-database-schema#profiles (미확정 — 컬럼 타입·코드값은 설계 승인 전, 항목 범위는 확정)]]).
-   확정 전까지 2절 화면은 자리표시자 라벨을 쓴다.
+1. `occupation_type` 온보딩 입력 컴포넌트(select vs 라디오 그룹) — 2절에 제안(미확정)만
+   적었다. 설계 승인으로 확정된다.
+
+(2026-09-27 해결: 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은
+[[anyang-service-scope]] "프로필 선택지" 행(user, 2026-09-27)에서 확정됐다 — 2절 참고.)
 
 (2026-09-27 해결: 동의 체크박스 분리 여부, 비밀번호 재설정 포함 여부는
 [[anyang-service-scope]] 결정으로 확정됐다 — 7절, 1절, 10절 참고.)

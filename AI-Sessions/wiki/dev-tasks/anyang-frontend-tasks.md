@@ -17,10 +17,11 @@ owner: frontend
 의존: [[anyang-backend-api]]의 인증(동의 포함)·프로필·채팅·공지·알림설정·선호·히스토리·관리자
 엔드포인트가 먼저 구현돼 있어야(또는 목/스텁으로라도) 해당 화면을 붙일 수 있다. 개인정보
 동의 항목 분리(수집·이용/국외 이전 체크박스 2개)와 비밀번호 재설정 제외는
-[[anyang-service-scope]]로 확정됐다(2026-09-27). 프로필 코드값 셋만 여전히 미확정이라
-[[anyang-frontend-screens#확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)]]이
-풀릴 때까지 해당 세부만 보류한다 — 화면 포함 여부 자체는
-[[anyang-service-scope]]로 이미 확정됐으므로 작업 단위 착수를 막지 않는다.
+[[anyang-service-scope]]로 확정됐다(2026-09-27). 프로필 코드값 셋(`gender`,
+`occupation_type`, `enrollment_status`)도 [[anyang-service-scope]] "프로필 선택지" 행(user,
+2026-09-27)에서 확정됐다. `occupation_type`의 온보딩 입력 컴포넌트(select vs 라디오, 8개
+선택지 때문에 나온 제안)만 여전히 (미확정)이며 [[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)]]
+설계 승인으로 확정된다.
 
 ## Details
 
@@ -37,8 +38,9 @@ owner: frontend
    세부 문구는 법률 검토 확정 후 교체(구조 변경 아님, 제안).
 3-1. **계정 탈퇴 화면** (`/settings/account`) — 확인 다이얼로그(네이티브 `window.confirm` 또는
    모달, 미확정), `DELETE /api/account` 연동, 보관 안내 문구 표시.
-4. **온보딩 화면** (`/onboarding`) — 프로필 입력 폼(4개 확정 항목 기준), `PUT /api/profile` 연동.
-   코드값 셋 확정 시 라디오 버튼 라벨만 교체(재설계 아님).
+4. **온보딩 화면** (`/onboarding`) — 프로필 입력 폼(4개 확정 항목·코드값 셋 확정 기준 —
+   [[anyang-service-scope]]), `PUT /api/profile` 연동. `occupation_type` 입력 컴포넌트(select
+   vs 라디오)는 화면 설계 승인 시 확정.
 5. **채팅 화면** (`/chat`) — 메시지 리스트, 스트리밍 응답 렌더링, 공지 인용 카드, 히스토리
    목록 진입점. `POST /api/chat` 연동.
 6. **추천 공지 피드·상세** (`/notices`, `/notices/[id]`) — `GET /api/notices/recommended`,
