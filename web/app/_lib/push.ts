@@ -11,21 +11,9 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuf
   return outputArray;
 }
 
-// sw.js가 받는 push payload를 알림 표시 내용으로 변환한다. 서버는
-// { title, notice_id }를 보낸다(app/api/jobs/notify/route.ts). 이동 대상은
-// anyang-frontend-screens 4절에 확정된 공지 상세 라우트 `/notices/[id]`를 따른다.
-// sw.js는 이 파일을 import할 수 없으므로(서비스워커는 별도 스크립트 컨텍스트) 같은
-// 로직을 그대로 복제해 두되, 테스트는 여기서 한다.
-export function parsePushPayload(payload: { title?: string; notice_id?: string }): {
-  title: string;
-  url: string;
-} {
-  return {
-    title: payload.title || "안양 청년정책 비서",
-    url: payload.notice_id ? `/notices/${payload.notice_id}` : "/notices",
-  };
-}
-
+// push payload 파싱(parsePushPayload)은 public/sw.js에만 있다. 서비스워커는 별도 스크립트
+// 컨텍스트라 이 파일을 import할 수 없어 sw.js 쪽이 원본이다. 테스트는 sw.js 소스를 직접
+// 읽어 검증한다(web/test/frontend-push.test.ts).
 export function subscriptionToPayload(sub: PushSubscription): {
   endpoint: string;
   p256dh: string;

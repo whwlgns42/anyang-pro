@@ -1,5 +1,17 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { urlBase64ToUint8Array, subscriptionToPayload, parsePushPayload } from "@/app/_lib/push";
+import { urlBase64ToUint8Array, subscriptionToPayload } from "@/app/_lib/push";
+
+// sw.js는 서비스워커 전용 스크립트라 import할 수 없고, self.addEventListener(...) 부분은
+// Node 테스트 환경(self 없음)에서 실행할 수 없다. parsePushPayload 함수 정의만 잘라내
+// 평가해, 복제본이 아닌 진짜 sw.js 소스를 검증한다.
+const swSource = readFileSync(path.join(__dirname, "../public/sw.js"), "utf-8");
+const fnSource = swSource.slice(0, swSource.indexOf("self.addEventListener"));
+const parsePushPayload: (payload: { title?: string; notice_id?: string }) => {
+  title: string;
+  url: string;
+} = new Function(`${fnSource}\nreturn parsePushPayload;`)();
 
 describe("urlBase64ToUint8Array", () => {
   it("decodes a base64url VAPID-like key into bytes", () => {
