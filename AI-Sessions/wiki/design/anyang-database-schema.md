@@ -69,10 +69,11 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
 | created_at | timestamptz, default now() | |
 | suspended_at | timestamptz, null 허용 | 관리자가 계정을 정지한 시각. null이면 정상 상태(제안). 정지 사유를 남길지는 미확정 — 필요하면 별도 컬럼(예: `suspended_reason text`) 추가(되돌릴 수 있는 마이그레이션) |
 
-- **정지 계정 처리 방식 (제안, backend 확정 필요)**: 로그인 시 `suspended_at`이 not null이면
-  인증 자체를 막을지, 로그인은 허용하되 API 응답을 차단할지는 backend가 정한다. 알림(notify-job)은
-  `suspended_at`이 not null인 사용자를 조회 대상에서 제외한다(아래 pg_cron 절 쿼리에 조건 추가 필요).
-  정지는 로그인 계정(`users`) 단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.
+- **정지 계정 처리 방식**: [[anyang-backend-api#1-2. 정지 계정(users.suspended_at) 제한 방식
+  (제안, 미확정 — 2차 재점검 반영: 로그인차단 방식 폐기)]]에서 정리한다 — 로그인은 허용, 제한
+  상태(제안, 미확정). 알림(notify-job)은 `suspended_at`이 not null인 사용자를 조회 대상에서
+  제외한다(아래 pg_cron 절 쿼리, `u.suspended_at is null` 조건). 정지는 로그인 계정(`users`)
+  단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.
 - **계정 삭제**는 이 컬럼과 무관하게 기존 cascade 정책(위 각 테이블 `on delete cascade`)을 그대로
   따른다 — `users` 행 삭제 시 profiles/accounts/credentials/conversations/push_subscriptions/
   notify_settings/user_preferences가 함께 삭제된다. `consents`만 예외다 — `on delete set null`이므로
@@ -319,7 +320,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | user_id | uuid, PK, FK → users.id, on delete cascade | |
 | notify_time | time, not null | 사용자가 자유롭게 고른 하루 중 시각([[glossary]]의 notify-time). 시간대는 아래 timezone 기준 |
 | enabled | boolean, not null, default true | 알림 on/off |
-| enabled_at | timestamptz, null 허용 | 알림을 켠(또는 마지막으로 다시 켠) 시각(제안). 알림 대상 공지 범위를 이 시각 이후 수집분으로 제한하는 데 쓴다(아래 참고). `enabled=false`로 끄는 시점에는 건드리지 않고, `false→true`로 다시 켤 때만 갱신한다(애플리케이션 책임) |
+| enabled_at | timestamptz, null 허용 | 알림을 켠(또는 마지막으로 다시 켠) 시각(제안). 알림 대상 공지 범위를 이 시각 이후 수집분으로 제한하는 데 쓴다(아래 참고). 가입·온보딩 시 이 행을 처음 만들 때도 `enabled`가 기본값 `true`이므로 이때 `now()`로 채운다(애플리케이션 책임). 이후 `enabled=false`로 끄는 시점에는 건드리지 않고, `false→true`로 다시 켤 때만 갱신한다 |
 | timezone | text, not null, default 'Asia/Seoul' | 서비스가 국내 전용이므로 Asia/Seoul로 고정한다(확정). 모든 사용자에게 동일하게 적용하며, 사용자별로 다른 시간대를 선택하는 기능은 없다 |
 | updated_at | timestamptz, default now() | 설정 변경 시각 |
 
@@ -327,9 +328,11 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   삼는다 — 가입(또는 재가입) 직후 과거에 쌓인 공지가 한꺼번에 발송되는 것을 막기 위함이다.
   `/api/jobs/notify`의 매칭 쿼리(backend, [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림
   잡]])에 `notices.collected_at > notify_settings.enabled_at` 조건을 추가하는 방식을 제안한다.
-  `enabled_at`이 null이면(과거 가입자로 아직 값이 없는 경우) 이 조건을 적용하지 않는 것으로
-  본다(제안 — 기존 사용자에게 갑자기 알림이 끊기지 않도록). 최종 채택 여부와 정확한 비교
-  조건은 backend 조율 후 확정한다.
+  이제 가입 시점부터 `enabled_at`이 항상 채워지므로, `enabled_at`이 null인 행은 이 컬럼을
+  도입하기 전에 만들어진 레거시 행뿐이다. 이 경우 **발송 대상에서 제외한다(제안, 미확정)** —
+  "생성 시각 기준으로 간주" 대안도 있으나, 레거시 행의 실제 온/오프 이력을 알 수 없어 안전한
+  쪽(제외)을 기본안으로 둔다. 최종 채택 여부와 정확한 비교 조건, 레거시 행 처리(마이그레이션
+  시 `enabled_at`을 일괄 채울지)는 backend 조율 후 확정한다.
 - `notify_time`은 `time` 범위(00:00~23:59)만 검증하면 된다(애플리케이션 책임, CHECK 제약 불필요).
 - 시간대 처리: `notify_time`은 시간대 정보가 없는 `time` 타입이므로, "지금이 사용자의 알림
   시각인지" 비교할 때는 항상 `timezone`(Asia/Seoul 고정) 기준으로 현재 시각을 변환해 비교한다.
@@ -502,7 +505,7 @@ select cron.schedule(
     url := '앱 API URL(미확정, 환경변수로 관리)',
     headers := jsonb_build_object(
       'content-type', 'application/json',
-      'x-notify-job-secret', '공유 시크릿(미확정, 환경변수/Supabase Vault로 관리, 문서에 값 기록 금지)'
+      'x-scheduler-secret', '공유 시크릿(미확정, 환경변수/Supabase Vault로 관리, 문서에 값 기록 금지)'
     )
   );
   $$

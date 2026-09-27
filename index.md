@@ -52,7 +52,7 @@
 ## Dev Tasks
 
 - [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위 21개(draft)
-- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위 15개(draft)
+- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위 16개(draft)
 
 ## Concepts
 

@@ -76,7 +76,9 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
     `{ email, password, consents: { collection_use: true, overseas_transfer: true } }`.
     동의는 "수집·이용"과 "국외 이전"을 분리해 각각 받는 것이 확정([[anyang-service-scope]],
     user, 2026-09-27)이므로 body도 항목별 boolean 2개로 받는다. 둘 중 하나라도 `true`가
-    아니면(누락 포함) 400으로 거부(가입 완료 불가). 둘 다 `true`면 트랜잭션으로 `users` +
+    아니면(누락 포함) 400으로 거부(가입 완료 불가). 동의 검사 전에 email이 `ADMIN_EMAILS`에
+    있으면 403(`ADMIN_EMAIL_RESERVED`, 1-4절, 13-0절 신규)으로 거부한다(제안, 미확정 —
+    관리자 이메일은 Google 로그인으로만 가입 가능). 둘 다 `true`면 트랜잭션으로 `users` +
     `credentials` 생성 후 `consents`에 **2행**(각 `consent_type`마다 1행,
     `policy_version=POLICY_VERSION`(아래), `consented_at=now()`) 기록. 이미 가입된 email이면
     409.
@@ -135,24 +137,32 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
     (13-3절) 후 재가입하는 것이 유일한 우회로다(제안, 한계 인지, frontend 안내 문구에 반영
     필요 — "frontend 반영 필요"로 보고).
 
-### 1-2. 정지 계정(`users.suspended_at`) 차단 방식 (제안, 미확정)
+### 1-2. 정지 계정(`users.suspended_at`) 제한 방식 (제안, 미확정 — 2차 재점검 반영: 로그인
+차단 방식 폐기)
 
 `users.suspended_at`은 database가 제안한 컬럼이다([[anyang-database-schema#users
-(미확정)]]). JWT 세션 전략이라 서버가 세션을 직접 무효화할 수 없으므로, 정지가 즉시 반영되게
-아래 두 지점에서 확인한다(제안).
+(미확정)]]). 정지는 로그인 자체를 막는 제재가 아니라 **이용 제한**으로 처리한다(제안, 채택) —
+정지된 사용자도 로그인해 정지 사유를 확인하고 탈퇴할 수 있어야 한다는 판단이다.
 
-1. **로그인 시점**: Auth.js `signIn` 콜백에서 `suspended_at is not null`이면 로그인 자체를
-   거부한다(신규 로그인 차단).
-2. **이미 발급된 세션**: `/api/admin/*`와 `DELETE /api/account`를 제외한 인증 필요 API 공통
-   미들웨어(Next.js `middleware.ts` 또는 각 라우트 공통 헬퍼, 미확정)에서 매 요청마다
-   `users.suspended_at`을 조회해 not null이면 403(에러 코드 `ACCOUNT_SUSPENDED` — 1-4절
-   참고)으로 거부한다. 이 서비스 규모에서는 요청마다 1회 단순 조회 추가가
-   과설계가 아니라고 판단한다(제안) — JWT에 정지 여부를 캐싱하면 정지 후에도 세션 만료까지
-   계속 접근 가능해지는 문제가 더 크다. `DELETE /api/account`를 예외로 두는 이유(제안,
-   미확정): 정지된 사용자도 탈퇴할 권리 자체는 막지 않는다 — 정지가 서비스 이용 제한이지
-   계정 삭제 금지는 아니라고 판단했다.
-3. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
-   `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택).
+1. **로그인은 항상 허용**: Auth.js `signIn` 콜백에서 `suspended_at`을 이유로 로그인을 거부하지
+   않는다(이전 draft의 "신규 로그인 차단" 제안은 폐기). 로그인 성공 시 `jwt`/`session`
+   콜백이 `suspended_at is not null` 여부를 세션에 포함한다(제안, 미확정 필드명:
+   `session.suspended`, boolean) — frontend가 별도 API 호출 없이 정지 안내 화면을 바로 그릴
+   수 있다(YAGNI — 정지 안내 전용 조회 엔드포인트를 새로 만들지 않는다).
+2. **정지 중 허용되는 것**: 정지 안내 화면 표시(위 세션 필드로 충분), 로그아웃(Auth.js
+   표준), `DELETE /api/account`(1-3절)뿐이다.
+3. **그 외 모든 인증 필요 API**: `/api/admin/*`와 `DELETE /api/account`를 제외한 인증 필요
+   API 공통 미들웨어(Next.js `middleware.ts` 또는 각 라우트 공통 헬퍼, 미확정)에서 매
+   요청마다 `users.suspended_at`을 조회해 not null이면 403(에러 코드 `ACCOUNT_SUSPENDED` —
+   1-4절 참고)으로 거부한다. 이 서비스 규모에서는 요청마다 1회 단순 조회 추가가 과설계가
+   아니라고 판단한다(제안, 기존 유지) — JWT에 정지 여부만 캐싱하고 매 요청 재확인을 생략하면
+   정지 후에도 세션 만료까지 계속 접근 가능해지는 문제가 더 크다(위 1번의 `session.suspended`
+   는 안내 화면 표시용일 뿐, 접근 차단 판정에는 쓰지 않는다 — 판정은 이 미들웨어의 매 요청
+   DB 조회로만 한다). `DELETE /api/account`를 예외로 두는 이유(제안, 미확정): 정지된
+   사용자도 탈퇴할 권리 자체는 막지 않는다 — 정지가 서비스 이용 제한이지 계정 삭제 금지는
+   아니라고 판단했다.
+4. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
+   `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택, 변경 없음).
 
 ### 1-3. 사용자 탈퇴 API (제안, 미확정)
 
@@ -185,15 +195,42 @@ frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 �
 
 | 코드 | 발생 위치 | 의미 |
 |---|---|---|
-| `ACCOUNT_SUSPENDED` | 1-2절 정지 확인 | 계정이 정지됨 |
+| `ACCOUNT_SUSPENDED` | 1-2절 정지 확인 | 계정이 정지되어 이용이 제한됨(로그인 자체는 허용, 1-2절 허용 경로 외 API 차단) |
 | `CONSENT_REQUIRED` | 1절 재동의 판정 | 처리방침 개정으로 재동의 필요 |
-| `ADMIN_ONLY` | 13-0절 관리자 인가 | 로그인은 됐으나 관리자가 아님 |
+| `ADMIN_ONLY` | 13-0절 관리자 인가 | 로그인은 됐으나 관리자가 아님(로그인 provider가 google이 아니거나 `ADMIN_EMAILS`에 없음) |
+| `ADMIN_EMAIL_RESERVED` | 1절 가입 시점 차단(13-0절 신규) | `ADMIN_EMAILS`에 있는 이메일로 Credentials 가입을 시도함(제안, 미확정) |
 
 - 관리자 거부는 **404가 아니라 403**으로 통일한다(13-0절에서 이미 결정한 대로 — 이 서비스는
   공개 attack surface가 아니므로 엔드포인트 존재를 숨길 필요가 낮고, 403이 frontend 처리도
   단순하다). 이 문서 전체에서 관리자 API의 "권한 없음"은 항상 403 + `ADMIN_ONLY`다.
 - 401(비로그인)은 코드 문자열 없이 기존대로 빈 body 또는 최소 body를 반환한다(제안 —
   로그인 여부는 프런트가 세션 유무로 이미 알 수 있어 별도 코드가 필요 없다, YAGNI).
+
+### 1-5. 이메일 계정 연결 정책 (신규, 제안, 미확정)
+
+이메일 인증이 없으므로(1-1절) 타인의 이메일 주소로 먼저 이메일·비밀번호 가입을 해버리면 두
+가지 문제가 생길 수 있다.
+
+1. **진짜 주인이 Google 로그인을 못 함(계정 연결 off — 이 설계가 채택하는 기본값)**: Auth.js는
+   `allowDangerousEmailAccountLinking`을 켜지 않는 한 서로 다른 provider 간 같은 email을
+   자동 연결하지 않는다(기본값 off, 제안 채택 — 켜지 않는다). 이미 `credentials`로 가입된
+   이메일로 Google 로그인을 시도하면 Auth.js가 `OAuthAccountNotLinked` 에러로 로그인을
+   막는다. 이 경우 진짜 주인은 자신의 이메일로 서비스를 못 쓰게 된다.
+2. **자동 연결을 켜면 계정이 섞인다(이 설계는 채택하지 않음)**: 공격자가 먼저 만든
+   `credentials` 계정과 진짜 주인의 Google 로그인이 같은 `users` 행으로 합쳐져, 공격자가
+   자신이 정한 비밀번호로 계속 그 계정(진짜 주인의 프로필·기억)에 접근할 수 있다 — 1번보다
+   위험하므로 채택하지 않는다.
+
+**처리 경로(제안, 미확정, 채택)**: 자동 연결 off를 유지한다. Google 로그인이
+`OAuthAccountNotLinked`로 실패하면 frontend가 안내 메시지("이 이메일은 이미 비밀번호로
+가입되어 있습니다. 비밀번호로 로그인하거나, 본인 계정이 아니면 관리자에게 문의해 주세요")를
+보여준다(**frontend 반영 필요**). 이메일 인증이 없어 서버가 "진짜 주인"을 자동으로 판별할
+방법이 없으므로, 최종 해결은 1-1절과 같은 방식에 의존한다 — 관리자가 13-3절
+`DELETE /api/admin/users/:id`로 문제의 `credentials` 계정을 수동 삭제하면 진짜 주인이
+Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 않기로 한 결정(1-1절)에서 이미
+감수한 것과 같은 종류이며, 새 인프라(이메일 인증·소유권 확인 절차)를 추가하지 않는다(YAGNI).
+자동 연결 여부 자체를 사용자가 다르게 정하고 싶다면 별도 확인이 필요하다 — 이 문서는 "off
+유지"를 기본 제안으로 채택했다.
 
 ### 2. 프로필 CRUD
 
@@ -249,6 +286,14 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 - body(미확정 — 컬럼 타입 자체는 설계 승인 전): `{ notify_time, enabled }`. `notify_time`은
   하루 중 자유 시각(예: `"08:30"`)이며 고정 선택지 분기는 없다(확정). 서버는 `time` 형식
   검증만 한다(00:00~23:59).
+- **`enabled_at` 갱신(제안, [[anyang-database-schema#notify_settings (미확정 — 컬럼 타입은
+  설계 승인 전, 항목 범위·시간대는 확정)]] 반영)**: `PUT /api/notify-settings`가 upsert할 때
+  다음 규칙으로 `enabled_at`을 함께 쓴다.
+  - 행이 없어 새로 만드는 경우(가입·온보딩 첫 설정): `enabled_at = now()`로 채운다(`enabled`
+    기본값 `true` 여부와 무관하게 생성 시 항상 채움).
+  - 기존 행이 있고 `enabled`가 `false → true`로 바뀌는 경우: `enabled_at = now()`로 갱신한다.
+  - 그 외(이미 `true`를 유지, 또는 `true → false`로 끄는 경우): `enabled_at`을 건드리지 않는다.
+  - 7절 알림 잡은 `enabled_at`이 null인 행(이 컬럼 도입 전 레거시)을 발송 대상에서 제외한다.
 - 인증 필요(세션 없으면 401). 본인 것만 접근.
 
 ### 2-3. "AI가 기억하는 내 정보" (user_preferences) — 채택 (조회·수정·삭제)
@@ -278,11 +323,20 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 
 **흐름 (제안, 미확정)**:
 
-1. 사용자 메시지를 `messages`에 저장(role=user).
+0. **가림 처리(제안, 미확정 — 2차 재점검 반영: 적용 범위 확장)**: 사용자 메시지를 Gemini
+   또는 DeepSeek로 보내기 전에 전화번호·이메일·주민등록번호 형태를 **정규식으로 가린다**
+   (제안, 미확정 패턴 — user 결정, [[anyang-ai-models-data-transfer]], 2026-09-27). 원래
+   Gemini 임베딩(아래 2-a)에만 적용하기로 했던 것을, 같은 원본 텍스트가 DeepSeek로도 전송되는
+   3번(대화 컨텍스트)에도 동일하게 적용한다(제안, 채택) — 정규식 가림 대상은 어느 API로
+   보내든 식별정보이므로 한쪽만 가리면 의미가 없다. **가림 함수는 한 곳에 두고**(예:
+   `lib/mask-pii.ts`, 미확정 경로) Gemini·DeepSeek 전송 직전 두 지점 모두 이 함수를 호출한다
+   — 같은 정규식을 두 곳에 복제하면 한쪽만 패턴이 갱신될 위험이 있다(YAGNI에 부합 —
+   공용 함수 하나면 충분하고 provider별 별도 구현은 불필요).
+1. 사용자 메시지를 `messages`에 저장(role=user) — 저장은 가림 처리 **전** 원문으로 한다(기존
+   그대로, 이 서비스 DB 자체가 저장 대상이지 외부 전송 대상이 아니므로 이 변경과 무관).
 2. RAG 검색:
-   a. 현재 사용자 메시지를 Gemini로 보내기 전에 전화번호·이메일·주민등록번호 형태를
-      **정규식으로 가린다**(제안, 미확정 패턴 — user 결정, [[anyang-ai-models-data-transfer]],
-      2026-09-27). 이 임베딩은 검색 쿼리 벡터로 한 번만 쓰고 저장하지 않는다
+   a. 위 0번에서 가린 메시지를 Gemini로 임베딩한다. 이 임베딩은 검색 쿼리 벡터로 한 번만 쓰고
+      저장하지 않는다
       ([[anyang-database-schema#conversations / messages (미확정)]]의 "채팅 사용자 메시지
       임베딩 저장 여부" 절 그대로 채택). `user_preferences.embedding`(누적 선호 벡터,
       있으면)과 가림 처리 후 임베딩한 벡터를 결합(예: 최근 선호 top-K 평균 + 현재 메시지
@@ -298,8 +352,8 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
       별도 설계 변경으로 database와 재조율한다.
 3. DeepSeek API 호출(OpenAI 호환 Chat Completions, `stream: true`, 미확정). 전송 메시지에는
    **식별정보 없이** 다음만 포함: 프로필 조건 텍스트(나이대·성별·직군), 검색된 공지 제목·본문
-   일부, 최근 대화 맥락. `email`, `name`, `user_id`는 절대 포함하지 않는다
-   ([[anyang-ai-models-data-transfer]] 준수).
+   일부, 최근 대화 맥락(**0번에서 가린** 현재 사용자 메시지 포함). `email`, `name`, `user_id`는
+   절대 포함하지 않는다([[anyang-ai-models-data-transfer]] 준수).
    - **요청 한도**: DeepSeek는 RPM이 아니라 계정 단위 동시성 제한이다(`deepseek-flash` 2500,
      `deepseek-v4-pro` 500 동시 요청, 초과 시 429). 출처(2026-09-27 확인):
      https://api-docs.deepseek.com/quick_start/rate_limit/. API가 지원하는 `user_id`
@@ -308,14 +362,17 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
      미확정 — 예: `crypto.randomUUID()`를 세션마다 생성해 재사용).
 4. 응답 스트리밍 중 청크를 클라이언트로 전달, 완료 후 `messages`에 저장(role=assistant).
 5. **선호 추출(제안, 미확정)**: 대화 종료 또는 N턴마다(N 미확정) DeepSeek에 "이 대화에서
-   드러난 선호를 문장으로 요약" 요청(식별정보 없이 대화 내용만 전송) → 결과 문장을 Gemini로
-   임베딩해 `user_preferences`에 저장. 이 추출은 자유 텍스트 생성이라 Jev 대상이 아니다(문서·
-   텍스트 생성은 dev-common Jev 조건에서 제외).
+   드러난 선호를 문장으로 요약" 요청(식별정보 없이 대화 내용만 전송) → 결과 문장에도 0번의
+   가림 함수를 적용한 뒤(제안, 채택, 2차 재점검 반영 — 사용자가 대화 중 언급한 전화번호·
+   이메일·주민등록번호 형태가 요약 문장에 그대로 옮겨질 수 있으므로) Gemini로 임베딩해
+   `user_preferences`에 저장. 이 추출은 자유 텍스트 생성이라 Jev 대상이 아니다(문서·텍스트
+   생성은 dev-common Jev 조건에서 제외).
 
-**외부 전송 데이터 최소화 요약**: DeepSeek에는 조건·공지 텍스트·대화 텍스트만, Gemini에는
-공지 본문/선호 문장/채팅 사용자 메시지(전화번호·이메일·주민등록번호 형태 정규식 가림 후,
-위 2-a)만. 둘 다 `user_id`, `email`, `name` 미전송(제약은 애플리케이션 코드가
-지킨다 — database 문서에도 기록됨).
+**외부 전송 데이터 최소화 요약**: DeepSeek에는 조건·공지 텍스트·대화 텍스트(0번에서 가린
+현재 사용자 메시지 포함)만, Gemini에는 공지 본문/선호 문장(0번 가림 적용, 5번)/채팅 사용자
+메시지(0번 가림 적용, 2-a)만. 둘 다 `user_id`, `email`, `name` 미전송(제약은 애플리케이션
+코드가 지킨다 — database 문서에도 기록됨). 가림 함수는 0번에서 정의한 공용 함수 하나를
+DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 
 **`api_usage_logs` 기록 지점(제안, 미확정)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
 호출을 각각 감싸는 공통 래퍼 함수 안에서, 성공·실패와 무관하게 호출 직후 1행을 기록한다
@@ -451,12 +508,14 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
     (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]).
 - `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 후보 공지를 다음
   두 조건으로 좁힌 뒤 Web Push 전송(8절) 여부를 정한다.
-  1. **알림 대상 공지 범위(제안, database 제안 채택)**: `notices.collected_at >
-     notify_settings.enabled_at` — 사용자가 알림을 켠(또는 다시 켠) 시각 이후 수집된 공지만
-     대상으로 한다([[anyang-database-schema#notify_settings (미확정 — 컬럼 타입은 설계
-     승인 전, 항목 범위·시간대는 확정)]]). `enabled_at`이 null(과거 가입자로 아직 값이 없는
-     경우)이면 이 조건을 적용하지 않는다(제안 — 기존 사용자에게 갑자기 알림이 끊기지 않도록).
-     이렇게 과거에 쌓인 공지가 알림을 켜자마자 한꺼번에 발송되는 것을 막는다.
+  1. **알림 대상 공지 범위(제안, database 제안 채택 — 2차 재점검 반영: null 처리 변경)**:
+     `notices.collected_at > notify_settings.enabled_at` — 사용자가 알림을 켠(또는 다시 켠)
+     시각 이후 수집된 공지만 대상으로 한다([[anyang-database-schema#notify_settings (미확정
+     — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]). 2-2절에 따라 `enabled_at`은
+     가입·온보딩 시 항상 채워지므로, `enabled_at`이 null인 행은 이 컬럼 도입 전에 만들어진
+     레거시 행뿐이다 — 이 경우 **발송 대상에서 제외한다**(database 문서와 동일한 결정,
+     이전 draft의 "조건을 적용하지 않는다(포함)"는 폐기). 이렇게 과거에 쌓인 공지가 알림을
+     켜자마자 한꺼번에 발송되는 것을 막는다.
   2. **유사도 임계값**: 1번을 통과한 공지 중 **`notice_chunks` 벡터와 사용자
      `user_preferences.embedding`(선호) 벡터**의 코사인 유사도가 임계값(미확정, 제안 0.75)
      이상인 것만 고른다. **프로필은 임베딩하지 않으므로**([[anyang-ai-models-data-transfer]]
@@ -580,19 +639,30 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 - 공통 헬퍼(제안, 미확정 이름: `requireAdmin(request)`)를 모든 `/api/admin/*` 핸들러
   맨 앞에서 호출한다. 로그인 세션이 없으면 401을 반환한다.
-- **관리자 판정은 Google 로그인(OAuth) 계정에만 적용한다(제안, 채택)**: 세션 이메일을
-  `ADMIN_EMAILS`와 비교하기 전에, 그 이메일·비밀번호(Credentials) 가입 계정은 이메일 인증이
-  없어(1-1절) 타인의 이메일 주소로 가입할 수 있으므로 먼저 로그인 방식을 확인한다.
-  `requireAdmin`은 `accounts` 테이블에서 `user_id = <세션 사용자>` AND `provider = 'google'`
-  행이 있는지 조회한다(제안, 미확정 쿼리 예시: `SELECT 1 FROM accounts WHERE user_id = $1
-  AND provider = 'google'`). 그 행이 없으면(Credentials로 가입/로그인한 계정) 세션 이메일이
-  `ADMIN_EMAILS`에 있어도 403(`ADMIN_ONLY`, 1-4절)을 반환한다 — Google 계정 여부를 먼저
-  걸러야 이메일만으로는 관리자를 사칭할 수 없다. 그 행이 있으면 세션 이메일이
-  `ADMIN_EMAILS`(쉼표로 분리한 목록, 대소문자 무시 비교, 제안)에 있는지 비교해 없으면
-  403(`ADMIN_ONLY`)을, 있으면 통과시킨다
+- **관리자 판정은 이번 세션의 로그인 방식(JWT provider claim)으로만 한다(제안, 채택 —
+  2차 재점검 반영: `accounts` 테이블 조회 방식 폐기)**: 세션 이메일을 `ADMIN_EMAILS`와
+  비교하기 전에, 그 이메일·비밀번호(Credentials) 가입 계정은 이메일 인증이 없어(1-1절) 타인의
+  이메일 주소로 가입할 수 있으므로 먼저 **이번 로그인의 provider**를 확인한다. Auth.js
+  `jwt` 콜백에서 로그인 provider(`account.provider`, 예: `'google'`/`'credentials'`)를 JWT
+  클레임(`token.provider`, 미확정 이름)에 기록하고 `session` 콜백에서 세션 객체로 넘긴다.
+  `requireAdmin`은 세션의 `provider === 'google'`일 때만 다음 단계로 넘어가 세션 이메일이
+  `ADMIN_EMAILS`(쉼표로 분리한 목록, 대소문자 무시 비교, 제안)에 있는지 비교한다 — 없으면
+  403(`ADMIN_ONLY`)을, 있으면 통과시킨다. `provider`가 `'credentials'`(또는 그 외)이면
+  세션 이메일이 `ADMIN_EMAILS`에 있어도 즉시 403(`ADMIN_ONLY`, 1-4절)이다 — 로그인 방식을
+  먼저 걸러야 이메일만으로는 관리자를 사칭할 수 없다
   (관리자 API 존재 자체를 숨기는 404 방식도 검토했으나, 이 서비스는 공개 attack surface가
   아니고 403이 더 단순하며 클라이언트 에러 처리도 쉬워 403을 기본안으로 택한다 — YAGNI,
   1-4절과 동일 결정).
+  - **왜 `accounts` 조회 대신 JWT 클레임인가(제안)**: 세션이 이미 이번 로그인의 provider
+    정보를 갖고 있으므로, 매 관리자 요청마다 `accounts` 테이블을 다시 조회할 필요가 없다
+    (YAGNI — 요청당 DB 왕복 1회를 없앤다). 과거에 Google로 가입했던 계정이라도 이번 세션이
+    Credentials로 로그인했다면(예: 같은 계정에 두 provider가 있는 경우) 이번 로그인 방식을
+    기준으로 판정하는 것이 "지금 이 요청이 실제로 어떻게 인증됐는가"에 더 부합한다.
+  - **가입 시점 차단(신규, 제안, 미확정)**: `POST /api/auth/register`(이메일·비밀번호 가입)에서
+    요청 email이 `ADMIN_EMAILS`에 있으면 계정 생성 자체를 403(에러 코드 `ADMIN_EMAIL_RESERVED`
+    제안, 미확정 — 1-4절 표에 추가 필요)으로 거부한다. 관리자 이메일은 Google 로그인으로만
+    가입하게 강제해, 그 이메일로 비밀번호 계정을 먼저 만들어 관리자를 사칭하는 경로 자체를
+    없앤다. 1-5절의 이메일 충돌 문제와 같은 종류의 방어다.
 - `ADMIN_EMAILS` 값은 매 요청 `process.env`에서 읽는다(별도 캐싱 없음, 배포당 값이 바뀌지
   않으므로 과설계 방지).
 - 관리자 화면 API 응답에는 어떤 엔드포인트에서도 `messages.content`, `user_preferences.
@@ -718,8 +788,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - **채팅**: DeepSeek API를 목(mock)으로 대체한 통합 테스트로 스트리밍 응답 조립 확인.
   전송 payload를 캡처해 `email`/`name`/`user_id` 문자열이 포함되지 않는지 검증(정규식 또는
   키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증. 전화번호·이메일·주민등록번호 형태를
-  포함한 사용자 메시지로 Gemini 임베딩 호출을 목으로 캡처해, 가림 처리 후 문자열이 Gemini로
-  전달되는지 확인(정규식 가림 자동 검증).
+  포함한 사용자 메시지로 DeepSeek·Gemini 호출을 각각 목으로 캡처해, 두 전송 payload 모두
+  가림 처리 후 문자열이 전달되는지 확인(정규식 가림 자동 검증 — 한 곳만 확인하지 않는다).
+  선호 추출 결과 문장에 전화번호 등이 포함된 픽스처로 Gemini 임베딩 호출을 캡처해 가림
+  처리가 적용됐는지도 함께 확인.
 - **RAG 검색**: 알려진 `notice_chunks` 픽스처와 쿼리 벡터로 코사인 유사도 상위 K가 예상
   순서로 나오는지 확인.
 - **임베딩 파이프라인**: Gemini API를 목으로 대체, 429 응답 시 재시도 횟수·백오프 간격이
@@ -740,8 +812,12 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   `/api/admin/notify-logs/summary`, `/api/admin/api-usage/summary` 응답 payload를 캡처해
   `messages`/`user_preferences.preference_text` 등 대화·기억 원문 필드가 섞여 있지 않은지
   키 존재 여부로 자동 검증(3절 데이터 최소화 테스트와 같은 방식).
-- **정지 계정 차단**: `suspend` 후 신규 로그인 시도 거부, 기존 세션으로 인증 필요 API 호출 시
-  403 확인. `unsuspend` 후 다시 정상 동작하는지 확인.
+- **정지 계정 제한**: `suspend` 후에도 로그인이 성공하고 세션에 `suspended: true`가 포함되는지
+  확인. 정지 상태에서 `DELETE /api/account`와 로그아웃은 성공하고, 그 외 인증 필요 API
+  호출은 403(`ACCOUNT_SUSPENDED`)인지 확인(접근 차단은 매 요청 DB 조회 미들웨어가 판정하므로
+  `unsuspend` 직후 바로 정상 동작해야 한다 — `session.suspended` 필드 자체는 안내 화면
+  표시용이라 다음 로그인/토큰 갱신 전까지 값이 지연될 수 있음을 감안해 미들웨어 결과로만
+  판정한다).
 - **공지 숨김**: `hide` 후 `/api/notices/recommended`·채팅 RAG 검색 결과에 해당 공지가 빠지는지
   확인. `unhide` 후 다시 나오는지 확인.
 - **알림 중복 발송 방지 + pending 선점(`notify_logs`)**: 같은 (user_id, notice_id) 쌍으로
@@ -784,6 +860,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   기간·등록 자체는 승인됨. 실제 pg_cron 등록은 database 소관 SQL이라 이 문서에 API
   엔드포인트는 없다. [[anyang-backend-tasks]]에 구현 단계 작업 단위로 등록해, 구현 착수
   지시서에 이 잡 실행에 대한 별도 승인이 적혀 있는지 확인하는 절차를 명시했다.
+- **이메일 계정 연결 정책(1-5절, 신규)** — backend 제안(자동 연결 off 유지 + 안내 메시지 +
+  관리자 수동 삭제 경로)을 기본안으로 채택했다. 이메일 인증이 없는 구조적 한계상 완전한
+  해결책은 없다고 판단해 블로킹 질문으로 올리지 않았으나, 설계 승인 시 이 기본안 자체에
+  이견이 없는지 확인이 필요하다.
 
 ## Links
 

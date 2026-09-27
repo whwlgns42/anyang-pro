@@ -27,17 +27,23 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 
 ### 작업 단위 (모두 [[anyang-backend-api]] 승인 후 착수, 값은 그 문서 기준 미확정)
 
-1. **인증·동의** — Auth.js v5 설정(Google + Credentials provider, JWT 세션),
-   `/api/auth/register`(동의 항목 2개 — 수집·이용/국외 이전 — 게이트 포함),
+1. **인증·동의** — Auth.js v5 설정(Google + Credentials provider, JWT 세션, `jwt`/`session`
+   콜백에서 로그인 provider를 `token.provider`/`session`에 기록 — 12번 관리자 인가가
+   의존), `/api/auth/register`(동의 항목 2개 — 수집·이용/국외 이전 — 게이트 포함, 이메일이
+   `ADMIN_EMAILS`면 403 `ADMIN_EMAIL_RESERVED`로 거부 — backend 설계 1절·13-0절),
    `/api/auth/consent`(Google 로그인 동의·재동의 겸용), `POLICY_VERSION` 코드 상수,
-   재동의 판정 미들웨어(1-2절 정지 확인과 같은 위치). 비밀번호 재설정은 1차 출시 제외로
-   해결됨(backend 설계 1-1절) — 이 단위에 포함하지 않는다. 테스트: 로그인/가입/동의/재동의/
-   오류 케이스([[anyang-backend-api#테스트 방법]] 1번).
+   재동의 판정 미들웨어(1-2절 정지 확인과 같은 위치). `signIn` 콜백의 `OAuthAccountNotLinked`
+   실패는 그대로 두고(자동 연결 off 유지, backend 설계 1-5절) 별도 처리 코드를 추가하지
+   않는다. 비밀번호 재설정은 1차 출시 제외로 해결됨(backend 설계 1-1절) — 이 단위에
+   포함하지 않는다. 테스트: 로그인/가입/동의/재동의/오류 케이스
+   ([[anyang-backend-api#테스트 방법]] 1번).
 1-4. **사용자 탈퇴** — `DELETE /api/account`(1-3절, consents 보관 순서). 1번 의존. 테스트:
    탈퇴 후 `consents` 보관·`user_id` null 확인.
 2. **프로필 CRUD** — `GET/PUT /api/profile`(4항목: birth_year/gender/occupation_type/
    enrollment_status). 테스트: 인증·본인 확인.
-2-1. **알림 설정** — `GET/PUT /api/notify-settings`. 테스트: 인증·형식 검증.
+2-1. **알림 설정** — `GET/PUT /api/notify-settings`. PUT은 생성 시 `enabled_at=now()` 채움,
+   `false→true` 전환 시 `enabled_at` 갱신 포함(backend 설계 2-2절). 테스트: 인증·형식 검증·
+   `enabled_at` 갱신 규칙.
 2-2. **기억(user_preferences)** — `GET/PUT/DELETE /api/preferences`. PUT은 동기 재임베딩
    포함(3번 의존). 테스트: 수정 시 임베딩 갱신, 실패 시 롤백.
 2-3. **대화 히스토리** — `GET /api/conversations`, `GET /api/conversations/:id/messages`,
@@ -48,9 +54,10 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). 착수 전 `robots.txt`
    준수와 HTML 구조를 실제로 확인해야 한다(구현 전 확인, backend 설계 5절) — 이 확인이
    끝나기 전까지 파서 상세 구현은 보류.
-6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 사용자 메시지를 Gemini로
-   임베딩하기 전 전화번호·이메일·주민등록번호 형태를 정규식으로 가리는 처리 포함(backend
-   설계 3절, user 결정 [[anyang-ai-models-data-transfer]]). 3번 의존.
+6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 공용 가림 함수
+   (`lib/mask-pii.ts` 등, 미확정 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·선호 추출 결과
+   문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
+   기존에는 Gemini 임베딩에만 적용). 3번 의존.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). 3·8번 의존. 중복 발송 방지 방식은
    database·backend 조율 완료(backend 설계 7절).
@@ -60,8 +67,9 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
     실제 값 채우기(비밀 값은 문서에 남기지 않음). `APP_ORIGIN`은 배포 시 Vercel 기본 도메인
     사용, 커스텀 도메인은 나중에(12-1절 절차). `ADMIN_EMAILS`도 이 단위에서 채운다.
 11. **UNO Q 전환 runbook 리허설** — 로컬 PostgreSQL 덤프/복원 1회(개발 환경 한정).
-12. **관리자 공통 인가** — `requireAdmin` 헬퍼(13-0절, `ADMIN_EMAILS` 파싱·비교, 401/403).
-    1·9번 의존(세션·미들웨어 재사용).
+12. **관리자 공통 인가** — `requireAdmin` 헬퍼(13-0절, 세션의 `provider === 'google'`
+    확인 후 `ADMIN_EMAILS` 파싱·비교, 401/403 — `accounts` 테이블 조회 방식 아님, 2차
+    재점검 반영). 1·9번 의존(1번의 `token.provider`/`session` 클레임, 세션·미들웨어 재사용).
 13. **관리자 — 공지 수집 관리** — `GET/POST /api/admin/collect-runs`,
     `PATCH /api/admin/notices/:id/hide`·`/unhide`(13-1절). 5·12번 의존. 5번(수집기 로직
     재사용)이 끝난 뒤 착수.

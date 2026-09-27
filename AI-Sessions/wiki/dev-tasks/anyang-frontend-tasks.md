@@ -28,12 +28,16 @@ owner: frontend
 ### 작업 단위 (모두 [[anyang-frontend-screens]] 승인 후 착수, 값은 그 문서 기준 미확정)
 
 1. **공통 레이아웃·인증 가드** — 하단 탭, 로그인/온보딩/동의 리다이렉트 규칙, 403 응답 코드
-   (`ACCOUNT_SUSPENDED`/`CONSENT_REQUIRED`/`ADMIN_ONLY`, backend 1-4절) 분기 처리. 이후 전체
-   화면이 의존.
+   (`ACCOUNT_SUSPENDED`/`CONSENT_REQUIRED`/`ADMIN_ONLY`, backend 1-4절) 분기 처리. 정지는
+   로그인을 막지 않고 `session.suspended` 플래그로 정지 안내 화면을 보여주는 방식(backend
+   1-2절, 로그인 차단 방식 폐기)으로 처리한다 — 세션 종료 없이 403 `ACCOUNT_SUSPENDED` 응답을
+   받으면 정지 안내 화면으로 돌려보낸다. 이후 전체 화면이 의존.
 2. **로그인/가입 화면** (`/login`) — Google 소셜 + 이메일·비밀번호 폼, `POST /api/auth/register`
-   연동(body는 backend 1절의 `consents` 형식). 정지 계정 안내(`ACCOUNT_SUSPENDED`)에 탈퇴
-   경로 링크 포함. 비밀번호 재설정은 1차 출시 제외로 확정됐으므로 화면을 만들지 않고 Google
-   로그인 안내 문구로 대체한다.
+   연동(body는 backend 1절의 `consents` 형식). 정지 계정은 로그인 성공 후 정지 안내 화면으로
+   이동(1번 작업과 연계, 탈퇴 경로 링크 포함). `OAuthAccountNotLinked`(backend 1-5절) 오류
+   안내, 가입 시 403 `ADMIN_EMAIL_RESERVED`(backend 13-0절) 인라인 오류 처리 포함. 비밀번호
+   재설정은 1차 출시 제외로 확정됐으므로 화면을 만들지 않고 Google 로그인 안내 문구로
+   대체한다.
 3. **개인정보 동의 화면** (`/consent`) — 가입 시 필수 동의, 체크박스 2개(수집·이용,
    국외 이전) 모두 필수 — 국외 이전 고지에는 Gemini로 대화 내용을 전송한다는 사실(전송 전
    전화번호·이메일·주민등록번호 형태를 가림)도 포함한다. `POST /api/auth/register`/
@@ -51,7 +55,8 @@ owner: frontend
    목록 진입점. `POST /api/chat` 연동.
 6. **추천 공지 피드·상세** (`/notices`, `/notices/[id]`) — `GET /api/notices/recommended`,
    `GET /api/notices/:id` 연동.
-7. **알림 설정 화면** (`/settings/notifications`) — 토글·시각 선택 UI, 푸시 권한 요청 흐름,
+7. **알림 설정 화면** (`/settings/notifications`) — 토글·시각 선택 UI, 알림을 켠 시각
+   (`enabled_at`) 이후 공지만 알림 대상이라는 안내 문구(backend 2-2절), 푸시 권한 요청 흐름,
    도메인 변경 재구독 유도 배너, `GET/PUT /api/notify-settings`,
    `POST/DELETE /api/push/subscribe` 연동.
 8. **PWA manifest·서비스워커** — `app/manifest.ts`, `sw.js`(푸시 수신·클릭 처리), 등록 로직.
@@ -65,8 +70,9 @@ owner: frontend
     콘텐츠만 채운다(구조는 이번에 만든다).
 12. **관리자 공통 레이아웃·가드** (`/admin`) — 관리자 API 응답 코드(401/403 `ADMIN_ONLY`)
     기준 접근 판정([[anyang-frontend-screens#공통 레이아웃 (모바일 우선, 미확정)]]의 "관리자
-    가드" 절 — 판정은 `ADMIN_EMAILS` + Google 로그인 계정만 통과, backend 13-0절), 확인
-    다이얼로그 공통 컴포넌트(정지·정지 해제·삭제 공용). 13~15번이 의존.
+    가드" 절 — 판정은 `ADMIN_EMAILS` + 이번 세션의 로그인이 Google인 경우만 통과, 계정이
+    아니라 이번 로그인 방식(JWT provider 클레임) 기준, backend 13-0절), 확인 다이얼로그
+    공통 컴포넌트(정지·정지 해제·삭제 공용). 13~15번이 의존.
 13. **공지 수집 관리 화면** (`/admin/collect-runs`) — 실행 이력, 수동 수집 실행(최대 300초
     진행 상태 표시), 공지 숨김/해제. `GET/POST /api/admin/collect-runs`,
     `PATCH /api/admin/notices/:id/hide|unhide` 연동.
