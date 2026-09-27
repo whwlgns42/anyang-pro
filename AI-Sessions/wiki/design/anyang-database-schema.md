@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: database
 ---
 
@@ -15,7 +15,7 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 대화·기억 원문은 담지 않는다. 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
-사용자 설계 승인으로 확정되기 전까지 `(미확정)`이다.
+사용자 설계 승인으로 확정되기 전까지 ``이다.
 
 ## Context
 
@@ -58,7 +58,7 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
 
 ### 테이블 제안 (모두 미확정)
 
-#### users (미확정)
+#### users
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -80,7 +80,7 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
   처리 순서(애플리케이션 책임, 제안): ① `consents.withdrawn_at` 채우기 → ② `users` 행 삭제(나머지
   cascade 테이블은 이때 함께 삭제됨).
 
-#### accounts (미확정) — OAuth 연동, Auth.js 어댑터 규격 기본안
+#### accounts — OAuth 연동, Auth.js 어댑터 규격 기본안
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -101,7 +101,7 @@ DB에 세션을 저장하지 않는다. 이 문서에는 `sessions` 테이블을
 이 확정을 먼저 뒤집어야 하므로 backend가 그 기능을 설계에 넣으려면 설계 변경으로 다시 승인을
 받는다.
 
-#### credentials (미확정) — 자체 회원가입(이메일·비밀번호)
+#### credentials — 자체 회원가입(이메일·비밀번호)
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -145,7 +145,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   두 항목을 함께 쓰는 근거(정책 공고가 실제로 이 조합으로 자격 조건을 나눈다는 것)는 확인된
   출처가 없는 추정이다(근거: 추정) — 스키마 확정과 별개로 남는 참고 메모다.
 
-#### notices (미확정) — 공지 자격요건 구조화 컬럼 없음(확정)
+#### notices — 공지 자격요건 구조화 컬럼 없음(확정)
 
 공지 자격요건(연령·직군 등 조건)을 구조화된 컬럼으로 저장하지 않는 것은 1차 출시 범위로
 확정됐다([[anyang-service-scope]], user, 2026-09-27). 아래 표에 그런 컬럼을 두지 않는다 —
@@ -177,7 +177,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
      제거한다 — 다시 숨김 해제하면 재임베딩이 필요해 되돌리기 비용이 크므로 권장하지 않는다(제안).
   기본안은 1번이다. 최종 선택은 backend 조율 후 확정한다.
 
-#### notice_chunks (미확정) — 벡터 검색용
+#### notice_chunks — 벡터 검색용
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -198,7 +198,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
      끝난 뒤 기존 컬럼을 지우는 방식을 쓴다(컬럼 타입을 바로 ALTER하면 기존 벡터가 무의미해짐).
   3. HNSW 인덱스는 재계산이 끝난 뒤 새로 만든다(오래 걸리는 재구축 작업이므로 배치 시간대에).
 
-#### conversations / messages (미확정)
+#### conversations / messages
 
 대화 히스토리 목록 화면([[anyang-service-scope]], user, 2026-09-27 확정)이 있어야 하므로
 `conversations`에 목록 표시용 컬럼을 둔다.
@@ -221,7 +221,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   않는다(검색 후 재사용 계획 없음). 나중에 과거 메시지 유사도 검색이 필요해지면 컬럼 추가로
   대응하되, 이는 새 요구사항이므로 별도 설계 변경으로 다룬다.
 
-#### user_preferences (미확정) — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터
+#### user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터
 
 "AI가 기억하는 내 정보" 화면은 조회·수정·삭제를 지원한다([[anyang-service-scope]], user,
 2026-09-27 확정). 삭제는 행 삭제(DELETE)로 충분하다. 수정은 `preference_text`를 사용자가
@@ -245,7 +245,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   (아래 `notice_chunks`의 모델 교체 절차)와 달리 컬럼 구조 변경이 없어 되돌릴 수 없는 마이그레이션이
   아니다 — 애플리케이션이 UPDATE 시점에 동기로 처리한다(backend 설계에서 확정).
 
-#### consents (미확정) — 가입 시 개인정보 필수 동의 기록
+#### consents — 가입 시 개인정보 필수 동의 기록
 
 가입 시(Google·이메일 모두) 개인정보 필수 동의 화면을 두고 동의 시각을 기록하는 것은 확정
 ([[anyang-service-scope]], user, 2026-09-27). 동의 항목을 "수집·이용"(collection_use)과
@@ -299,7 +299,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     마이그레이션에 대한 사용자 승인이 지시서에 별도로 적혀 있어야 실행할 수 있다 —
     `collect_runs`/`api_usage_logs`의 `cleanup-logs` 잡과 같은 취급이다.
 
-#### push_subscriptions (미확정)
+#### push_subscriptions
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -338,7 +338,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   DB 서버의 시스템 시간대나 `now()`의 UTC 값을 그대로 비교하지 않는다(애플리케이션/쿼리 책임,
   아래 pg_cron/pg_net 절 참고).
 
-#### collect_runs (미확정) — 관리자 화면 "공지 수집 관리"용, [[glossary]]의 collect-run
+#### collect_runs — 관리자 화면 "공지 수집 관리"용, [[glossary]]의 collect-run
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -357,7 +357,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 - 관리자 화면의 "수동 수집 실행"은 이 테이블에 `trigger_type='manual'` 행을 만들며 잡을
   즉시 실행하는 API 엔드포인트로 구현한다(backend 설계에서 확정).
 
-#### notify_logs (미확정) — 관리자 화면 "알림 발송 현황"용 + 중복 발송 방지, [[glossary]]의 notify-log
+#### notify_logs — 관리자 화면 "알림 발송 현황"용 + 중복 발송 방지, [[glossary]]의 notify-log
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -396,7 +396,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   `select count(*) from push_subscriptions`로 집계한다(어느 쪽을 "구독 수"로 볼지는 미확정 —
   backend 조율 필요).
 
-#### api_usage_logs (미확정) — 관리자 화면 "외부 API 사용량"용, [[glossary]]의 api-usage-log
+#### api_usage_logs — 관리자 화면 "외부 API 사용량"용, [[glossary]]의 api-usage-log
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -489,7 +489,7 @@ select count(*) from users where suspended_at is null;
   참고) — 다만 90일 로그와 보존 기간이 다르고 삭제 대상 테이블도 달라 정리 잡 등록 자체는
   별도로 다룬다.
 
-### pg_cron / pg_net 잡 정의 (미확정)
+### pg_cron / pg_net 잡 정의
 
 이전 가능성 원칙에 따라 스케줄 로직 본체는 앱 API 엔드포인트에 둔다. pg_cron은 트리거만 한다.
 
@@ -584,7 +584,7 @@ select cron.schedule(
 - UNO Q 전환 시 트리거만 `리눅스 cron + curl`로 교체하고 잡 로직(앱 API)은 그대로 둔다
   ([[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO Q)]]).
 
-### 마이그레이션 도구 (미확정)
+### 마이그레이션 도구
 
 - Supabase 대시보드 전용 마이그레이션(Supabase CLI의 Supabase 전용 기능)은 이전 가능성 원칙과
   충돌할 수 있어 쓰지 않는다(제안). 대신 표준 PostgreSQL에서도 동작하는 SQL 마이그레이션 도구
