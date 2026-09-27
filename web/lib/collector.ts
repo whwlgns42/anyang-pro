@@ -4,12 +4,14 @@ import { pool } from "./db";
 import { parseRobotsTxt, isPathDisallowed } from "./robots";
 
 // anyang-backend-api 5절 — 공지 수집기. 대상 게시판 URL은 확정, robots.txt 준수와 요청 간격은
-// 코드에 포함. HTML 셀렉터는 "구현 전 확인" 항목(실제 게시판 구조 미확인) — 아래 셀렉터는
-// 설계 문서 기준 placeholder이며, 고정 픽스처로만 테스트했다. 실사이트 구조를 확인한 뒤
-// backend가 셀렉터를 맞춰야 실제 수집이 동작한다(사용자 준비/확인 필요, 이 세션에서는 요청하지 않음).
+// 코드에 포함. HTML 구조는 2026-09-28 메인 세션 확인 기준(목록 selectBbsNttList.do?bbsNo=1184&key=3543,
+// 상세 selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=...). 상세 페이지에는 게시일이 없어 목록의
+// <time> 값을 그대로 쓴다.
 const BOARD_ORIGIN = "https://www.anyang.go.kr";
 const BOARD_PATH = "/youth/selectBbsNttList.do";
-const BOARD_URL = `${BOARD_ORIGIN}${BOARD_PATH}?bbsNo=1184&key=3543`;
+const BBS_NO = "1184";
+const BBS_KEY = "3543";
+const BOARD_URL = `${BOARD_ORIGIN}${BOARD_PATH}?bbsNo=${BBS_NO}&key=${BBS_KEY}`;
 const DEFAULT_REQUEST_DELAY_MS = 2000;
 // 연락 가능한 식별 문자열(설계 제안) — 실제 문의 이메일은 배포 시 채운다.
 const USER_AGENT = "anyang-youth-policy-bot/1.0 (+contact: TODO-문의이메일)";
@@ -18,29 +20,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export type ListItem = { url: string; title: string };
-export type DetailContent = { title: string; body: string; publishedAt: string | null };
+// nttNo로 상세 URL을 정규화한다 — 목록 href에 붙는 부가 파라미터와 무관하게
+// 같은 글이면 항상 같은 source_url이 되어야 content_hash/source_url 고유성 규칙이 맞는다.
+function detailUrlFor(nttNo: string): string {
+  return `${BOARD_ORIGIN}/youth/selectBbsNttView.do?key=${BBS_KEY}&bbsNo=${BBS_NO}&nttNo=${nttNo}`;
+}
+
+export type ListItem = { url: string; title: string; publishedAt: string | null };
+export type DetailContent = { title: string; body: string };
 
 export function parseListPage(html: string): ListItem[] {
   const $ = cheerio.load(html);
   const items: ListItem[] = [];
-  $("table.board-list tbody tr").each((_, el) => {
-    const link = $(el).find("a").first();
+  $("table.p-table tbody tr").each((_, el) => {
+    const row = $(el);
+    const link = row.find("td.p-subject a").first();
     const href = link.attr("href");
     const title = link.text().trim();
-    if (href && title) {
-      items.push({ url: new URL(href, BOARD_ORIGIN).toString(), title });
-    }
+    if (!href || !title) return;
+    const nttNo = new URL(href, BOARD_URL).searchParams.get("nttNo");
+    if (!nttNo) return;
+    const publishedRaw = row.find("td").last().find("time").first().text().trim();
+    items.push({ url: detailUrlFor(nttNo), title, publishedAt: publishedRaw || null });
   });
   return items;
 }
 
 export function parseDetailPage(html: string): DetailContent {
   const $ = cheerio.load(html);
-  const title = $(".board-view-title").first().text().trim();
-  const body = $(".board-view-content").first().text().trim();
-  const publishedRaw = $(".board-view-date").first().text().trim();
-  return { title, body, publishedAt: publishedRaw || null };
+  const title = $("span.p-table__subject_text").first().text().trim();
+  const body = $("td.p-table__content").first().text().trim();
+  return { title, body };
 }
 
 export function contentHash(title: string, body: string): string {
@@ -96,7 +106,7 @@ export async function runCollectJob(
          on conflict (source_url) do update
            set title = excluded.title, body = excluded.body, content_hash = excluded.content_hash,
                published_at = excluded.published_at, collected_at = now()`,
-        [item.url, title, detail.body, hash, detail.publishedAt],
+        [item.url, title, detail.body, hash, item.publishedAt],
       );
       collectedCount++;
     }
