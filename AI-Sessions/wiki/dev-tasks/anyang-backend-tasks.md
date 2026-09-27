@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -93,7 +93,7 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
     [[anyang-database-schema#되돌릴 수 없는 마이그레이션 표시]]). 승인 기록이 없으면
     등록하지 않고 멈춰서 보고한다. `notify_logs`는 이 정리 대상이 아니다(확정).
 17. **동의 기록(`consents`) 보관 만료분 정리 잡 등록(1년)** —
-    [[anyang-database-schema#consents (미확정) — 가입 시 개인정보 필수 동의 기록]]의
+    [[anyang-database-schema#consents — 가입 시 개인정보 필수 동의 기록]]의
     "탈퇴 후 보관" 절 `delete from consents where withdrawn_at is not null and withdrawn_at
     < now() - interval '1 year'` pg_cron SQL을 database가 등록한다(app API 엔드포인트 없음,
     backend 작업 아님). 보관 기간(1년)은 이미 승인됐다(user, 2026-09-27,

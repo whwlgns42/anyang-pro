@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -13,13 +13,13 @@ Next.js(App Router) Route Handler로 인증(동의 게이트 포함), 프로필 
 "AI가 기억하는 내 정보"(조회·수정·삭제), 대화 히스토리 조회, 채팅(DeepSeek 스트리밍 + RAG),
 Gemini 임베딩, 공지 수집기(안양시 청년 게시판 1개), 임베딩 파이프라인, 스케줄러(수집·알림 잡),
 Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 스키마는
-[[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이며 `(미확정)`이고,
+[[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이며 ``이고,
 사용자 설계 승인으로 확정된다.
 
 **2026-09-28 개정(확인 항목 22·23)**: 채팅 응답에 인용 공지 스트림 계약(3-2절)과 관리자용
 `GET /api/admin/notices`(13-1절)를 추가했다. 둘 다 기존 스키마
 ([[anyang-database-schema]])로 구현 가능하며 스키마 변경이 필요하지 않다. 값은 모두
-`(미확정)`이며 재승인 대상이다.
+``이며 재승인 대상이다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -50,7 +50,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
   `users.suspended_at`을 [[anyang-database-schema]]에 이미 추가했다(테이블 구조 자체는
   아직 미확정).
 - 이 세션(backend)에는 웹 접근 도구가 없어 수집 대상 게시판의 `robots.txt`와 실제 HTML 구조는
-  이번 설계에서 확인하지 못했다 — **구현 전 확인(미확정)**으로 남긴다(5절).
+  이번 설계에서 확인하지 못했다 — **구현 전 확인**으로 남긴다(5절).
 - 확정([[anyang-service-scope]], user, 2026-09-27, 반영 완료): 동의는 "수집·이용"/"국외
   이전" 분리 각각 필수(1절), 처리방침 개정 시 재동의 강제(1절), 탈퇴 시 `consents` 즉시
   삭제 아님·보관 후 삭제(1-3절, 13-3절), 비밀번호 재설정 1차 출시 제외·Google 로그인
@@ -77,7 +77,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 - 비밀번호 해시: `argon2id`(제안, 미확정) — bcrypt보다 GPU 공격 저항이 높다. 파라미터
   (memory/time cost)는 미확정.
 - 전용 엔드포인트(Auth.js가 커버하지 않는 것만):
-  - `POST /api/auth/register` (미확정) — body
+  - `POST /api/auth/register` — body
     `{ email, password, consents: { collection_use: true, overseas_transfer: true } }`.
     동의는 "수집·이용"과 "국외 이전"을 분리해 각각 받는 것이 확정([[anyang-service-scope]],
     user, 2026-09-27)이므로 body도 항목별 boolean 2개로 받는다. 둘 중 하나라도 `true`가
@@ -147,7 +147,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 (제안, 미확정 — 2차 재점검 반영: 로그인 차단 방식 폐기)
 
 `users.suspended_at`은 database가 제안한 컬럼이다([[anyang-database-schema#users
-(미확정)]]). 정지는 로그인 자체를 막는 제재가 아니라 **이용 제한**으로 처리한다(제안, 채택) —
+]]). 정지는 로그인 자체를 막는 제재가 아니라 **이용 제한**으로 처리한다(제안, 채택) —
 정지된 사용자도 로그인해 정지 사유를 확인하고 탈퇴할 수 있어야 한다는 판단이다.
 
 1. **로그인은 항상 허용**: Auth.js `signIn` 콜백에서 `suspended_at`을 이유로 로그인을 거부하지
@@ -167,13 +167,13 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
    DB 조회로만 한다). `DELETE /api/account`를 예외로 두는 이유(제안, 미확정): 정지된
    사용자도 탈퇴할 권리 자체는 막지 않는다 — 정지가 서비스 이용 제한이지 계정 삭제 금지는
    아니라고 판단했다.
-4. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 쿼리대로
+4. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의]]의 쿼리대로
    `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택, 변경 없음).
 
 ### 1-3. 사용자 탈퇴 API (제안, 미확정)
 
 탈퇴 시 동의 기록(`consents`)은 즉시 삭제하지 않고 증빙용으로 보관한 뒤 삭제한다(확정,
-[[anyang-service-scope]], user, 2026-09-27). [[anyang-database-schema#consents (미확정) —
+[[anyang-service-scope]], user, 2026-09-27). [[anyang-database-schema#consents —
 가입 시 개인정보 필수 동의 기록]]의 "탈퇴 후 보관" 절(`on delete set null` +
 `withdrawn_at`)을 그대로 따른다.
 
@@ -245,7 +245,7 @@ Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 �
 | GET | `/api/profile` | 로그인 사용자 본인 프로필 조회 |
 | PUT | `/api/profile` | 본인 프로필 생성/갱신(upsert) |
 
-- body(미확정, [[anyang-database-schema#profiles (미확정)]] 컬럼 기준): `{ birth_year, gender,
+- body(미확정, [[anyang-database-schema#profiles]] 컬럼 기준): `{ birth_year, gender,
   occupation_type, enrollment_status }`. 4항목으로 확정됐다([[anyang-service-scope]], user,
   2026-09-27) — 더 늘어나지 않는다.
 - 인증 필요(세션 없으면 401). 본인 것만 접근(다른 user_id 조회 불가).
@@ -253,7 +253,7 @@ Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 �
 ### 2-1. 추천 공지 피드·상세 (frontend 조율, 2026-09-27)
 
 frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 상세를 보여줄 화면을 설계 중이라
-아래 조회 엔드포인트를 제안한다(미확정).
+아래 조회 엔드포인트를 제안한다.
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
@@ -313,9 +313,9 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 | PUT | `/api/preferences/:id` | 항목 1건의 `preference_text` 수정 |
 | DELETE | `/api/preferences/:id` | 항목 1건 삭제 |
 
-- `PUT /api/preferences/:id` body(미확정): `{ preference_text }`. 서버가 **동기로**
+- `PUT /api/preferences/:id` body: `{ preference_text }`. 서버가 **동기로**
   Gemini 재임베딩을 호출해 `embedding`/`embedding_model`/`updated_at`을 함께 갱신한 뒤
-  응답한다([[anyang-database-schema#user_preferences (미확정) — 대화에서 추출한 선호,
+  응답한다([[anyang-database-schema#user_preferences — 대화에서 추출한 선호,
   벡터. "AI가 기억하는 내 정보" 화면의 데이터]]의 "수정 시 재임베딩 필요" 절 반영). 재임베딩
   실패(4절 재시도 소진) 시 트랜잭션 롤백, 텍스트도 갱신하지 않고 5xx 응답(제안, 미확정) —
   텍스트와 임베딩이 어긋난 상태로 저장되면 검색 결과가 틀어지므로 둘을 한 트랜잭션으로 묶는다.
@@ -324,7 +324,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 
 ### 3. 채팅 — DeepSeek 스트리밍 + RAG
 
-`POST /api/chat` (미확정) — body `{ conversation_id?, message }`. SSE/스트리밍 응답
+`POST /api/chat` — body `{ conversation_id?, message }`. SSE/스트리밍 응답
 (Vercel Fluid 함수의 스트리밍 응답 사용, 미확정).
 
 **흐름 (제안, 미확정)**:
@@ -343,7 +343,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 2. RAG 검색:
    a. 위 0번에서 가린 메시지를 Gemini로 임베딩한다. 이 임베딩은 검색 쿼리 벡터로 한 번만 쓰고
       저장하지 않는다
-      ([[anyang-database-schema#conversations / messages (미확정)]]의 "채팅 사용자 메시지
+      ([[anyang-database-schema#conversations / messages]]의 "채팅 사용자 메시지
       임베딩 저장 여부" 절 그대로 채택). `user_preferences.embedding`(누적 선호 벡터,
       있으면)과 가림 처리 후 임베딩한 벡터를 결합(예: 최근 선호 top-K 평균 + 현재 메시지
       임베딩, 가중치 미확정)해 쿼리 벡터를 만든다.
@@ -389,7 +389,7 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 
 **`api_usage_logs` 기록 지점(제안, 미확정)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
 호출을 각각 감싸는 공통 래퍼 함수 안에서, 성공·실패와 무관하게 호출 직후 1행을 기록한다
-(user_id 없음, [[anyang-database-schema#api_usage_logs (미확정)]] 그대로). 값 셋(제안):
+(user_id 없음, [[anyang-database-schema#api_usage_logs]] 그대로). 값 셋(제안):
 `provider`는 `deepseek` / `gemini`, `operation`은 DeepSeek는 `chat`, Gemini는 `embedding`
 고정(둘 다 이 한 종류만 쓰므로 값이 늘 필요는 없다, YAGNI), `status`는 `success` /
 `rate_limited`(429 응답) / `error`(그 외 실패). `input_tokens`/`output_tokens`는 제공자
@@ -406,7 +406,7 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 | GET | `/api/conversations/:id/messages` | 특정 대화의 과거 메시지 목록 |
 
 - `messages`/`conversations` 테이블은 [[anyang-database-schema#conversations / messages
-  (미확정)]]에 있다(컬럼: `conversations.id/user_id/title/created_at/updated_at`,
+ ]]에 있다(컬럼: `conversations.id/user_id/title/created_at/updated_at`,
   `messages.id/conversation_id/role/content/created_at`). 목록은
   `(user_id, updated_at desc)` 인덱스로 최근 순 조회(database 문서 인덱스 제안).
 - **`conversations.title` 자동 생성(제안, 미확정)**: 대화의 첫 사용자 메시지를 앞에서부터
@@ -467,7 +467,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   `notice_chunks.embedding IS NULL` / `user_preferences.embedding IS NULL`인 행을 큐로
   보고, 한 번의 `/api/jobs/embed` 호출에서 여러 건을 묶어 보낸다(배치 크기 미확정, 제안
   10~20건 — RPM 100 한도 안에서 여유를 두는 값).
-- 모델 교체 절차는 [[anyang-database-schema#notice_chunks (미확정) — 벡터 검색용]]의
+- 모델 교체 절차는 [[anyang-database-schema#notice_chunks — 벡터 검색용]]의
   재임베딩 절차를 따른다.
 
 ### 5. 공지 수집기 (Collector)
@@ -497,7 +497,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   5. 신규/변경 공지는 임베딩 파이프라인 큐에 등록(4번 참고).
 - User-Agent에 연락 가능한 식별 문자열을 남긴다(제안, 미확정 — 예: 서비스명 + 문의 이메일).
 - **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices
-  (미확정)]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
+ ]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
   애플리케이션 책임으로 끝나고, 숨김 해제 시 재임베딩 비용이 없다(YAGNI, 물리 삭제는 되돌리기
   비용만 크고 이득이 없다). `/api/notices/recommended`, `/api/notices/:id`, 채팅 RAG 검색
   (3절), notify-job 매칭(7절) 등 `notices`/`notice_chunks`를 조회하는 모든 지점에서
@@ -506,10 +506,10 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 
 ### 6. 임베딩 파이프라인
 
-- 트리거: `POST /api/jobs/embed` (미확정) — 스케줄러(7번)가 호출.
+- 트리거: `POST /api/jobs/embed` — 스케줄러(7번)가 호출.
 - 동작: `notice_chunks`/`user_preferences` 중 `embedding IS NULL`인 행을 조회 → Gemini
   임베딩 호출(4번 재시도 규칙 적용) → 결과 저장.
-- 청크 분할 여부: 미확정([[anyang-database-schema#notice_chunks (미확정) — 벡터 검색용]]
+- 청크 분할 여부: 미확정([[anyang-database-schema#notice_chunks — 벡터 검색용]]
   참고). 공지 본문이 길면(임계값 미확정) 분할, 짧으면 통째로 1개 청크.
 
 ### 7. 스케줄러 — 수집 잡 / 알림 잡
@@ -517,9 +517,9 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 이전 가능성 원칙에 따라 잡 로직은 앱 API 엔드포인트에, 트리거는 pg_cron+pg_net(클라우드)
 또는 리눅스 cron+curl(UNO Q, 12절 runbook)로 교체 가능하게 둔다.
 
-| 엔드포인트 | 설명 | 트리거 주기(미확정) |
+| 엔드포인트 | 설명 | 트리거 주기 |
 |---|---|---|
-| `POST /api/jobs/collect` | 공지 수집기(5절) 실행 | 하루 1회(미확정 제안, database 제안과 같은 시각 — Asia/Seoul 04:00, [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]) |
+| `POST /api/jobs/collect` | 공지 수집기(5절) 실행 | 하루 1회(미확정 제안, database 제안과 같은 시각 — Asia/Seoul 04:00, [[anyang-database-schema#pg_cron / pg_net 잡 정의]]) |
 | `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 미확정, 제안: 수집 잡 직후 |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
 
@@ -527,18 +527,18 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   `SCHEDULER_SHARED_SECRET` 값과 상수 시간 비교(`crypto.timingSafeEqual`, 미확정 구현
   방식). 불일치 시 401. 값은 문서에 남기지 않는다(dev-common 규칙 9).
 - **알림 시각 정밀도(제안, 미확정)** — pg_cron 트리거 주기 5분 전제
-  ([[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]): pg_cron은 지정한 크론
+  ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]): pg_cron은 지정한 크론
   표현식 그대로(예: `*/5 * * * *`) 정확히 실행되므로(Vercel Cron처럼 1시간 창 안 임의
   시점이 아니다), `/api/jobs/notify`는 "직전 실행 이후 지금까지" 창을 본다 — Asia/Seoul
   기준 `notify_time`이 `(현재 시각 - 5분, 현재 시각]` 범위에 들어오는 `enabled=true`
   사용자를 고른다. 이렇게 하면 사용자가 어떤 분을 고르든 늦어도 5분 안에 그 시각을 창이
   지나간다. **자정 경계 처리를 포함한 실제 쿼리는 여기서 다시 적지 않고**
-  [[anyang-database-schema#pg_cron / pg_net 잡 정의 (미확정)]]의 대상 사용자 선정 쿼리를
+  [[anyang-database-schema#pg_cron / pg_net 잡 정의]]의 대상 사용자 선정 쿼리를
   그대로 쓴다(`notify_time + 5분`이 자정을 넘는 경우를 OR로 분기 처리한 SQL, database가
   이미 작성해뒀다 — 값을 복제하면 한쪽만 고쳐질 위험이 있어 링크로 대체).
   - **중복 발송 방지 — `notify_logs` pending 2단계 채택(제안, database 조율 완료)**:
     database가 확정한 `notify_logs` 구조([[anyang-database-schema#notify_logs
-    (미확정)]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
+   ]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
     쓴다. 흐름: 매칭된 (사용자, 공지) 쌍마다
     1. `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'pending')
        ON CONFLICT (user_id, notice_id) DO NOTHING`으로 먼저 선점한다.
@@ -595,9 +595,9 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   원칙 5).
 - VAPID subject는 `mailto:` 또는 `https://` + `APP_ORIGIN`(확정 원칙 — 값 자체는 도메인
   확정 시점에 정해짐, [[anyang-deployment-portability]] 원칙 5).
-- 라이브러리는 표준 `web-push`(npm, Node 표준 Web Push 구현) 사용 제안(미확정).
+- 라이브러리는 표준 `web-push`(npm, Node 표준 Web Push 구현) 사용 제안.
 
-### 9. 환경변수 목록 (미확정)
+### 9. 환경변수 목록
 
 | 변수 | 용도 |
 |---|---|
@@ -688,7 +688,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 관리자 지정·기능 범위·"대화·기억 원문 비노출" 원칙은 확정
 ([[anyang-service-scope]], user, 2026-09-27). 아래 엔드포인트·응답 필드·구현 방식은 제안이며
-`(미확정)`이다.
+``이다.
 
 #### 13-0. 공통 인가
 
@@ -731,7 +731,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | GET | `/api/admin/collect-runs` | `collect_runs` 목록(최신순, 페이지네이션 미확정) |
 | POST | `/api/admin/collect-runs` | 수동 수집 실행 |
 | GET | `/api/admin/notices` | 공지 목록(숨김 포함, 페이지네이션) — 신규(확인 항목 23) |
-| PATCH | `/api/admin/notices/:id/hide` | 공지 숨김. body `{ hidden_reason? }`(미확정) |
+| PATCH | `/api/admin/notices/:id/hide` | 공지 숨김. body `{ hidden_reason? }` |
 | PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
 
 - `POST /api/admin/collect-runs`는 5절 수집기 로직을 `trigger_type='manual'`,
@@ -769,7 +769,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
     둘 다, `hidden=true`면 숨김만, `hidden=false`면 정상만 나오는지 확인. `page_size`
     범위를 벗어난 값(0, 101)으로 호출 시 400 확인. 관리자 아닌 로그인 사용자 403,
     비로그인 401 확인(13-0절 관례와 동일 방식으로 자동 검증).
-- `PATCH .../hide`, `.../unhide`는 [[anyang-database-schema#notices (미확정)]]의
+- `PATCH .../hide`, `.../unhide`는 [[anyang-database-schema#notices]]의
   `hidden_at`/`hidden_reason`을 갱신한다. 숨김 처리는 5절에서 채택한 쿼리 조건 방식을 따른다
   (물리 삭제 없음).
 - 인증 필요(13-0), 관리자만.
@@ -780,10 +780,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 |---|---|---|
 | GET | `/api/admin/notify-logs/summary` | 날짜별 발송·실패 수 + 구독 수 |
 
-- 쿼리 파라미터(미확정): `from`, `to`(날짜 범위, 기본값 최근 30일 제안).
+- 쿼리 파라미터: `from`, `to`(날짜 범위, 기본값 최근 30일 제안).
 - 응답(제안, 미확정): `{ daily: [{ day, success_count, failed_count }], notify_enabled_count,
   push_device_count }`. `daily`는
-  [[anyang-database-schema#notify_logs (미확정)]]의 집계 쿼리 예시를 그대로 쓴다.
+  [[anyang-database-schema#notify_logs]]의 집계 쿼리 예시를 그대로 쓴다.
 - **"구독 수" 집계 기준(제안, 채택)**: database가 제기한 미확정 질문(두 지표 중 택1)을
   "둘 다 반환"으로 해소한다 — `notify_enabled_count`는 `notify_settings.enabled=true`
   행 수(서비스 관점 "알림 받기로 설정한 사용자 수"), `push_device_count`는
@@ -819,7 +819,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - `DELETE /api/admin/users/:id`는 1-3절 "사용자 탈퇴 API"와 **같은 2단계 처리 순서**를
   따른다(제안) — 관리자가 대신 탈퇴시키는 것이므로 삭제 방식이 같아야 한다.
   1. `UPDATE consents SET withdrawn_at = now() WHERE user_id = $1 AND withdrawn_at IS NULL`
-  2. `DELETE FROM users WHERE id = $1` — [[anyang-database-schema#users (미확정)]]의
+  2. `DELETE FROM users WHERE id = $1` — [[anyang-database-schema#users]]의
      cascade 정책에 따라 profiles/accounts/credentials/conversations/push_subscriptions/
      notify_settings/user_preferences가 함께 삭제된다. `consents`는 `on delete set null`
      이므로 1번에서 `withdrawn_at`을 채운 행이 삭제되지 않고 `user_id`만 null이 된다(증빙
@@ -836,10 +836,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 |---|---|---|
 | GET | `/api/admin/api-usage/summary` | 제공자별 호출 수·오류·토큰, 무료 한도 대비 사용량 |
 
-- 쿼리 파라미터(미확정): `from`, `to`(기본값 오늘, database 집계 쿼리 예시와 동일 범위 제안).
+- 쿼리 파라미터: `from`, `to`(기본값 오늘, database 집계 쿼리 예시와 동일 범위 제안).
 - 응답(제안, 미확정): `{ providers: [{ provider, day, success_count, rate_limited_count,
   error_count, input_tokens, output_tokens, limit_note }] }`.
-  [[anyang-database-schema#api_usage_logs (미확정)]]의 집계 쿼리를 그대로 쓴다.
+  [[anyang-database-schema#api_usage_logs]]의 집계 쿼리를 그대로 쓴다.
 - **무료 한도 값의 출처**: 이 문서 11절 "공식 문서로 확인한 수치" 표를 그대로 링크한다(값을
   이 절에 다시 옮겨 적지 않는다 — 두 곳에 있으면 한쪽만 고쳐져 어긋난다는 규칙). Gemini
   임베딩은 RPD 한도(약 1,000/일)가 있어 `limit_note`에 "오늘 사용량 / 1000"처럼 계산해
@@ -937,7 +937,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   대체 안내(1-1절). 관련 엔드포인트·이메일 발송 인프라 없음.
 - 알림 잡 중복 발송 방지 — 해결(2026-09-27, database 확정 + backend 채택): `notify_logs`의
   `unique(user_id, notice_id)` + `pending`→`success`/`failed` 2단계 흐름(7절). 정체된
-  `pending` 재시도 임계값(제안 10분)은 backend 제안값이며 (미확정)이다.
+  `pending` 재시도 임계값(제안 10분)은 backend 제안값이며이다.
 - 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 1차 출시에서 만들지 않는다(확정,
   [[anyang-service-scope]], user, 2026-09-27). 게시판 구조 확인 후에도 이번 스콥에서는
   재검토하지 않는다.
@@ -947,7 +947,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   1-3절). `POLICY_VERSION` 코드 상수 위치(`lib/consent.ts` 등, 미확정 정확한 경로)와
   재동의 판정 위치(공통 미들웨어, 1절)는 backend 제안이며 설계 승인으로 확정된다.
 - **동의 기록 보관 기간(숫자) — 해결(2026-09-27, user)**: 1년으로 확정됐다
-  ([[anyang-service-scope]], [[anyang-database-schema#consents (미확정) — 가입 시 개인정보
+  ([[anyang-service-scope]], [[anyang-database-schema#consents — 가입 시 개인정보
   필수 동의 기록]]). 로그 테이블(90일)보다 긴 것은 `consents`가 법적 증빙 목적이기 때문이다.
   보관 만료분 정리 잡(`delete from consents where withdrawn_at < now() - interval '1
   year'`) 자체는 되돌릴 수 없는 삭제이므로, 실제 pg_cron 등록은 구현 단계 지시서에 이 잡
@@ -961,13 +961,13 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   해결책은 없다고 판단해 블로킹 질문으로 올리지 않았으나, 설계 승인 시 이 기본안 자체에
   이견이 없는지 확인이 필요하다.
 - **채팅 인용 공지 스트림(3-2절, 확인 항목 22)** — 이벤트 형식(`event: citations`)·전송
-  시점·중복 제거·빈 목록 처리는 backend 제안이며 `(미확정)`이다. frontend가 이 형식으로
+  시점·중복 제거·빈 목록 처리는 backend 제안이며 ``이다. frontend가 이 형식으로
   파싱 가능한지는 다음 조율 차례에 확인이 필요하다(이번 호출 범위 밖 — frontend 조율은
   이번 지시서에서 요청받지 않았다).
 - **관리자 공지 목록(13-1절, 확인 항목 23)** — `GET /api/admin/notices`는 기존 스키마
   ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]])로 구현
   가능하다(스키마 변경 불필요, database 재조율 없이 진행). 쿼리 파라미터·응답 필드·
-  `total_count` 포함 여부는 backend 제안이며 `(미확정)`이다.
+  `total_count` 포함 여부는 backend 제안이며 ``이다.
 
 ## Links
 

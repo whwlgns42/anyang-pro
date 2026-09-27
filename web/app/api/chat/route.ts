@@ -153,8 +153,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 502 });
   }
 
-  const { rows: notices } = await pool.query<{ title: string; chunk_text: string }>(
-    `select n.title, nc.chunk_text
+  const { rows: notices } = await pool.query<{
+    id: string;
+    title: string;
+    source_url: string;
+    published_at: string | null;
+    chunk_text: string;
+  }>(
+    `select n.id, n.title, n.source_url, n.published_at, nc.chunk_text
        from notice_chunks nc
        join notices n on n.id = nc.notice_id
       where n.hidden_at is null
@@ -162,6 +168,16 @@ export async function POST(request: NextRequest) {
       limit $2`,
     [JSON.stringify(queryVector), RAG_TOP_K],
   );
+
+  // anyang-backend-api 3-2절 — 인용 공지 목록. 같은 notice_id는 먼저 나온(유사도가 높은) 1건만 남긴다.
+  const seenNoticeIds = new Set<string>();
+  const citations = notices
+    .filter((n) => {
+      if (seenNoticeIds.has(n.id)) return false;
+      seenNoticeIds.add(n.id);
+      return true;
+    })
+    .map((n) => ({ id: n.id, title: n.title, source_url: n.source_url, posted_at: n.published_at }));
 
   const { rows: profileRows } = await pool.query<{
     birth_year: number | null;
@@ -212,7 +228,22 @@ export async function POST(request: NextRequest) {
     console.error("chat: failed to store assistant message", err);
   });
 
-  return new Response(clientStream, {
+  // 3-2절 — 인용 이벤트를 DeepSeek 청크보다 먼저, 대화당 1회만 보낸다. 빈 목록도 `data: []`로 전송.
+  const citationsEvent = `event: citations\ndata: ${JSON.stringify(citations)}\n\n`;
+  const withCitations = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(new TextEncoder().encode(citationsEvent));
+      const reader = clientStream.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        controller.enqueue(value);
+      }
+      controller.close();
+    },
+  });
+
+  return new Response(withCitations, {
     headers: { "content-type": "text/event-stream", "x-conversation-id": conversationId },
   });
 }

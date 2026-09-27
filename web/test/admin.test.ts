@@ -21,6 +21,7 @@ const deleteUser = await import("@/app/api/admin/users/[id]/route");
 const stats = await import("@/app/api/admin/stats/route");
 const notifyLogsSummary = await import("@/app/api/admin/notify-logs/summary/route");
 const apiUsageSummary = await import("@/app/api/admin/api-usage/summary/route");
+const adminNotices = await import("@/app/api/admin/notices/route");
 
 const FORBIDDEN = new Response(JSON.stringify({ error: "ADMIN_ONLY" }), { status: 403 });
 
@@ -66,6 +67,10 @@ describe("admin API endpoints reject non-admins", () => {
     expect(
       (await apiUsageSummary.GET(new Request("http://x/api/admin/api-usage/summary") as never)).status,
     ).toBe(403);
+  });
+
+  it("GET /api/admin/notices 403", async () => {
+    expect((await adminNotices.GET(new Request("http://x/api/admin/notices") as never)).status).toBe(403);
   });
 });
 
@@ -200,6 +205,49 @@ describe("admin API endpoints when admin", () => {
     const deepseek = body.providers.find((p: { provider: string }) => p.provider === "deepseek");
     expect(gemini.limit_note).toBe("50/1000");
     expect(deepseek.limit_note).toBeNull();
+  });
+
+  it("GET /api/admin/notices returns items with hidden fields, page, page_size, total_count", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("count(*)::text")) return { rows: [{ count: "2" }] };
+      return {
+        rows: [
+          { id: "n1", title: "공지1", source_url: "https://a", hidden_at: null },
+          { id: "n2", title: "공지2", source_url: "https://b", hidden_at: new Date() },
+        ],
+      };
+    });
+    const res = await adminNotices.GET(new Request("http://x/api/admin/notices") as never);
+    const body = await res.json();
+    expect(body.items).toHaveLength(2);
+    expect(body.page).toBe(1);
+    expect(body.page_size).toBe(20);
+    expect(body.total_count).toBe(2);
+  });
+
+  it("GET /api/admin/notices filters by hidden=true (only hidden) / hidden=false (only visible)", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      if (sql.includes("count(*)::text")) return { rows: [{ count: "1" }] };
+      expect(sql).toContain("hidden_at is not null");
+      return { rows: [{ id: "n2", hidden_at: new Date() }] };
+    });
+    const res = await adminNotices.GET(new Request("http://x/api/admin/notices?hidden=true") as never);
+    expect(res.status).toBe(200);
+    expect((await res.json()).items).toHaveLength(1);
+  });
+
+  it("GET /api/admin/notices 400 on out-of-range page_size", async () => {
+    for (const pageSize of ["0", "101", "abc"]) {
+      const res = await adminNotices.GET(
+        new Request(`http://x/api/admin/notices?page_size=${pageSize}`) as never,
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("GET /api/admin/notices 400 on invalid hidden param", async () => {
+    const res = await adminNotices.GET(new Request("http://x/api/admin/notices?hidden=maybe") as never);
+    expect(res.status).toBe(400);
   });
 
   it("no admin endpoint response includes raw conversation/preference content fields", async () => {

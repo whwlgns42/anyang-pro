@@ -25,7 +25,7 @@ function mockAuthenticatedQueries(extra: (sql: string) => unknown[] | undefined 
     if (text.includes("policy_version")) return { rows: [{ policy_version: "2026-09-27" }] };
     if (text.includes("insert into conversations")) return { rows: [{ id: "conv-1" }] };
     if (text.includes("select embedding from user_preferences")) return { rows: [] };
-    if (text.includes("select n.title, nc.chunk_text")) return { rows: [] };
+    if (text.includes("select n.id, n.title")) return { rows: [] };
     if (text.includes("select birth_year")) return { rows: [] };
     if (text.includes("select role, content from messages")) return { rows: [] };
     return { rows: [] };
@@ -44,6 +44,18 @@ function makeSseStream(chunks: string[]): ReadableStream<Uint8Array> {
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/chat", { method: "POST", body: JSON.stringify(body) }) as never;
+}
+
+async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+  }
+  return text;
 }
 
 describe("POST /api/chat", () => {
@@ -97,6 +109,44 @@ describe("POST /api/chat", () => {
 
     const res = await POST(makeRequest({ conversation_id: "other-conv", message: "안녕" }));
     expect(res.status).toBe(404);
+  });
+
+  it("sends citations event with data: [] before DeepSeek chunks when no notices match", async () => {
+    mockAuthenticatedQueries();
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockResolvedValue(
+      new Response(makeSseStream(['data: {"choices":[{"delta":{"content":"안녕"}}]}\n\n', "data: [DONE]\n\n"])),
+    );
+
+    const res = await POST(makeRequest({ message: "안녕" }));
+    const text = await readAll(res.body!);
+    expect(text.startsWith("event: citations\ndata: []\n\n")).toBe(true);
+    expect(text.indexOf("event: citations")).toBeLessThan(text.indexOf('"choices"'));
+  });
+
+  it("dedupes citations by notice_id, keeping the first (most similar) occurrence, excludes hidden notices via query", async () => {
+    mockAuthenticatedQueries((text) => {
+      if (text.includes("select n.id, n.title")) {
+        expect(text).toContain("hidden_at is null");
+        return [
+          { id: "n1", title: "공지1", source_url: "https://a", published_at: "2026-01-01", chunk_text: "본문1" },
+          { id: "n1", title: "공지1", source_url: "https://a", published_at: "2026-01-01", chunk_text: "본문1-2" },
+          { id: "n2", title: "공지2", source_url: "https://b", published_at: null, chunk_text: "본문2" },
+        ];
+      }
+      return undefined;
+    });
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockResolvedValue(new Response(makeSseStream(["data: [DONE]\n\n"])));
+
+    const res = await POST(makeRequest({ message: "안녕" }));
+    const text = await readAll(res.body!);
+    const citationsLine = text.split("\n\n")[0];
+    const json = JSON.parse(citationsLine.replace("event: citations\ndata: ", ""));
+    expect(json).toEqual([
+      { id: "n1", title: "공지1", source_url: "https://a", posted_at: "2026-01-01" },
+      { id: "n2", title: "공지2", source_url: "https://b", posted_at: null },
+    ]);
   });
 });
 
