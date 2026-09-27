@@ -75,6 +75,7 @@
 ## Errors / Lessons
 
 - [[anyang-preferences-put-missing-mask-pii]] — 안양 비서: 선호 수정 API가 가림 없이 Gemini로 전송(해결 622962b, embedText 내부 강제 가림)
+- [[anyang-backend-api-mihwakjeong-removal-corruption]] — 안양 비서: 승인 후 (미확정) 기계적 삭제로 backend-api 문장 비문·위키링크 앵커 공백 잔존(설계 잠금 대상, 사용자 결정 대기)
 
 ## Prompt Library
 

@@ -46,6 +46,7 @@ owner: pm
 - 2026-09-27: database 구현 완료(`df067cd`, 앱 위치 `web/` pm 결정). backend 1차 시작 직후 사용자 지시로 작업 전체 중단(산출물 없음). frontend·code-review 미착수. 인수인계 [[2026-09-27_anyang-implementation-paused]].
 - 2026-09-28: 구현 재개·완료. backend 1~3차(83fad79, a1db114, cf02f65), 추천 공지 API 보충(d8d967c — dev-task 목록 누락분), 프로필 null 허용 구현 수정(b0085a4), frontend A·B(e1f0e0c, 8d4dff9). code-review 차단 1건(선호 수정 가림 누락 [[anyang-preferences-put-missing-mask-pii]]) → backend 수정 622962b → 재검수 통과. npm test 103개·build 통과(외부 자원은 모킹, 실제 DB·브라우저 확인은 못 함). 설계 변경 필요 2건(확인 항목 22·23)으로 [[anyang-backend-api]]를 승인된 설계에서 뺌.
 - 2026-09-28: 재개. backend가 수집기 셀렉터를 실제 게시판 구조로 수정(766ea20). 사용자 결정 22·23·OCR·taste-skill 기록. 22·23 설계(backend → frontend) draft 완료 — backend-api 3-2절 인용 공지 SSE(`event: citations`)·13-1절 `GET /api/admin/notices`, frontend-screens 3절 인용 카드·11절 공지 목록 탭, tasks 두 문서에 작업 추가. code-review 지적으로 backend-api 5절·backend-tasks 5번 수집기 서술을 확인 사실로 갱신. frontend가 taste-skill(`design-taste-frontend`)로 시각 개선(1b27f0e, 공통 토큰·로그인·온보딩·동의·채팅·공지 피드, 관리자 화면은 토큰 반영만). code-review 통과(경미 1건: consent-form 인라인 style 잔존), npm test 104개·build 통과. errors 문서 status active로(code-review). 설계 문서 4종 재승인 대기, 22·23 구현은 재승인 뒤.
+- 2026-09-28: 사용자가 22·23 설계 4종 재승인(기준 커밋 `f525792`). 구현: backend ccd6042(인용 공지 SSE, `GET /api/admin/notices`), frontend ed7c751(taste-skill 호출, 인용 카드, 관리자 공지 목록 탭, consent-form 인라인 style 정리). code-review 통과(차단 없음), npm test 120개·build 통과(실제 DB·브라우저 확인은 못 함). 경미 문서 결함 1건은 설계 잠금 대상이라 확인 항목 26으로 올림.
 
 ### 설계 문서
 
@@ -86,14 +87,19 @@ owner: pm
     - 23 해결(2026-09-28, user): (a) `GET /api/admin/notices`(숨김 포함, 페이지네이션) + 관리자 공지 목록 화면에서 숨김/해제. 세부는 설계 재승인으로 확정.
 24. 포스터 이미지 OCR — 나중에 결정(2026-09-28, user). 1차는 공지 제목+본문만 임베딩, 실제 수집 데이터로 매칭 품질 확인 후 재검토.
 25. frontend UI 개발에 taste-skill(`design-taste-frontend`) 사용 — 해결(2026-09-28, user). 적용 범위는 랜딩·첫 화면·시각 톤, 관리자 표 화면은 가독성·일관성만.
+26. **사용자 결정 필요(2026-09-28, code-review 지적)**: 재승인 뒤 backend가 [[anyang-backend-api]]의 `(미확정)`을 기계적으로 지우면서 문장 1곳이 비문이 되고(940행 "제안값이며이다"), 원래 줄바꿈에 걸려 있던 위키링크 앵커 몇 곳(409·500·541행 등)에 공백만 남았다. 의미·계약 변경은 없다. 고치려면 승인된 설계 내용 수정이라 설계 잠금 대상이다. 선택지: (a) 그대로 둔다, (b) 문구·앵커만 고치는 수정을 허용(문서를 승인된 설계에서 잠시 빼고 수정 후 재승인). 권장 (b), 확인 항목의 "(미확정) 표기 잔존 → 훅을 좁게 수정" 결정과 함께 처리. [[anyang-backend-api-mihwakjeong-removal-corruption]]
 
 ## 승인된 설계
 
 기준 커밋 `ef51d3c`. 문서 안의 (미확정) 제안값도 함께 확정. 확정하지 않겠다고 한 값 없음.
 
 - [[anyang-database-schema]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
 
-2026-09-28: 22·23 설계 반영(새 요청)을 위해 anyang-frontend-screens·anyang-backend-tasks·anyang-frontend-tasks를 여기서 뺐다(확인 항목 22·23). 재승인 전까지 구현 기준은 기준 커밋 `ef51d3c`의 승인본이며, 22·23으로 추가된 draft 내용은 구현하지 않는다.
+2026-09-28 재승인: 22·23 반영본(기준 커밋 `f525792`). 문서 안의 (미확정) 제안값도 함께 확정, 확정하지 않겠다고 한 값 없음.
 
 ## Jev 도입 제안
 
@@ -115,3 +121,4 @@ owner: pm
 - [[2026-09-27_anyang-design-approval-wait]]
 - [[2026-09-27_anyang-implementation-paused]]
 - [[anyang-preferences-put-missing-mask-pii]]
+- [[anyang-backend-api-mihwakjeong-removal-corruption]]
