@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { urlBase64ToUint8Array, subscriptionToPayload } from "@/app/_lib/push";
+import { urlBase64ToUint8Array, subscriptionToPayload, parsePushPayload } from "@/app/_lib/push";
 
 describe("urlBase64ToUint8Array", () => {
   it("decodes a base64url VAPID-like key into bytes", () => {
@@ -27,6 +27,22 @@ describe("subscriptionToPayload", () => {
       endpoint: "https://push.example/abc",
       p256dh: "p-key",
       auth: "a-key",
+    });
+  });
+});
+
+describe("parsePushPayload", () => {
+  it("builds the notice detail url from notice_id (jobs/notify route shape)", () => {
+    expect(parsePushPayload({ title: "새 공지", notice_id: "abc-123" })).toEqual({
+      title: "새 공지",
+      url: "/notices/abc-123",
+    });
+  });
+
+  it("falls back to a default title and the notices list url", () => {
+    expect(parsePushPayload({})).toEqual({
+      title: "안양 청년정책 비서",
+      url: "/notices",
     });
   });
 });
