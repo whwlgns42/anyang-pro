@@ -48,6 +48,16 @@ STATUS_LINE_RE = re.compile(r"^status:.*$", re.M)
 # Approval confirms the design's values, so dropping their "(미확정)" markers
 # when the design goes active is not a content change.
 UNCONFIRMED_RE = re.compile(r"[ \t]?\(미확정\)")
+# Only inside one-line parentheses, never in running prose: "(제안, 미확정)" -> "(제안)".
+PAREN_RE = re.compile(r"\(([^()\n]*미확정[^()\n]*)\)")
+MARKER_IN_PAREN_RE = re.compile(r"\s*[,·—–-]?\s*미확정\s*[,·—–-]?\s*")
+
+
+def drop_unconfirmed(text):
+    def inner(m):
+        rest = MARKER_IN_PAREN_RE.sub(" ", m.group(1)).strip(" ,·—–-")
+        return f"({rest})" if rest else ""
+    return PAREN_RE.sub(inner, UNCONFIRMED_RE.sub("", text))
 
 
 def project_agent(agent_type):
@@ -151,10 +161,10 @@ def design_lock_reason(root, tool_input):
         so content changes disguised as frontmatter edits are still caught."""
         m = FRONTMATTER_RE.match(text)
         if not m:
-            return UNCONFIRMED_RE.sub("", text)
+            return drop_unconfirmed(text)
         front = STATUS_LINE_RE.sub("", m.group(0))
         rest = text[m.end():]
-        return UNCONFIRMED_RE.sub("", front + rest)
+        return drop_unconfirmed(front + rest)
 
     if body(old) == body(new):
         return None

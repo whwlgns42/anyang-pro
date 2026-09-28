@@ -122,6 +122,17 @@ def check_design_lock():
                "design-lock: dropping (미확정) markers on activation denied")
         expect(reason(approved, old_string="30분 (미확정)", new_string="60분"),
                "design-lock: value change hidden in marker removal allowed")
+        approved.write_text(approved.read_text(encoding="utf-8")
+                            + "재시도 10분 (제안, 미확정)\n주기 (미확정 — backend 조율)\n"
+                            + "보관 기간은 미확정이다\n", encoding="utf-8")
+        expect(reason(approved, edits=[{"old_string": "(제안, 미확정)", "new_string": "(제안)"},
+                                       {"old_string": "(미확정 — backend 조율)",
+                                        "new_string": "(backend 조율)"}]) is None,
+               "design-lock: dropping 미확정 inside a compound parenthesis denied")
+        expect(reason(approved, old_string="10분 (제안, 미확정)", new_string="10분"),
+               "design-lock: dropping other words with the 미확정 marker allowed")
+        expect(reason(approved, old_string="보관 기간은 미확정이다", new_string="보관 기간은 이다"),
+               "design-lock: dropping 미확정 from running prose allowed")
         expect(reason(other, old_string="# Other", new_string="# Changed") is None,
                "design-lock: design outside '승인된 설계' section denied")
         approved.write_text(
