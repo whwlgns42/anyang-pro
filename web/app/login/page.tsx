@@ -4,6 +4,14 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { CONSENT_TYPES } from "@/lib/consent";
+import {
+  PASSWORD_HINT_TEXT,
+  TOO_MANY_ATTEMPTS_TEXT,
+  LOGIN_INVALID_TEXT,
+  getRegisterErrorMessage,
+  isLoginTooManyAttempts,
+  isPasswordTooShort,
+} from "../_lib/auth-form";
 
 type Mode = "login" | "register";
 
@@ -19,19 +27,33 @@ export default function LoginPage() {
   const [collectionUse, setCollectionUse] = useState(false);
   const [overseasTransfer, setOverseasTransfer] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const passwordTooShort = isPasswordTooShort(password);
   const canSubmitRegister =
-    email && password && password === passwordConfirm && collectionUse && overseasTransfer;
+    email &&
+    password &&
+    password.length >= 8 &&
+    password === passwordConfirm &&
+    collectionUse &&
+    overseasTransfer;
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setBlocked(null);
     setSubmitting(true);
     const res = await signIn("credentials", { email, password, redirect: false });
     setSubmitting(false);
     if (res?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      // anyang-backend-api 1-6절 — TOO_MANY_ATTEMPTS는 계정 열거 방지를 위해 401(비밀번호
+      // 오류) 메시지와 시각적으로 구분한다(banner vs error-text).
+      if (isLoginTooManyAttempts(res.code) || isLoginTooManyAttempts(res.error)) {
+        setBlocked("TOO_MANY_ATTEMPTS");
+      } else {
+        setError(LOGIN_INVALID_TEXT);
+      }
       return;
     }
     router.push("/post-login");
@@ -40,6 +62,7 @@ export default function LoginPage() {
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setBlocked(null);
     if (!canSubmitRegister) return;
     setSubmitting(true);
     const res = await fetch("/api/auth/register", {
@@ -51,24 +74,14 @@ export default function LoginPage() {
         consents: { collection_use: collectionUse, overseas_transfer: overseasTransfer },
       }),
     });
-    if (res.status === 409) {
-      setSubmitting(false);
-      setError("이미 가입된 이메일입니다.");
-      return;
-    }
-    if (res.status === 403) {
+    if (!res.ok) {
       const body = await res.json().catch(() => null);
       setSubmitting(false);
-      if (body?.error === "ADMIN_EMAIL_RESERVED") {
-        setError("이 이메일은 비밀번호로 가입할 수 없습니다. Google로 로그인해 주세요.");
+      if (res.status === 429 && body?.error === "TOO_MANY_ATTEMPTS") {
+        setBlocked("TOO_MANY_ATTEMPTS");
       } else {
-        setError("가입할 수 없습니다.");
+        setError(getRegisterErrorMessage(res.status, body?.error));
       }
-      return;
-    }
-    if (!res.ok) {
-      setSubmitting(false);
-      setError("가입 중 오류가 발생했습니다.");
       return;
     }
     const signInRes = await signIn("credentials", { email, password, redirect: false });
@@ -148,6 +161,14 @@ export default function LoginPage() {
 
         {mode === "register" && (
           <>
+            {/* anyang-frontend-screens 1-1절 — 비밀번호 힌트는 상시 노출, 8자 미만이면
+                제출 전 인라인 오류로도 표시(서버 400 PASSWORD_TOO_SHORT와 같은 자리). */}
+            <p className="hint-text">{PASSWORD_HINT_TEXT}</p>
+            {passwordTooShort && (
+              <p className="error-text" role="alert">
+                {PASSWORD_HINT_TEXT}
+              </p>
+            )}
             <div className="field">
               <label htmlFor="password-confirm">비밀번호 확인</label>
               <input
@@ -191,6 +212,13 @@ export default function LoginPage() {
           </>
         )}
 
+        {/* anyang-frontend-screens 1-1절 — 429(TOO_MANY_ATTEMPTS)는 계정 열거 방지를 위해
+            401/일반 오류(error-text)와 시각적으로 구분되는 banner로 표시한다. */}
+        {blocked && (
+          <p className="banner" role="alert">
+            {TOO_MANY_ATTEMPTS_TEXT}
+          </p>
+        )}
         {error && (
           <p className="error-text" role="alert">
             {error}
