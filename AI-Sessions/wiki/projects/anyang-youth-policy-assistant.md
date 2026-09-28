@@ -48,6 +48,7 @@ owner: pm
 - 2026-09-28: 재개. backend가 수집기 셀렉터를 실제 게시판 구조로 수정(766ea20). 사용자 결정 22·23·OCR·taste-skill 기록. 22·23 설계(backend → frontend) draft 완료 — backend-api 3-2절 인용 공지 SSE(`event: citations`)·13-1절 `GET /api/admin/notices`, frontend-screens 3절 인용 카드·11절 공지 목록 탭, tasks 두 문서에 작업 추가. code-review 지적으로 backend-api 5절·backend-tasks 5번 수집기 서술을 확인 사실로 갱신. frontend가 taste-skill(`design-taste-frontend`)로 시각 개선(1b27f0e, 공통 토큰·로그인·온보딩·동의·채팅·공지 피드, 관리자 화면은 토큰 반영만). code-review 통과(경미 1건: consent-form 인라인 style 잔존), npm test 104개·build 통과. errors 문서 status active로(code-review). 설계 문서 4종 재승인 대기, 22·23 구현은 재승인 뒤.
 - 2026-09-28: 사용자가 22·23 설계 4종 재승인(기준 커밋 `f525792`). 구현: backend ccd6042(인용 공지 SSE, `GET /api/admin/notices`), frontend ed7c751(taste-skill 호출, 인용 카드, 관리자 공지 목록 탭, consent-form 인라인 style 정리). code-review 통과(차단 없음), npm test 120개·build 통과(실제 DB·브라우저 확인은 못 함). 경미 문서 결함 1건은 설계 잠금 대상이라 확인 항목 26으로 올림.
 - 2026-09-28: 메인 세션 최종 검토(HEAD a8083ee) 반영. 구현 수정: database 65043e5(collect_runs.triggered_by on delete set null, 0016), backend d3a3a21(수집 잡 끝에서 임베딩 호출, 공지별 예외 처리·제목+본문 임베딩, chat 저장 after(), .env.example, vercel.json icn1, 410 구독 삭제, 공지 변경 시 재임베딩, 풀 max 3, 유선전화 가림), frontend 37c0d30(sw.js payload 정합). code-review 재위임 1회: backend 992e01e(maxDuration 300 — [[anyang-jobs-collect-missing-maxduration]]), frontend b5c575a(sw.js 실제 소스 테스트). 재검수 통과, npm test 132개·build 통과. Gemini 재시도·백오프와 선호 누적은 이미 설계대로라 수정 없음. 설계 변경 필요 28·29, 확인 30·31, 추천·알림 프로필 미사용은 27 보류.
+- 2026-09-28: 사용자 결정 26·28~31. 하네스 설계 잠금이 괄호 안 미확정 삭제 허용(bdacfa0, 메인 세션 변경). 설계(database → backend → frontend) 반영 후 재기록, 구현: database 62b2e62(0017 auth_attempts, 0018 failed_device_count, 정리 잡 미등록 파일), backend a953dbc(나이대 구간, 비밀번호 8자, 로그인·가입 시도 제한, 다기기 판정), frontend 859df5c(taste-skill 호출, 8자 안내·429 배너). backend-api 비문·앵커 복구, payload·환경변수 명시. code-review 통과(재위임 없음), npm test 170개·build 통과, lint WARN 0. 에이전트 제안값은 확인 항목 32로 승인 대기. 기존 승인값의 괄호 안 (미확정) 표기는 database·frontend가 "애매하면 남김"으로 대부분 남겨 둠.
 
 ### 설계 문서
 
@@ -94,18 +95,28 @@ owner: pm
 29. **설계 변경 필요(2026-09-28, 동일)**: 비밀번호 최소 길이, 로그인·가입 시도 횟수 제한 값이 설계에 없다. 값 결정 필요. 현재 미적용.
 30. **설계 확인(2026-09-28, 동일, 차단 아님)**: 한 사용자가 기기 여러 대를 등록했을 때 일부 기기만 푸시 성공하면 `notify_logs`를 success/failed 중 무엇으로 볼지 설계 7절에 없다. 현재 "모든 기기 성공해야 success" 유지(410/404 만료 구독은 삭제하고 실패로 세지 않음).
 31. **문서 보완 필요(2026-09-28, 차단 아님)**: [[anyang-backend-api]]에 없는 구현 사실 2건 — Web Push payload 스키마 `{title, notice_id}`(8절, sw.js는 `/notices/[id]`로 이동), 환경변수 `NEXT_PUBLIC_VAPID_PUBLIC_KEY`(9절 표). 승인된 설계라 잠겨 있어 26번과 함께 문서 수정 허용 여부 결정 필요.
+    - 26·31 해결(2026-09-28, user): 고친다 — backend-api 비문·앵커 공백 복구(의미 변경 없음), push payload `{title, notice_id}` 명시, 환경변수 표에 `NEXT_PUBLIC_VAPID_PUBLIC_KEY` 추가. 설계 잠금 훅은 괄호 안 "미확정" 삭제를 허용하도록 바뀜(bdacfa0) — 승인된 값의 괄호 안 표기도 정리.
+    - 28 해결(2026-09-28, user): 나이대 = 19세 미만 / 19~24 / 25~29 / 30~34 / 35~39 / 40세 이상(만 나이, Asia/Seoul 기준 현재 연도 − birth_year). DeepSeek에는 구간 문자열만. 경계 처리는 backend 제안. [[anyang-ai-models-data-transfer]]
+    - 29 해결(2026-09-28, user): 비밀번호 최소 8자. 로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과 시 일시 차단, 가입은 같은 IP 15분에 5회 초과 시 일시 차단. 외부 서비스 없이 DB 기록(database가 테이블·정리 방식 설계, 새 마이그레이션). 응답 코드·메시지는 backend 제안.
+    - 30 해결(2026-09-28, user): 기기 중 한 대라도 성공하면 success, 실패 기기 수를 함께 기록(컬럼 여부는 database 제안).
+    - 27은 보류 유지(user).
+    - 26·28~31 반영·구현 완료(2026-09-28): 62b2e62, a953dbc, 859df5c. code-review 통과.
+32. **사용자 승인 필요 — 이번 라운드 에이전트 제안값(2026-09-28, (미확정)인 채 구현, 사용자 지시)**:
+    - database([[anyang-database-schema]] auth_attempts·notify_logs): `auth_attempts(id, attempt_type, identifier_type, identifier_hash, created_at)` + 복합 인덱스, 이메일·IP는 SHA-256 해시로 저장, 로그인 실패 시 email·ip 각 1행·가입은 성공 포함 ip 1행·로그인 성공 미기록, 차단 해제 시각 컬럼 없이 15분 슬라이딩 윈도우, 보존 1일 + 매시간 정리 잡(`UNAPPLIED_cleanup-auth-attempts.sql`, pg_cron 미등록 — 되돌릴 수 없는 삭제라 등록 승인 필요), `notify_logs.failed_device_count integer not null default 0`.
+    - backend([[anyang-backend-api]] 1-6·3·7절): 429 `{ error: "TOO_MANY_ATTEMPTS" }`(로그인·가입), 400 `{ error: "PASSWORD_TOO_SHORT" }`, IP = `x-forwarded-for` 첫 값·없으면 `127.0.0.1`(Vercel에서 위조·공유 버킷 위험은 공식 문서 확인 필요 — code-review), 로그인 차단은 Auth.js `CredentialsSignin` 서브클래스 code `TOO_MANY_ATTEMPTS`, `birth_year` null이면 나이대 조건 생략, 만료(410/404) 구독은 성공·실패 어느 쪽에도 세지 않음. 동시 요청 시 5회 경계를 약간 넘을 수 있는 레이스(count 후 insert) 허용.
+    - frontend([[anyang-frontend-screens]] 1-1절): 가입 모드 비밀번호 힌트 상시 노출 "비밀번호는 8자 이상이어야 합니다."(인라인 오류 같은 문구), 429 배너 "잠시 후 다시 시도해 주세요."(401 오류와 구분).
 
 ## 승인된 설계
 
-기준 커밋 `ef51d3c`. 문서 안의 (미확정) 제안값도 함께 확정. 확정하지 않겠다고 한 값 없음.
+2026-09-28: 결정 26·28~31 반영을 위해 anyang-database-schema·anyang-backend-api·anyang-backend-tasks·anyang-frontend-screens·anyang-frontend-tasks를 여기서 잠시 뺐다(사유: 위 결정). 반영 후 사용자 결정값·기계적 수정은 사용자 승인(메인 세션 전달, 2026-09-28)으로 재기록하고, 에이전트 새 제안값은 (미확정)으로 남겨 보고한다. 이전 승인 기준 커밋: database `ef51d3c`, 나머지 `f525792`.
 
-- [[anyang-database-schema]] — 승인일 2026-09-27, 승인자 user
+- [[anyang-database-schema]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
 
-2026-09-28 재승인: 22·23 반영본(기준 커밋 `f525792`). 문서 안의 (미확정) 제안값도 함께 확정, 확정하지 않겠다고 한 값 없음.
+2026-09-28 재기록: 결정 26·28~31 반영본. 사용자 결정값과 기계적 수정은 승인으로 확정(메인 세션 전달, user). 이번 라운드에 에이전트가 새로 제안한 값(auth_attempts 구조·해시 저장·보존 1일·정리 잡, failed_device_count, 429 응답 코드·메시지, IP 추출, 나이대 경계 처리, 가입·로그인 안내 문구)은 (미확정)으로 남겨 구현을 진행하고 사용자 승인 대상으로 보고한다(사용자 지시).
 
 ## Jev 도입 제안
 

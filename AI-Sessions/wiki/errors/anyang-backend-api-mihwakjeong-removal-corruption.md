@@ -41,6 +41,15 @@ Kickoff 4단계가 허용하는 범위), 일부 위치에서 문자열 `(미확�
    `bash scripts/lint-wiki.sh`는 링크 대상 문서의 존재만 확인하고 앵커(heading) 일치는
    검사하지 않아 이 문제를 잡지 못한다(기존 알려진 한계).
 
+## 재확인 (2026-09-28, code-review)
+
+사용자 결정 26 반영(2026-09-28)으로 backend가 문장·앵커를 고쳤다. `anyang-backend-api.md:1015`가
+"backend 제안값이다."로 정상 문장이 됐고(과거 940행), 과거 409·500·541행 근방에 있던 줄 바꿈
+뒤 ` ]]`로 시작하는 잘린 앵커도 더 이상 없다(현재 남은 유일한 줄바꿈 앵커는 150행
+`[[anyang-database-schema#users ]]`로, 이 문서 Details 2절에 적었듯 이번 버그 이전부터 있던
+것이라 새로 생긴 문제가 아니다). 문장·앵커 파손은 해결됐다. `status`는 재발 방지 참고용으로
+`active` 유지.
+
 ## 재발 방지
 
 `(미확정)` 표시를 지울 때 문자열 치환이 아니라 문장·링크 단위로 확인하며 지운다. 특히
@@ -51,3 +60,4 @@ Kickoff 4단계가 허용하는 범위), 일부 위치에서 문자열 `(미확�
 
 - [[anyang-backend-api]]
 - [[anyang-database-schema]]
+- [[anyang-youth-policy-assistant]]
