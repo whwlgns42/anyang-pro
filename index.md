@@ -76,6 +76,7 @@
 
 - [[anyang-preferences-put-missing-mask-pii]] — 안양 비서: 선호 수정 API가 가림 없이 Gemini로 전송(해결 622962b, embedText 내부 강제 가림)
 - [[anyang-jobs-collect-missing-maxduration]] — 안양 비서: 수집·임베딩 잡 라우트에 maxDuration 누락으로 설계의 300초 전제 미적용(해결 992e01e)
+- [[anyang-vercel-first-deploy-pitfalls]] — 안양 비서: Vercel 첫 배포 시 framework Other 404, 첫 배포 운영 배정, Supabase Direct IPv6 전용(pooler 사용)
 - [[anyang-backend-api-mihwakjeong-removal-corruption]] — 안양 비서: 승인 후 (미확정) 기계적 삭제로 backend-api 문장 비문·위키링크 앵커 공백 잔존(2026-09-28 사용자 결정 26으로 복구)
 
 ## Prompt Library

@@ -56,6 +56,7 @@ owner: pm
 - 2026-09-28: 사용자 결정 34(운영용)·35(공개 API 차단, 확장성). [[anyang-database-schema]]를 승인된 설계에서 빼고 database 설계 draft — "공개 API 차단" 절, 0019_lock_public_api 계획(up/down), 점검 SQL 2개·migrate.sh exit 1·MCP 적용 후 점검+get_advisors, 운영 기준 테스트 방법. 첫 호출은 pm이 "승인된 설계" 절 설명 문장에 위키링크를 남겨 설계 잠금 훅에 막혔고, 백틱 표기로 고친 뒤 재호출. 재승인 대기, 0019 구현·적용은 재승인 뒤. 새 확인 항목 36.
 - 2026-09-28: 사용자 재승인(database-schema, 35 반영본), 승인된 설계 재기록. database 구현: 0019_lock_public_api up/down 작성, migrate.sh up 끝에 점검 2개(실패 시 테이블 이름 출력·exit 1), 설계 문서 (미확정) 2곳 제거. **적용 전 점검에서 멈춤** — 테이블 소유자는 `postgres`(단일)로 확인했지만 로컬 `web/.env.local`에 `DATABASE_URL`이 없어 앱 접속 롤을 확정하지 못함. 운영 적용·검증·코드 커밋·code-review 미진행(0019 파일과 migrate.sh는 작업 트리에 미커밋). 확인 항목 37.
 - 2026-09-28: 37 해결(user, 접속 롤 = postgres Direct connection). database가 0019를 운영 DB에 단일 트랜잭션으로 적용·검증(점검 2개 0행, anon 42501, `_probe` rollback), npm test 170개·build 통과, 커밋 1b22f09. code-review 구현 수정 1건(up/down 파일에 begin/commit) → e6330a8, 재검수 통과. 35 해결. 남은 일: 메인 세션의 `get_advisors` 실행, 36(개발용 프로젝트에서 down→up) 보류.
+- 2026-09-28: 메인 세션이 사용자 요청으로 Vercel 배포 시작. 프로젝트 `anyang-youth-policy-assistant` 생성(icn1), framework Other→nextjs 수정 후 미리보기 배포 정상(`/` 307, `/login` 200). 첫 배포가 운영에 배정돼 운영 주소는 404 버전 — `--prod` 재배포 필요. 환경변수 6개 등록(AUTH_SECRET·SCHEDULER_SHARED_SECRET·VAPID 3개·APP_ORIGIN, 값 미보관). 접속 정보는 사용자 요청으로 로컬 전용 `AI-Sessions/private/anyang-credentials.md`(git 제외)에 기록. 실패 사례 [[anyang-vercel-first-deploy-pitfalls]].
 
 ### 설계 문서
 
@@ -128,6 +129,10 @@ owner: pm
 36. **보류(2026-09-28, 35 후속)**: `0019_lock_public_api` down→up 반복 적용 테스트는 운영 DB에서 하지 않는다(되돌리는 동안 공개 키 접근이 다시 열림). 개발용 Supabase 프로젝트가 생기면 그곳에서 실행한다. 그때까지 down 파일은 문법 검토만.
 37. **사용자 확인 필요(2026-09-28, 0019 적용 전 점검에서 database 제기)**: 운영 앱의 `DATABASE_URL`(Vercel 환경변수 등) 접속 롤이 public 테이블 소유자 `postgres`와 같은지. 로컬 `web/.env.local`에는 `DATABASE_URL`이 없어(키: `AUTH_SECRET`, `AUTH_URL`뿐) 확인할 수 없었다. Supabase pooler 연결 문자열이면 사용자명이 `postgres.<ref>` 형식이고 롤은 `postgres`다(비밀번호는 알려주지 않아도 된다 — 사용자명 부분만 확인). 다른 롤(예: 별도 앱 전용 롤)이면 정책 없는 RLS가 앱 쿼리를 막아 운영 장애가 되므로 설계 재검토. 확인되면 database 구현 재호출로 단일 트랜잭션 적용 → 점검·검증 → 커밋 → code-review. 아직 앱을 운영에 배포하지 않아 `DATABASE_URL`을 정하지 않은 상태라면 그 사실도 알려 주면 된다(그때는 "소유자 롤 `postgres`로 접속"을 배포 조건으로 두고 적용할지 결정).
     - 37 해결(2026-09-28, user): 접속 롤 = postgres(Direct connection), 사용자 확인. 테이블 소유자와 같다. 접속 문자열·비밀번호·project ref는 어디에도 남기지 않는다. database 구현 재호출로 0019 운영 적용 진행.
+
+38. **사용자 입력 필요(2026-09-28, Vercel 배포)**: 운영 환경변수 남은 7개 — `DATABASE_URL`(Transaction pooler 6543, 메인 세션이 넣을 수 있음·사용자 답 대기), `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`DEEPSEEK_API_KEY`·`GEMINI_API_KEY`·`ADMIN_EMAILS`(사용자가 직접 입력). Google OAuth 리디렉션 URI `https://anyang-youth-policy-assistant.vercel.app/api/auth/callback/google` 등록 필요. 입력 뒤 `vercel deploy --prod`.
+39. **사용자 결정 필요(2026-09-28, Vercel 배포)**: 프로젝트에 Vercel Authentication(ssoProtection `all_except_custom_domains`)이 켜져 있어 `*.vercel.app` 운영 주소도 Vercel 로그인 사용자만 열 수 있다. 일반 사용자와 pg_cron 수집·알림 트리거가 막힌다. 운영만 해제(미리보기는 보호 유지)할지 결정.
+40. **후속(2026-09-28, 38 이후)**: 예약 작업(collect/notify 트리거) 등록 시 `SCHEDULER_SHARED_SECRET`을 새로 만들어 Vercel과 Supabase Vault에 동시에 넣는다(2026-09-28 생성값은 보관하지 않음).
 
 ## 승인된 설계
 

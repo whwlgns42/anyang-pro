@@ -16,6 +16,9 @@ __pycache__/
 # 비밀값 (커밋 금지 — dev-common 규칙 9)
 .env
 .env.*
+# 사용자 요청으로 로컬에만 두는 접속 정보 메모(2026-09-28)
+AI-Sessions/private/
+.vercel
 
 # Node.js
 node_modules/
