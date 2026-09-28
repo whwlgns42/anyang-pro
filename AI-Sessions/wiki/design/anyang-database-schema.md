@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: database
 ---
 
@@ -13,7 +13,9 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 조각, 대화, 선호(preference) 벡터, 푸시 구독, 알림 설정 테이블을 둔다. 관리자 기능(수집 이력,
 공지 숨김, 알림 발송 로그, 계정 정지, 외부 API 사용량)을 위한 로그성 테이블도 두되 개인별
 대화·기억 원문은 담지 않는다. 로그인 실패·가입 시도 제한을 위한 `auth_attempts` 테이블과
-알림 발송 시 실패 기기 수를 기록하는 `notify_logs` 컬럼을 둔다. 스케줄은 Supabase
+알림 발송 시 실패 기기 수를 기록하는 `notify_logs` 컬럼을 둔다. public 테이블 전체에 RLS를
+켜고 anon·authenticated 롤의 현재·미래 권한을 회수해 공개 키 접근을 차단한다(`0019_lock_public_api`,
+확장성 유지). 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
 사용자 설계 승인으로 확정됐다.
@@ -685,6 +687,83 @@ select cron.schedule(
 - 개발/운영 Supabase 프로젝트는 별도로 둔다([[anyang-deployment-portability]] 확정). 각 환경은
   독립된 `DATABASE_URL`을 쓰고, 같은 마이그레이션 파일을 순서대로 적용한다.
 
+### 공개 API 차단 (확인 항목 35, 확장성 원칙)
+
+19개 테이블 생성 마이그레이션을 적용한 뒤 Supabase 보안 경고로 public 테이블 전체가 RLS
+꺼짐 상태이고, anon(공개) 키로 모든 행을 읽고 쓸 수 있다는 사실이 드러났다(user, 2026-09-28).
+앱은 서버에서만 `pg` Pool(`web/lib/db.ts`)로 `DATABASE_URL`에 접속하고 supabase-js나 공개
+키를 쓰지 않으므로, 공개 키 경로가 열려 있을 이유가 없다 — 막는다.
+
+**확장성 요구**: 이 조치는 새 테이블 추가·기존 테이블 수정 뒤에도 유지돼야 한다(user,
+2026-09-28). RLS를 테이블마다 매번 켜는 방식만으로는 새 테이블을 만들 때 깜빡하면 다시
+뚫린다. 그래서 두 겹을 둔다 — 현재 테이블 RLS + 미래 테이블 기본 권한 회수(`alter default
+privileges`). 기본 권한 회수가 확장성의 핵심이다: 이후 어떤 경로로 테이블을 만들어도 anon·
+authenticated 롤에 애초에 권한이 없다.
+
+- **새 테이블을 만드는 마이그레이션 관례(확정, 이 문서 규칙)**: 새 테이블을 만드는 마이그레이션은
+  같은 파일에서 `enable row level security`를 함께 적용한다. `alter default privileges`가
+  권한을 막아도 RLS 자체는 켜두는 것이 이중 방어다.
+- **클라이언트 직접 접근이 필요해지면**: 이 원칙을 뒤집는 것이므로 설계 변경으로 처리한다.
+  전체 잠금을 풀지 않고, 필요한 테이블에만 권한(GRANT)과 RLS 정책을 준다.
+- **대시보드 Data API 노출 끄기**: 새 테이블도 자동으로 막아주지만 저장소(마이그레이션 파일)에
+  남지 않아 프로젝트마다 손으로 다시 해야 한다. 주 수단에서 빼고, 배포 체크리스트의 선택
+  사항(이중 방어)으로만 남긴다 — 지금은 하지 않는다.
+
+#### 마이그레이션 0019_lock_public_api (계획)
+
+- **up**:
+  - DO 블록으로 `pg_tables`(schemaname='public')를 순회하며 모든 테이블(`schema_migrations`
+    포함)에 `enable row level security`를 적용한다. 정책은 만들지 않는다 — 정책 없는 RLS는
+    기본적으로 모든 행을 막고, 서버는 `DATABASE_URL` 소유자 권한으로 접속하므로 RLS 자체와
+    무관하게(테이블 소유자는 RLS를 우회) 영향받지 않는다.
+  - DO 블록으로 `pg_roles`에 `anon`, `authenticated` 롤이 있는지 먼저 확인한다. 있을 때만
+    아래를 실행한다 — UNO Q 등 anon 롤이 없는 표준 PostgreSQL 환경에서도 에러 없이 지나가게
+    하기 위해서다(이전 가능성 원칙).
+    - 현재 테이블·시퀀스·함수 권한 회수: `revoke all on all tables/sequences/functions in
+      schema public from anon, authenticated;`
+    - 미래 객체 권한 선회수: `alter default privileges for role postgres in schema public
+      revoke all on tables/sequences/functions from anon, authenticated;` — 이후 어떤
+      마이그레이션 경로(`migrate.sh` 또는 MCP)로 테이블을 만들어도 anon·authenticated에
+      기본 권한이 없다.
+- **down**: 위를 반대로 적용한다 — `alter default privileges ... grant all ...`, 현재 테이블
+  권한 `grant all`, 각 테이블 `disable row level security`. anon·authenticated 롤이 있을
+  때만 권한 관련 문을 실행한다(up과 동일 조건).
+- **롤백 가능 여부**: 스키마 변경(RLS on/off, 권한 회수/부여)만 다루고 데이터를 삭제하지
+  않는다. 되돌릴 수 없는 마이그레이션(테이블·컬럼 삭제, 데이터 삭제, 타입 축소)에 해당하지
+  않는다 — 아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영.
+- **운영 적용 시 원자성(확정, 프로젝트 문서 확인 항목 35)**: up 파일 전체를 `begin; …
+  commit;` 단일 트랜잭션으로 적용한다. 중간 실패 시 전체가 롤백되게 하기 위해서다.
+
+#### 적용 후 점검 (누락 감지, `migrate.sh`와 MCP 두 적용 경로 공통)
+
+새 테이블이 생겨도 위 규칙이 지켜지지 않으면(관례를 깜빡하거나 기본 권한 회수가 프로젝트
+전환 중 빠지는 경우) 점검 SQL이 잡는다.
+
+- 점검 1 — RLS가 꺼진 public 테이블 목록(0행이어야 함, 제안 SQL):
+  ```sql
+  select relname from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+  ```
+- 점검 2 — anon 롤에 테이블 권한이 남은 목록(0행이어야 함, 제안 SQL, anon 롤이 없으면 이
+  점검 자체를 건너뛴다):
+  ```sql
+  select table_name from information_schema.tables t
+  where table_schema = 'public'
+    and has_table_privilege('anon', format('%I.%I', table_schema, table_name), 'SELECT');
+  ```
+- `web/db/migrate.sh up`의 마지막 단계로 위 점검 2개를 실행한다(제안, 구현 단계에서 정확한
+  출력 형식은 `(미확정)`). 결과가 있으면 테이블 이름을 출력하고 `exit 1`로 끝낸다 — up이
+  "성공"으로 끝났는데 공개 접근이 남는 상황을 막는다.
+- MCP(`apply_migration`)로 적용한 뒤에도 같은 점검 SQL 2개와 `get_advisors`(security 타입,
+  RLS 관련 경고 0건 확인)를 실행한다.
+
+#### 배포 체크리스트 메모 (선택, 지금 하지 않음)
+
+- Supabase 대시보드에서 Data API 노출을 끄는 것은 이중 방어이지만 저장소에 남지 않으므로
+  주 수단이 아니다. 새 프로젝트를 만들 때(개발용 프로젝트 등, 프로젝트 문서 확인 항목 36)
+  체크리스트 항목으로만 남긴다(제안, 이 문서는 구현하지 않는다).
+
 ### 마이그레이션 계획 (0017·0018, 확인 항목 29·30)
 
 기존 마이그레이션은 `web/db/migrations/0000_extensions` ~ `0016_collect_runs_triggered_by_set_null`
@@ -711,6 +790,14 @@ select cron.schedule(
   절)은 데이터 삭제이므로 별도로 되돌릴 수 없는 작업이며 그 잡 등록 자체에 대한 사용자 승인이
   구현 단계 지시서에 적혀 있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
 
+### 마이그레이션 계획 (0019, 확인 항목 35)
+
+위 "공개 API 차단" 절의 `0019_lock_public_api`를 다음 번호로 계획한다(제안, 파일은 구현
+단계에서 생성 — 이번 설계 단계에서는 만들지 않는다). up/down SQL 개요는 위 절을 참고한다
+(중복 기재 방지). 스키마·데이터 삭제가 없어 되돌릴 수 없는 마이그레이션이 아니다 — 구현
+단계에서 별도 승인 없이 실행할 수 있다(단, 운영 적용이므로 위 "운영 적용 시 원자성" 절의
+트랜잭션·사전 점검 절차는 반드시 따른다).
+
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
@@ -731,6 +818,11 @@ select cron.schedule(
   없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
   마이그레이션)와 `notify_logs.failed_device_count` 컬럼(0018 마이그레이션)은 위
   "마이그레이션 계획" 절에 적힌 대로 되돌릴 수 없는 마이그레이션이 아니다.
+- `0019_lock_public_api`(위 "공개 API 차단" 절)도 되돌릴 수 없는 마이그레이션이 아니다 —
+  RLS on/off와 권한 회수/부여만 다루고 데이터를 지우지 않는다. 다만 운영 DB에 적용하므로
+  "운영 적용 시 원자성"과 "적용 후 점검" 절의 절차(트랜잭션, 소유자·접속 롤 점검, 점검 SQL,
+  `get_advisors`)는 승인 여부와 무관하게 반드시 따른다 — 이는 되돌릴 수 없음 여부가 아니라
+  운영 장애 방지 목적이다.
 
 ## 테스트 방법 (제안)
 
@@ -778,6 +870,21 @@ select cron.schedule(
   이상을 등록한 뒤, 그중 하나만 성공하도록 만들고 `notify_logs.result`가 `success`로,
   `failed_device_count`가 실패한 기기 수(예: 1)로 기록되는지 확인한다. 모두 실패하면
   `result='failed'`이고 `failed_device_count`가 시도한 기기 수 전체와 같은지 확인한다.
+- 공개 API 차단 확인(0019, 확인 항목 35, 운영 DB):
+  - 적용 전: `select tableowner from pg_tables where schemaname='public'`와 `DATABASE_URL`
+    접속 롤이 같은지 확인한다. 다르거나 불확실하면 적용하지 않고 멈춰서 보고한다(RLS가 앱
+    쿼리까지 막아 운영 장애로 이어질 수 있다).
+  - 적용은 `begin; … commit;` 단일 트랜잭션으로 한다.
+  - 적용 후: 위 "적용 후 점검" 절의 점검 SQL 2개(RLS 꺼진 테이블 0행, anon 권한 남은 테이블
+    0행)를 실행하고, `get_advisors`(security)로 RLS 관련 경고 0건을 확인한다.
+  - 권한 회수 확인: `set role anon; select * from public.users;`가 권한 오류로 막히는지
+    확인한 뒤 `reset role`.
+  - 미래 테이블 확인(반드시 트랜잭션 안에서만, 흔적을 남기지 않기 위해): `begin; create
+    table public._probe(id int);`로 만든 테이블에 anon 권한이 없는지 확인한 뒤 `rollback;`.
+  - 운영에서는 down→up 반복 롤백 테스트를 하지 않는다(되돌리는 동안 공개 접근이 다시 열리기
+    때문). down 파일은 문법 검토만 한다. 반복 테스트는 개발용 Supabase 프로젝트가 생긴 뒤
+    (프로젝트 문서 확인 항목 36)로 미룬다.
+  - 앱 확인: `npm test`, `npm run build` 통과.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -834,6 +941,11 @@ select cron.schedule(
 - 알림 다중 기기 성공/실패 판정 — 해결(2026-09-28, user): 기기 중 한 대라도 성공하면
   `success`, 실패 기기 수를 함께 기록. [[anyang-youth-policy-assistant#확인이 필요한 항목]]
   30. `notify_logs.failed_device_count` 컬럼으로 반영(위 `notify_logs` 절 참고).
+- 공개 키(anon) 접근 차단 — 해결(2026-09-28, user): DB에 두 겹(현재 테이블 RLS + 미래 테이블
+  기본 권한 회수)을 두고 적용 후 점검 SQL로 누락을 잡는다. 대상은 운영용 프로젝트(확인
+  항목 34 해결과 연동). [[anyang-youth-policy-assistant#확인이 필요한 항목]] 35. `0019_lock_public_api`
+  마이그레이션과 "공개 API 차단" 절로 반영(위 참고). 점검 SQL의 정확한 문구, `migrate.sh`
+  출력 형식은 제안값으로 `(미확정)` — 구현 단계에서 확정.
 
 ## Links
 

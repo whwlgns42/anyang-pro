@@ -53,10 +53,11 @@ owner: pm
 - 2026-09-28: 사용자가 27·33 취소. 각 소유자가 33 내용 제거(database·backend·frontend 설계 문서, pm 결정 문서 행), 5종 status active, 승인된 설계 재기록.
 - 2026-09-28: 사용자 피드백(로그인 화면 중앙 정렬 안 됨·허전함)으로 frontend 시각 개선 ca0e5c9(taste-skill 호출). 로그인 데스크톱 2단(소개·핵심 가치 3개 + 카드), 모바일 1단, 로고 마크·한 줄 소개·G 아이콘·"또는" 구분선·처리방침 링크, /consent·/onboarding·/suspended 공통 중앙 카드 레이아웃(/post-login은 리다이렉트 전용이라 제외). 기능·API·흐름 변경 없음. npm test 170개·tsc 통과, **npm run build는 개발 서버(3100)와 .next 충돌 우려로 미실행**.
 - 2026-09-28: 사용자 요청으로 database가 Supabase MCP로 `web/db/migrations/` up 파일 19개(0000_extensions ~ 0018_notify_logs_failed_device_count)를 순서대로 원격 DB에 적용 — 전부 성공, 건너뜀·실패 없음(적용 전 빈 프로젝트). migrate.sh와 같은 추적을 위해 각 적용에 `public.schema_migrations` 기록을 함께 넣음(19개 version). public 테이블 17개(schema_migrations 포함). `web/db/jobs/`(pg_cron 트리거·정리 잡)와 down 파일은 적용 안 함. 저장소 파일 변경 없음. 확인 항목 34·35.
+- 2026-09-28: 사용자 결정 34(운영용)·35(공개 API 차단, 확장성). [[anyang-database-schema]]를 승인된 설계에서 빼고 database 설계 draft — "공개 API 차단" 절, 0019_lock_public_api 계획(up/down), 점검 SQL 2개·migrate.sh exit 1·MCP 적용 후 점검+get_advisors, 운영 기준 테스트 방법. 첫 호출은 pm이 "승인된 설계" 절 설명 문장에 위키링크를 남겨 설계 잠금 훅에 막혔고, 백틱 표기로 고친 뒤 재호출. 재승인 대기, 0019 구현·적용은 재승인 뒤. 새 확인 항목 36.
 
 ### 설계 문서
 
-재승인 대기(2026-09-28, 22·23 반영, draft): anyang-backend-api·anyang-backend-tasks·anyang-frontend-screens·anyang-frontend-tasks. anyang-database-schema는 승인 유지.
+재승인 대기(2026-09-28, 35 반영, draft): anyang-database-schema. 나머지 4종은 승인 유지.
 
 - [[anyang-database-schema]] — database. 스키마, HNSW 인덱스, pg_cron+pg_net 잡, 재임베딩 절차
 - [[anyang-backend-api]] — backend. API 계약, 인증, 채팅 RAG, 임베딩, 수집기, Web Push, 환경변수, 배포, UNO Q 전환 runbook
@@ -117,12 +118,17 @@ owner: pm
     - **취소(2026-09-28, user)**: 하지 않는다. 처리방침 반영도 불필요.
 34. **사용자 확인 필요(2026-09-28, 마이그레이션 적용 후 database 제기)**: Supabase MCP가 연결된 프로젝트의 이름·ref가 MCP 응답에 나오지 않아, 19개 마이그레이션이 적용된 곳이 개발용 프로젝트인지 운영용인지 확인하지 못했다([[anyang-deployment-portability]]는 개발/운영 분리). 사용자가 Supabase 대시보드에서 확인 필요.
 35. **설계 결정 필요(2026-09-28, 동일)**: 새 테이블 17개 모두 RLS가 꺼져 있다. Supabase는 public 스키마를 Data API로 노출하므로 anon 키로 모든 행을 읽고 쓸 수 있다는 경고가 나왔다(Supabase MCP `list_tables` 경고). [[anyang-database-schema]]에는 RLS·Data API 노출에 대한 설계가 없다. 앱은 `DATABASE_URL` 서버 접속만 쓰므로 선택지 예: (a) 모든 테이블 RLS 활성화 + 정책 없음(서버 접속 역할은 영향 없음, anon·authenticated 차단), (b) Data API에서 public 스키마 노출 해제. 설계 변경이라 database 설계 → 사용자 승인 필요. 그때까지 노출 상태이며 실제 개인정보를 넣기 전에 결정해야 한다. b39f76a로 설계 문서·결정 문서에 넣은 33 내용은 모두 제거했다(32 승인 반영·(미확정) 표기 정리는 유지). 재검토용 메모는 "Jev 도입 제안" 절에만 둔다.
+    - 34 해결(2026-09-28, user): 19개 마이그레이션이 적용된 곳은 **운영용** Supabase 프로젝트다. 이후 작업도 운영용으로 진행한다.
+    - 35 해결(2026-09-28, user): 확장성(테이블 추가·수정, 기능 확장 뒤에도 유지)이 요구사항. 방향 — 새 마이그레이션 `0019_lock_public_api`(up/down): public 테이블 전체 RLS 켜기·정책 없음, anon·authenticated 롤이 있을 때만(DO 블록) 현재 테이블·시퀀스·함수 권한 회수, `alter default privileges for role postgres in schema public revoke ...`로 미래 객체 권한 선회수. 적용 후 점검 SQL 2개(RLS 꺼진 테이블 0행, anon 권한 테이블 0행)를 `migrate.sh up` 끝에서 실행해 실패 시 exit 1, MCP 적용 뒤에도 같은 점검 + `get_advisors`. 설계 문서에 "공개 API 차단" 절(새 테이블 마이그레이션은 같은 파일에서 RLS 켜기, 클라이언트 직접 접근은 설계 변경). 운영 기준 검증: 단일 트랜잭션, 적용 전 테이블 소유자=접속 롤 점검(불확실하면 멈춤), `_probe`는 begin~rollback 안에서만, 운영에서 down→up 반복 테스트 안 함(36). 대시보드 Data API 토글은 배포 체크리스트의 선택 사항. 그래서 [[anyang-database-schema]]를 "승인된 설계"에서 뺐다(사유: 35 반영). database 설계 draft 후 사용자 재승인, 구현은 재승인 뒤.
+    - 설계 draft 완료(2026-09-28, database): [[anyang-database-schema]] "공개 API 차단" 절·0019 계획·테스트 방법. database 제안값(미확정): 점검 SQL 2개의 정확한 문구, `migrate.sh up` 실패 출력 형식 — 재승인으로 확정할지, 구현 단계에서 정할지 사용자 결정 필요.
+36. **보류(2026-09-28, 35 후속)**: `0019_lock_public_api` down→up 반복 적용 테스트는 운영 DB에서 하지 않는다(되돌리는 동안 공개 키 접근이 다시 열림). 개발용 Supabase 프로젝트가 생기면 그곳에서 실행한다. 그때까지 down 파일은 문법 검토만.
 
 ## 승인된 설계
 
 2026-09-28(4차): 33 취소(user)로 33 내용을 제거하고 5종을 다시 기록한다. 남은 변경은 확인 항목 32 승인값 반영과 괄호 안 (미확정) 표기 정리뿐이다. 문서 안의 값은 모두 확정이며, 정리 잡 pg_cron 등록만 사용자 결정 대기다.
 
-- [[anyang-database-schema]] — 승인일 2026-09-28, 승인자 user
+2026-09-28(5차): `anyang-database-schema`를 뺀다 — 사유: 확인 항목 35(공개 API 차단) 반영을 위한 설계 수정. 재승인 뒤 다시 기록한다.
+
 - [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
