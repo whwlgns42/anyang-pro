@@ -12,6 +12,8 @@ import {
   isLoginTooManyAttempts,
   isPasswordTooShort,
 } from "../_lib/auth-form";
+import { AuthLayoutSplit } from "../_lib/auth-layout";
+import { GoogleIcon } from "../_lib/google-icon";
 
 type Mode = "login" | "register";
 
@@ -108,12 +110,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="page page--narrow">
-      <h1>안양 청년정책 비서</h1>
-
+    <AuthLayoutSplit>
       <button type="button" onClick={handleGoogle} className="btn-google btn-block secondary">
+        <GoogleIcon />
         Google로 계속하기
       </button>
+
+      <div className="auth-divider" role="presentation">
+        <span>또는</span>
+      </div>
 
       <div role="tablist" aria-label="로그인 또는 가입 선택" className="tab-row">
         <button
@@ -233,6 +238,6 @@ export default function LoginPage() {
           {mode === "login" ? "로그인" : "가입하기"}
         </button>
       </form>
-    </main>
+    </AuthLayoutSplit>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AuthLayout } from "../_lib/auth-layout";
 
 // anyang-frontend-screens 7절: 체크박스 2개(수집·이용, 국외 이전) 모두 필수. 재동의 진입 시에도
 // 같은 화면을 재사용하고, 탈퇴 경로(8-1절, /settings/account)를 함께 보여준다.
@@ -35,7 +36,7 @@ export default function ConsentFormInner() {
   }
 
   return (
-    <main className="page page--narrow">
+    <AuthLayout>
       <h1>개인정보 동의</h1>
       <form onSubmit={handleSubmit}>
         <fieldset>
@@ -84,7 +85,7 @@ export default function ConsentFormInner() {
       <p className="hint-text hint-text--spaced">
         동의하지 않고 <a href="/settings/account">탈퇴</a>할 수도 있습니다.
       </p>
-    </main>
+    </AuthLayout>
   );
 }
 

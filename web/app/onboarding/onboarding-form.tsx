@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../_lib/api-fetch";
+import { AuthLayout } from "../_lib/auth-layout";
 import { GENDERS, ENROLLMENT_STATUSES, OCCUPATION_TYPES } from "@/lib/profile-codes";
 import {
   GENDER_LABELS,
@@ -69,7 +70,7 @@ export function OnboardingForm() {
   }
 
   return (
-    <main className="page page--narrow">
+    <AuthLayout>
       <h1>내 정보 입력</h1>
       <p className="hint-text">
         내게 맞는 공지를 추천하기 위해 필요한 정보입니다. 모든 항목은 선택 입력이며, 나중에
@@ -178,6 +179,6 @@ export function OnboardingForm() {
           나중에 입력
         </button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

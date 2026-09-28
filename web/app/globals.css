@@ -247,7 +247,10 @@ button.danger:hover:not(:disabled) {
 }
 
 .btn-google {
-  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .tab-row {
@@ -461,6 +464,165 @@ a.card:hover {
   margin-bottom: 12px;
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+/* ===== 인증 계열 공통 레이아웃(로그인/가입, consent, onboarding, suspended) =====
+   design-taste-frontend 재적용 (2026-09-28, 확인 항목 25) — "센터도 안 맞고 허전하다"
+   피드백 반영. 기존 VARIANCE 3/MOTION 2/DENSITY 4 판단(위 파일 상단 주석)은 유지한다.
+   카드·2단 배치는 구조 정리이지 마케팅 랜딩 전환이 아니다. */
+.auth-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  width: 100%;
+  max-width: 420px;
+}
+
+@media (min-width: 1024px) {
+  .auth-grid {
+    grid-template-columns: 1fr 1fr;
+    max-width: 900px;
+    gap: 56px;
+    align-items: center;
+  }
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 28px 24px 24px;
+}
+
+@media (min-width: 1024px) {
+  .auth-card {
+    margin: 0;
+  }
+}
+
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.auth-logo__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  flex-shrink: 0;
+}
+
+.auth-logo__text {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.auth-tagline {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--fg);
+}
+
+.auth-values {
+  display: none;
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 1024px) {
+  .auth-tagline {
+    font-size: 1.5rem;
+  }
+
+  .auth-values {
+    display: flex;
+  }
+}
+
+.auth-values li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.auth-values li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 16px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-footer {
+  text-align: center;
+  padding: 16px;
+  font-size: 0.8125rem;
+}
+
+.auth-footer a {
+  color: var(--muted);
 }
 
 .visually-hidden {
