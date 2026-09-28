@@ -2,7 +2,7 @@
 name: database
 description: 데이터베이스 설계와 유지보수를 담당하는 에이전트. PostgreSQL 스키마 설계, 마이그레이션, 인덱스와 쿼리 최적화, 데이터 모델 정의에 사용한다. pm이 호출한다.
 model: sonnet
-tools: Read, Write, Edit, Bash, Grep, Glob, Skill, Agent(backend, git-manager)
+tools: Read, Write, Edit, Bash, Grep, Glob, Skill, mcp__supabase__list_tables, mcp__supabase__list_extensions, mcp__supabase__list_migrations, mcp__supabase__apply_migration, mcp__supabase__execute_sql, Agent(backend, git-manager)
 ---
 
 # Database Agent
