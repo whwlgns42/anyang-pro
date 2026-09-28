@@ -48,3 +48,4 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-28 --:-- | save | 안양 비서 27·33 취소(user): 설계 5종·결정 문서에서 33 내용 제거(32 반영·미확정 정리 유지), 5종 active·승인된 설계 재기록, TypeSafe 참고 사실은 Jev 도입 제안 절에만 기록 | [[anyang-youth-policy-assistant]] [[anyang-ai-models-data-transfer]] [[anyang-database-schema]] [[anyang-backend-api]] [[anyang-backend-tasks]] [[anyang-frontend-screens]] [[anyang-frontend-tasks]]
 2026-09-28 --:-- | save | 안양 비서 로그인·인증 화면 시각 개선(사용자 피드백): ca0e5c9, 중앙 카드·데스크톱 2단·로고 마크, test 170·tsc 통과, build는 dev 서버 충돌 우려로 미실행 | [[anyang-youth-policy-assistant]]
 2026-09-28 --:-- | flag | [rule-skip] 로그인 시각 개선 커밋 ca0e5c9를 npm run build 없이 커밋(dev 서버 3100 실행 중이라 tsc로 대체) — build 확인 필요 | .claude/rules/dev-common.md 규칙 4
+2026-09-28 --:-- | lint | flag 해결(2026-09-28 --:--): 메인 세션이 ca0e5c9 기준 npm run build 통과 확인(dev 서버 중지 후 실행·재기동, /login 200) | [[anyang-youth-policy-assistant]]
