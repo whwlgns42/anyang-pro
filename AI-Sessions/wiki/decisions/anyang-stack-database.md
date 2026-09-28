@@ -35,3 +35,4 @@ Next.js(App Router) 풀스택 PWA 웹앱과 PostgreSQL + pgvector를 쓴다.
 - [[anyang-database-schema]]
 - [[anyang-backend-api]]
 - [[anyang-frontend-screens]]
+- [[anyang-supabase-connection]]
