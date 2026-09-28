@@ -71,3 +71,4 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-28 17:40 | save | 아두이노 UnoQ 보드 포트·접속 방법을 live_server_info에서 정리해 raw에 추가(user 지시, 비밀번호·토큰·API 키는 가림) | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`
 2026-09-28 17:45 | save | overview의 프로젝트 정의서·서비스 소개·다이어그램 3개를 탭 뷰어로 묶어 UnoQ 보드 7539 포트에 배포(user 지시): /home/arduino/anyang-docs, anyang-docs.service(python http.server). raw 포트 문서에는 7539가 없음(raw 불변이라 미수정) | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`
 2026-09-28 17:55 | save | raw 아두이노 포트 문서에 7539 문서 뷰어 정보 추가(user 지시로 raw 수정): 포트·접속 주소·서비스·디렉터리·재배포 방법 | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`
+2026-09-28 --:-- | save | 안양 비서 Vercel 프로젝트가 web으로 바뀜(anyang-youth-policy-assistant 세션 밖 삭제), web 운영 환경변수 9개 정리·운영 배포 https://web-beta-smoky-16.vercel.app (/login·/api/auth/providers 200). 남은 값 DEEPSEEK·GEMINI·ADMIN_EMAILS, 구글 리디렉션 URI 등록 | [[anyang-youth-policy-assistant]]
