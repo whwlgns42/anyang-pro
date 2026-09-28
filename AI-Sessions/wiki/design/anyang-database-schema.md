@@ -324,6 +324,78 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   (아래 `notice_chunks`의 모델 교체 절차)와 달리 컬럼 구조 변경이 없어 되돌릴 수 없는 마이그레이션이
   아니다 — 애플리케이션이 UPDATE 시점에 동기로 처리한다(backend 설계에서 확정).
 
+- **채팅 기억 자동 추출 시 중복 방지·갱신 (신규, 2026-09-29, [[anyang-youth-policy-assistant#확인이
+  필요한 항목]] 43)**: 매 AI 답변마다 "새로 알게 된 사실" 문장 0~N개가 생긴다. 새 문장을 그대로
+  INSERT하지 않고, 같은 사용자의 기존 기억 중 코사인 유사도가 임계값 이상인 행이 있으면 그 행을
+  갱신(UPDATE)한다. 스키마 변경은 없다 — 기존 컬럼(`preference_text`, `embedding`,
+  `embedding_model`, `source_conversation_id`, `updated_at`)만으로 충분하다(제안). 새
+  마이그레이션(0020~)은 필요 없다.
+  - **임계값 (제안, 미확정)**: 코사인 유사도 0.92 이상이면 같은 사실로 보고 갱신한다. pgvector의
+    `<=>` 연산자(`vector_cosine_ops`)는 코사인 거리(`1 - 코사인유사도`)를 반환하므로, 쿼리에서는
+    거리 `0.08` 미만으로 비교한다. 최종 값은 backend가 실제 문장 샘플로 조정해 설계 승인 때
+    확정한다.
+  - **갱신 쿼리 (제안)**: 가장 가까운 기존 기억 1행을 찾아 임계값 안이면 그 자리에서 갱신한다.
+    ```sql
+    -- $1 = user_id, $2 = 새 문장, $3 = 새 embedding, $4 = embedding_model, $5 = source_conversation_id
+    update user_preferences
+    set preference_text = $2,
+        embedding = $3,
+        embedding_model = $4,
+        source_conversation_id = $5,
+        updated_at = now()
+    where id = (
+      select id from user_preferences
+      where user_id = $1
+      order by embedding <=> $3
+      limit 1
+    )
+    and (embedding <=> $3) < 0.08  -- 코사인 거리 임계값. 유사도 0.92에 대응(미확정)
+    returning id;
+    ```
+    `UPDATE ... RETURNING`이 0행이면(가장 가까운 기억도 임계값 밖이거나 기억이 아예 없음)
+    애플리케이션이 이어서 `INSERT`한다(제안 — 별도 `INSERT ... ON CONFLICT`는 쓰지 않는다. 유사도
+    비교는 유니크 제약으로 표현할 수 없어 애플리케이션이 UPDATE 시도 후 실패하면 INSERT하는
+    2단계 방식이 맞다).
+  - **동시 요청 레이스 (제안, 허용)**: 같은 사용자가 정확히 동시에 답변 2개를 받는 경우는 실제로
+    드물다(한 사용자가 한 번에 대화 하나만 진행). 같은 순간에 유사한 문장 2개가 동시에 INSERT돼
+    행이 잠깐 중복되더라도, 다음 추출 때 그 두 행 중 하나와 다시 유사도 비교되어 자연히 합쳐질
+    가능성이 크다(제안). 잠금(`SELECT ... FOR UPDATE`, advisory lock 등)은 추가하지 않는다 —
+    사용자당 트래픽이 매우 낮아 이 레이스로 인한 피해(중복 기억 문장 하나가 잠깐 남는 것)가
+    잠금 코드의 복잡도를 정당화하지 못한다(제안, ponytail 판단: 레이스 허용, 실제로 문제가
+    반복 관찰되면 advisory lock을 추가한다).
+  - **행 수 상한 (미확정)**: 이 설계는 사용자당 기억 행 수에 상한을 두지 않는다. 갱신 위주 정책이라
+    자연히 느리게 늘겠지만, 상한이 필요한지는 backend/frontend가 화면 설계에서 판단한다(이
+    문서 범위 밖).
+
+- **조회 쿼리 2종 (신규, 2026-09-29)**: 채팅 요청마다 시스템 프롬프트에 넣을 기억을 이 두 조회의
+  합집합(중복 id 제거)으로 구성한다(제안). 각각 몇 개를 가져올지는 backend가 정한다(합쳐서 최대
+  10개 제안, [[anyang-youth-policy-assistant#추천 설계]] 2번).
+  1. **최근 기억 N개**:
+     ```sql
+     select id, preference_text, updated_at
+     from user_preferences
+     where user_id = $1
+     order by updated_at desc
+     limit $2;
+     ```
+  2. **현재 메시지와 유사한 기억 K개** (임베딩은 이미 계산된 값을 재사용, 추가 임베딩 호출 없음):
+     ```sql
+     select id, preference_text, embedding <=> $2 as distance
+     from user_preferences
+     where user_id = $1
+     order by embedding <=> $2
+     limit $3;
+     ```
+  - **인덱스 필요 없음 (제안, 근거: 운영 DB 실측)**: 2026-09-29 기준 `user_preferences`는 전체
+    3행, 사용자 1명이다. 이 설계(유사 기억은 갱신, 신규는 새 사실일 때만 추가)에서는 사용자당
+    행 수가 대화량 대비 훨씬 느리게 늘어난다(대화가 쌓여도 이미 아는 사실은 갱신되고 행이 늘지
+    않음). 위 두 쿼리 모두 `where user_id = $1`로 사용자별 행을 먼저 좁히는데, 사용자당 행 수가
+    수십 단위를 넘지 않는 한 Postgres 플래너가 순차 스캔으로도 충분히 빠르게 처리한다 — 현재
+    `user_preferences`에는 `user_id` 단독 인덱스도 없다(`0009_user_preferences.up.sql` 확인,
+    HNSW만 있음). 새 인덱스(`user_id` btree)는 추가하지 않는다. 사용자당 행 수가 실제로 수백
+    단위로 늘어나는 것이 관찰되면(운영 모니터링 필요, 이 설계 범위 밖) 그때 `create index
+    concurrently`(되돌릴 수 있는 마이그레이션)로 추가한다.
+
 #### consents — 가입 시 개인정보 필수 동의 기록
 
 가입 시(Google·이메일 모두) 개인정보 필수 동의 화면을 두고 동의 시각을 기록하는 것은 확정

@@ -62,10 +62,11 @@ owner: pm
 - 2026-09-28: 41 재승인(user, 법적 위험 감수) 기록, 승인된 설계 8차. frontend 구현 9f65aeb(동의 legend·라벨, 처리방침 "AI 처리" 절, 금지 문자열 테스트 2건, 설계 2종 active). npm test 172개 통과, **npm run build는 dev 서버(3100) 충돌 우려로 미실행인데 커밋됨**(log flag). code-review: 치명 없음, 문구·필드·검증·API 불변 확인. 경미 3건은 확인 항목 42.
 - 2026-09-28: Vercel 프로젝트 변경 — 메인 세션이 만든 `anyang-youth-policy-assistant`가 세션 밖에서 삭제되고 `web` 프로젝트(로컬 `web/.vercel` 연결)가 생겨 이후 `web`을 사용(user 지시 "vercel에도 배포해줘"). 운영 환경변수 9개 정리(구글 값은 Google 토큰 엔드포인트로 유효 확인, localhost `AUTH_URL` 제거, 비밀값 새로 생성), `vercel deploy --prod` → https://web-beta-smoky-16.vercel.app 로그인 없이 `/login` 200, `/api/auth/providers` 200(google·credentials). 런타임 DB 접속은 미검증(같은 주소로 로컬 접속만 확인).
 - 2026-09-29: 사용자가 운영에서 구글 로그인 성공 — 운영 DB에 users 1·accounts 1(google)·consents 2·profiles 1 기록 확인(개수만 조회), 운영 오류 로그 없음. `DEEPSEEK_API_KEY`(모델 목록·최소 호출 확인)·`GEMINI_API_KEY`(`gemini-embedding-001` 호출 200) Vercel `web` 운영·`web/.env.local` 등록 후 운영 재배포(Ready, `/login` 200). 운영 환경변수 11개. 코드의 `deepseek-chat`은 API가 `deepseek-flash`로 응답하는 별칭 — 확인 항목 41.
+- 2026-09-29: 사용자 새 요청(채팅이 이름을 기억 못 함). 원인 3개와 사용자 결정 2건을 확인 항목 43에 기록, [[anyang-ai-models-data-transfer]] 갱신, 설계 5종을 승인된 설계에서 뺌(9차). 설계 draft 완료(database 스키마 변경 없음, backend 기억 주입·매 답변 추출, frontend 안내·처리방침 문구). 재승인 대기, 구현은 재승인 뒤.
 
 ### 설계 문서
 
-5종 모두 승인됨(anyang-database-schema는 2026-09-28 35 반영본 재승인, 0019 구현·운영 적용 완료).
+5종 모두 확인 항목 43 설계 수정으로 재승인 대기(2026-09-29).
 
 - [[anyang-database-schema]] — database. 스키마, HNSW 인덱스, pg_cron+pg_net 잡, 재임베딩 절차
 - [[anyang-backend-api]] — backend. API 계약, 인증, 채팅 RAG, 임베딩, 수집기, Web Push, 환경변수, 배포, UNO Q 전환 runbook
@@ -158,7 +159,23 @@ owner: pm
     - (c) 경미, 보류 가능: `web/test/consent-privacy-wording.test.ts`가 주석까지 검사해 나중에 주석에 서비스명을 적으면 깨진다. 현재 동작은 정상.
     - pm 판단: 사용자 전달문은 "설계 변경 없음"이지만 [[anyang-frontend-screens]] 7·9절과 [[anyang-frontend-tasks]]에 해당 문구가 확정값으로 적혀 있어 설계 변경이다(그대로 코드만 고치면 설계-코드 모순). 두 문서를 승인된 설계에서 빼고 frontend 설계 draft → 재승인 → 구현. database·backend 문서는 필드명 `overseas_transfer`와 "국외 이전" 동의 유형 의미만 담고 있어 이번 범위에서 고치지 않는다.
 
-41. **확인 필요(2026-09-29, 메인 세션 제기, 차단 아님)**: `web/lib/deepseek.ts`의 모델명 `deepseek-chat`은 DeepSeek 제공 모델 목록(`deepseek-flash`, `deepseek-v4-pro`)에 없고 API가 `deepseek-flash`로 응답하는 별칭이다. 별칭이 없어지면 채팅이 멈춘다. 모델명을 `deepseek-flash`로 명시할지 사용자 결정 필요(설계 [[anyang-ai-models-data-transfer]]·[[anyang-backend-api]] 값 변경이라 설계 변경 절차).
+41. **확인 필요(2026-09-29, 메인 세션 제기, 차단 아님)**: `web/lib/deepseek.ts`의 모델명 `deepseek-chat`은 DeepSeek 제공 모델 목록(`deepseek-flash`, `deepseek-v4-pro`)에 없고 API가 `deepseek-flash`로 응답하는 별칭이다. 별칭이 없어지면 채팅이 멈춘다. 모델명을 `deepseek-flash`로 명시할지 사용자 결정 필요(설계 [[anyang-ai-models-data-transfer]]·[[anyang-backend-api]] 값 변경이라 설계 변경 절차). (번호 주의: 위 2026-09-28 41과 번호가 겹친다. 이후 항목은 43부터.)
+
+43. **설계 변경(2026-09-29, 새 요청 — 채팅이 사용자를 기억하지 못함)**: 사용자가 채팅에서 이름을 알려준 뒤 새로고침·새 대화에서 물으면 기억하지 못한다. 기대 동작은 "대화가 쌓일수록 그 사용자를 아는 비서"(모델 재학습이 아니라 기억 문장 + 벡터 저장·주입). 메인 세션 원인 분석(코드·운영 DB 실측, 2026-09-29) — 버그가 아니라 설계의 빈틈:
+    - (1) 핵심: `user_preferences`는 `buildQueryVector`로 공지 검색 벡터를 섞는 데만 쓰이고 시스템 프롬프트에 들어가지 않는다. 대화 이력도 현재 대화 메시지만 보낸다. [[anyang-backend-api]] 3절 2-a·5번이 선호를 "검색용 벡터"로만 정의.
+    - (2) 추출 빈도: 한 대화의 메시지 수가 6의 배수일 때만 추출. 운영 DB 대화 5개(메시지 1·6·2·2·2) 중 추출 1번.
+    - (3) 요약 프롬프트의 "식별정보는 포함하지 마" 지시로 이름이 빠짐(저장 문장 "사용자는 자신의 이름과 …"). [[anyang-ai-models-data-transfer]]의 이름 미전송 원칙이 그대로 적용된 결과.
+    - 부수: 메시지 1개짜리 대화 1건(assistant 답변 미저장). 원인은 backend 확인.
+    - 결정(2026-09-29, user, AskUserQuestion): ① 사용자가 대화에서 직접 알려준 이름·호칭까지 기억하고 DeepSeek에 전송 허용. 전화번호·이메일·주민번호는 계속 `maskPii`로 가림. ② 기억 추출은 AI 답변이 끝날 때마다. [[anyang-ai-models-data-transfer]] 갱신.
+    - 진행: `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(9차). 설계(database → backend → frontend) draft 후 사용자 재승인, 구현은 재승인 뒤. 내용 변경이 없는 문서는 기존 승인 그대로 다시 기록한다.
+    - 설계 draft 완료(2026-09-29): 5종 모두 수정. 재승인 대기. 제안값(미확정):
+      - database([[anyang-database-schema]] user_preferences 절): 스키마·인덱스·마이그레이션 변경 없음. 새 기억 문장은 같은 사용자 기존 기억과 코사인 유사도 0.92(거리 0.08) 이상이면 갱신, 아니면 추가. 동시 요청 레이스 허용(잠금 없음). 조회 2종(최근 N, 유사 K)은 user_id 필터 순차 스캔. 문서 frontmatter는 `status: active` 그대로 둠.
+      - backend([[anyang-backend-api]] 2-3절·3절 2-a·5번·3-3·3-3-1·3-3-2절, [[anyang-backend-tasks]] 6번·선택 항목): 최근 5 + 유사 5(합계 최대 10, 최근 우선, 중복 제거), 시스템 프롬프트 "사용자 조건"과 "관련 공지" 사이에 기억 절, 기억 없으면 생략. 유사 조회 실패 시 최근만, 둘 다 실패 시 생략. `extractPreferences`가 JSON 문자열 배열을 출력하고 코드펜스를 뗀 뒤 파싱, 파싱 실패는 빈 배열. 추출 프롬프트 문구 제안. `PREFERENCE_EXTRACTION_EVERY_N_MESSAGES` 제거. 부수 관찰은 스트림 읽기 예외 시 `assistantText`를 버리는 경로를 확인했지만 실제 원인은 확인 불가. 예외 시 부분 저장은 선택 항목.
+      - frontend([[anyang-frontend-screens]] 6·9절, [[anyang-frontend-tasks]] 9·11번): `/settings/memory` 구조 변경 없음, 안내 문구 추가. `/privacy-policy` "AI 처리" 절에 이름·호칭 기억 고지 문장 추가(서비스명·국가명 없음, 금지 문자열 테스트 준수).
+    - 미해결 질문:
+      - (a) 이름이 담긴 기억 문장이 임베딩 때 Gemini로 간다. 결정 원문은 "DeepSeek 전송 허용"뿐이라 Gemini 포함 여부 확인 필요.
+      - (b) 스트림 예외 시 부분 답변 저장을 43 범위에 넣을지. 넣으면 사용자가 취소한 답변도 저장된다.
+      - (c) 위 제안값을 재승인으로 확정할지.
 
 ## 승인된 설계
 
@@ -172,11 +189,7 @@ owner: pm
 
 2026-09-28(8차): 사용자 재승인(메인 세션 전달)으로 `anyang-frontend-screens`·`anyang-frontend-tasks`를 다시 기록한다(draft 커밋 ddb7192). frontend-screens 확인 항목 2의 제안 문구(legend·라벨·가림 안내 유지·처리방침 문구) 전부 확정. 사용자가 41-b 법적 위험을 감수하고 진행.
 
-- [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-database-schema]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
+2026-09-29(9차): 설계 문서 5종을 모두 뺀다 — 사유: 확인 항목 43(채팅 기억 주입·매 답변 추출·이름 기억, 새 요청). 설계 수정 후 재승인 뒤 다시 기록한다.
 
 ## Jev 도입 제안
 

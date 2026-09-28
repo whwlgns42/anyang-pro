@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -60,14 +60,25 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
 5. **공지 수집기** — `/api/jobs/collect`(대상 게시판 URL 확정됨). robots.txt 404(제한 없음)와
    게시판 HTML 구조는 2026-09-28 메인 세션이 확인했고 커밋 766ea20에서 구현·테스트됨
    (backend 설계 5절, [[2026-09-28_anyang-first-build-paused]]). 구조가 바뀌면 파서를 갱신한다.
-6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 선호 추출). 공용 가림 함수
-   (`lib/mask-pii.ts` 등, 미확정 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·선호 추출 결과
+6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 기억 추출·주입). 공용 가림 함수
+   (`lib/mask-pii.ts` 등, 미확정 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·기억 추출 결과
    문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
-   기존에는 Gemini 임베딩에만 적용). **인용 공지 스트림(신규, 확인 항목 22, backend 설계
+   기존에는 Gemini 임베딩에만 적용). **인용 공지 스트림(확인 항목 22, backend 설계
    3-2절)** — RAG 검색 결과(notice_id 중복 제거)를 `event: citations` SSE 이벤트로 DeepSeek
-   청크 전에 먼저 전송, 빈 목록도 `data: []`로 전송. **나이대 구간 계산(신규, 확인 항목 28,
+   청크 전에 먼저 전송, 빈 목록도 `data: []`로 전송. **나이대 구간 계산(확인 항목 28,
    backend 설계 3절)** — `birth_year`를 청년정책 구간 문자열로 변환해 프롬프트에 넣고
-   원값은 전송하지 않는다(null이면 조건 생략). 3번 의존.
+   원값은 전송하지 않는다(null이면 조건 생략). **기억 주입(신규, 확인 항목 43, backend 설계
+   3-3절, 핵심)** — `user_preferences` 최근 N개·유사 K개(합계 최대 10)를 조회해 시스템
+   프롬프트의 `기억하는 사용자 정보:` 절로 넣는다. 유사 기억 조회는 3절 2-a에서 계산한
+   원본 메시지 임베딩을 재사용(추가 임베딩 호출 없음). 기억 0건이면 절 생략, 조회 쿼리
+   실패 시 폴백(3-3절). **기억 추출 매 답변화(확인 항목 43, backend 설계 3절 5번·3-3-1절)**
+   — `PREFERENCE_EXTRACTION_EVERY_N_MESSAGES`(6의 배수 게이트) 제거,
+   `maybeExtractPreference`를 `consumeAndStore`의 답변 저장 직후 매번 호출하도록 변경.
+   `summarizePreference`를 새 프롬프트·JSON 배열 출력(`extractPreferences` 제안 이름)으로
+   교체, 파싱 실패는 빈 배열로 처리. 저장은
+   [[anyang-database-schema#user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는
+   내 정보" 화면의 데이터]]의 중복 방지·갱신 쿼리(UPDATE 실패 시 INSERT)를 따른다. 3번 의존.
+   테스트: 3-3절·3-3-1절·3절 5번의 테스트 방법([[anyang-backend-api#테스트 방법]]) 참고.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
@@ -112,6 +123,12 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     승인이 적혀 있는지 반드시 확인한다. 승인 기록이 없으면 등록하지 않고 멈춰서 보고한다.
     16번과 대상 테이블·보존 기간이 달라 별도 작업 단위로 둔다(YAGNI에 위배되지 않음 —
     합치면 오히려 조건 분기가 늘어난다).
+
+### 선택 항목(사용자 결정 대기, 확인 항목 43)
+
+- **스트림 읽기 예외 시 부분 저장** — [[anyang-backend-api#3-3-2. 부수 관찰 — 메시지 1개짜리
+  대화(AI 답변 미저장) 원인 확인 (2026-09-29, 확인 항목 43)]]의 제안. 6번 작업에 포함할지는
+  재승인 때 결정된다. 포함되지 않으면 이번 라운드에서 구현하지 않는다.
 
 ### 순서 제안
 

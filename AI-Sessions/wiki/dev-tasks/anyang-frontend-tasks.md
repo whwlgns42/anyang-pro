@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -30,6 +30,10 @@ owner: frontend
 **2026-09-28 추가(확인 항목 29)**: 아래 2-1 작업 단위를 추가했다. 이미 1차 구현된 2번(로그인/
 가입 화면)에 대한 추가 작업이며, [[anyang-frontend-screens#1-1. 비밀번호 길이·시도 제한 안내 (신규, 확인 항목 29)]]
 draft 반영에 의존한다.
+
+**2026-09-29 추가(확인 항목 43)**: 이미 1차 구현된 9번("AI가 기억하는 내 정보" 화면)·
+11번(개인정보 처리방침 페이지)에 문구 추가 작업을 반영했다. 화면 구조·API 연동은 바뀌지
+않는다 — [[anyang-frontend-screens]] 4차 개정(6절·9절) draft 반영에 의존한다.
 
 ## Details
 
@@ -84,12 +88,16 @@ draft 반영에 의존한다.
 8. **PWA manifest·서비스워커** — `app/manifest.ts`, `sw.js`(푸시 수신·클릭 처리), 등록 로직.
    1·7번과 함께 진행(권한 요청 흐름이 서비스워커에 의존).
 9. **"AI가 기억하는 내 정보" 화면** (`/settings/memory`) — 조회·수정·삭제. `GET /api/preferences`,
-   `PUT /api/preferences/:id`, `DELETE /api/preferences/:id` 연동.
+   `PUT /api/preferences/:id`, `DELETE /api/preferences/:id` 연동. **(확인 항목 43 추가)**
+   이름 기억 안내 문구(목록 위 고정 표시) 반영. 세부는
+   [[anyang-frontend-screens#6. "AI가 기억하는 내 정보" (`/settings/memory`)]] 참고.
 10. **대화 히스토리 목록 화면** (`/conversations`) — `GET /api/conversations`,
     `GET /api/conversations/:id/messages` 연동.
 11. **개인정보 처리방침 페이지** (`/privacy-policy`) — 정적 페이지. AI 처리 고지(국가명·
     서비스명 없이 "대화 내용은 AI가 처리" 수준, 2026-09-28 개정·확인 항목 41), 외부 AI API
-    사용량 90일 보관 고지(서비스명 제외), 동의 기록 1년 보관 고지 포함. 세부는
+    사용량 90일 보관 고지(서비스명 제외), 동의 기록 1년 보관 고지 포함. **(확인 항목 43
+    추가)** 이름·호칭 기억 고지 문장을 "AI 처리" 절에 추가. 기존
+    `web/test/consent-privacy-wording.test.ts` 금지 문자열 검사를 새 문장에도 지킨다. 세부는
     [[anyang-frontend-screens#9. 개인정보 처리방침 페이지 (`/privacy-policy`)]] 참고. 법률
     검토된 문구 확정 후 콘텐츠만 채운다(구조는 이번에 만든다).
 12. **관리자 공통 레이아웃·가드** (`/admin`) — 관리자 API 응답 코드(401/403 `ADMIN_ONLY`)
