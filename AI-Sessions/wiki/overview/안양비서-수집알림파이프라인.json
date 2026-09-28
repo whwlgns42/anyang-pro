@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "안양 비서 수집 · 임베딩 · 알림 파이프라인",
+    "viewBox": [
+      1080,
+      540
+    ],
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "all",
+      "entries": {
+        "default": {
+          "label": "주 데이터 흐름"
+        },
+        "emphasis": {
+          "label": "중요 처리"
+        },
+        "dashed": {
+          "label": "비동기 배치"
+        },
+        "database": {
+          "label": "데이터 저장소"
+        }
+      }
+    }
+  },
+  "stages": [
+    {
+      "label": "원천"
+    },
+    {
+      "label": "수집 · 임베딩"
+    },
+    {
+      "label": "Postgres 저장"
+    },
+    {
+      "label": "매칭"
+    },
+    {
+      "label": "전달"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "anyang",
+      "type": "external",
+      "label": "안양시 청년 게시판",
+      "sublabel": "robots.txt 확인",
+      "stage": 0,
+      "row": 0,
+      "tag": "요청 간 2초"
+    },
+    {
+      "id": "collect",
+      "type": "backend",
+      "label": "수집 처리",
+      "sublabel": "cheerio 파싱",
+      "stage": 1,
+      "row": 0,
+      "tag": "매일 04:00"
+    },
+    {
+      "id": "embed",
+      "type": "backend",
+      "label": "임베딩 처리",
+      "sublabel": "1500자 분할",
+      "stage": 1,
+      "row": 1,
+      "tag": "수집 직후"
+    },
+    {
+      "id": "gemini",
+      "type": "external",
+      "label": "Gemini",
+      "sublabel": "embedding-001",
+      "stage": 1,
+      "row": 2,
+      "tag": "15개씩 배치"
+    },
+    {
+      "id": "notices",
+      "type": "database",
+      "label": "notices",
+      "sublabel": "공고 원문",
+      "stage": 2,
+      "row": 0
+    },
+    {
+      "id": "chunks",
+      "type": "database",
+      "label": "notice_chunks",
+      "sublabel": "vector(768)",
+      "stage": 2,
+      "row": 1,
+      "tag": "HNSW"
+    },
+    {
+      "id": "prefs",
+      "type": "database",
+      "label": "user_preferences",
+      "sublabel": "vector(768)",
+      "stage": 2,
+      "row": 2,
+      "tag": "채팅에서 추출"
+    },
+    {
+      "id": "notify",
+      "type": "backend",
+      "label": "notify 처리",
+      "sublabel": "코사인 ≥ 0.75",
+      "stage": 3,
+      "row": 1,
+      "tag": "5분마다"
+    },
+    {
+      "id": "logs",
+      "type": "database",
+      "label": "notify_logs",
+      "sublabel": "pending → 결과",
+      "stage": 4,
+      "row": 0
+    },
+    {
+      "id": "push",
+      "type": "external",
+      "label": "Web Push",
+      "sublabel": "VAPID",
+      "stage": 4,
+      "row": 1
+    },
+    {
+      "id": "device",
+      "type": "frontend",
+      "label": "사용자 기기",
+      "sublabel": "sw.js 알림",
+      "stage": 4,
+      "row": 2
+    }
+  ],
+  "flows": [
+    {
+      "id": "html",
+      "from": "anyang",
+      "to": "collect",
+      "label": "목록 · 상세 HTML",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "upsert",
+      "from": "collect",
+      "to": "notices",
+      "label": "공고 저장",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "run-embed",
+      "from": "collect",
+      "to": "embed",
+      "label": "같은 요청에서 실행",
+      "variant": "dashed",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "chunk-text",
+      "from": "embed",
+      "to": "gemini",
+      "label": "청크 텍스트",
+      "classification": "PII 마스킹",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "vectors",
+      "from": "gemini",
+      "to": "chunks",
+      "label": "768차원 벡터",
+      "variant": "emphasis",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "new-chunks",
+      "from": "chunks",
+      "to": "notify",
+      "label": "신규 공고 벡터",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "id": "pref-avg",
+      "from": "prefs",
+      "to": "notify",
+      "label": "최근 5개 평균",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "reserve",
+      "from": "notify",
+      "to": "logs",
+      "label": "선점 · 결과 기록",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "send",
+      "from": "notify",
+      "to": "push",
+      "label": "제목 · notice_id",
+      "variant": "emphasis",
+      "route": "straight",
+      "labelDy": 34
+    },
+    {
+      "id": "deliver",
+      "from": "push",
+      "to": "device",
+      "label": "푸시 알림",
+      "variant": "emphasis",
+      "route": "vertical-channel"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "수집",
+      "items": [
+        "robots.txt 확인, 요청 간 2초",
+        "청크 없는 공고가 임베딩 대기열"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "매칭 · 발송",
+      "items": [
+        "선호 평균 vs enabled_at 이후 공고 (0.75 미확정)",
+        "410/404 구독 삭제, 한 기기라도 성공이면 success"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "트리거 상태",
+      "items": [
+        "설계: pg_cron → /api/jobs/* (미등록)",
+        "x-scheduler-secret 헤더로 보호"
+      ]
+    }
+  ]
+}

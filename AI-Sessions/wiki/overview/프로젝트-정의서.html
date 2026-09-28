@@ -1,0 +1,391 @@
+<title>안양 비서 프로젝트 정의서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600;700&display=swap">
+<style>
+:root{
+  --bg:#f6f7f2; --surface:#ffffff; --sunken:#eef1e8; --line:#dde2d4;
+  --ink:#1e2a22; --ink-2:#4f5b52; --ink-3:#7a857c;
+  --green:#2f6a4a; --green-soft:#e1ede4;
+  --blue:#2d5d85; --blue-soft:#e0eaf3;
+  --amber:#9a6417; --amber-soft:#f5ead8;
+  --grey-soft:#ebece7;
+  --serif:'Noto Serif KR','Nanum Myeongjo',serif;
+  --sans:'IBM Plex Sans KR','Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151a16; --surface:#1d231e; --sunken:#232a24; --line:#333c35;
+    --ink:#e8ede6; --ink-2:#b3bdb4; --ink-3:#8a958c;
+    --green:#86c6a0; --green-soft:#223328;
+    --blue:#8bb8de; --blue-soft:#1e2b37;
+    --amber:#e3b06a; --amber-soft:#342a1a;
+    --grey-soft:#2a302b;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151a16; --surface:#1d231e; --sunken:#232a24; --line:#333c35;
+  --ink:#e8ede6; --ink-2:#b3bdb4; --ink-3:#8a958c;
+  --green:#86c6a0; --green-soft:#223328;
+  --blue:#8bb8de; --blue-soft:#1e2b37;
+  --amber:#e3b06a; --amber-soft:#342a1a;
+  --grey-soft:#2a302b;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:15px; line-height:1.7; word-break:keep-all;
+  padding-inline:18px; padding-block:40px 72px;
+}
+.wrap{max-width:900px; margin-inline:auto; display:flex; flex-direction:column; gap:56px}
+h1,h2,h3{text-wrap:balance; margin:0}
+p{margin:0}
+.dim{color:var(--ink-2)}
+.fine{font-size:.85rem; color:var(--ink-3)}
+.label{font-size:.72rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--green)}
+
+/* cover */
+.cover{display:flex; flex-direction:column; gap:16px; padding-bottom:32px; border-bottom:1px solid var(--line)}
+.cover h1{font-family:var(--serif); font-size:clamp(1.8rem,5vw,2.6rem); line-height:1.25; letter-spacing:-.01em}
+.cover .en{font-size:1rem; color:var(--ink-3); letter-spacing:.02em}
+.meta{display:flex; flex-wrap:wrap; gap:8px 20px; font-size:.85rem; color:var(--ink-2)}
+.meta b{font-weight:600; color:var(--ink)}
+
+/* toc */
+.toc{display:grid; grid-template-columns:1fr; gap:2px 24px; padding:0; margin:0; counter-reset:t}
+@media(min-width:620px){.toc{grid-template-columns:1fr 1fr}}
+.toc li{list-style:none}
+.toc a{display:flex; gap:12px; padding:7px 0; color:var(--ink); text-decoration:none; border-bottom:1px dashed var(--line)}
+.toc a:hover,.toc a:focus-visible{color:var(--green)}
+.toc a span{font-variant-numeric:tabular-nums; color:var(--green); font-weight:600; width:24px; flex:none}
+
+/* sections */
+section{display:flex; flex-direction:column; gap:18px; scroll-margin-top:16px}
+.sh{display:flex; align-items:baseline; gap:14px; padding-bottom:10px; border-bottom:2px solid var(--ink)}
+.sh .no{font-family:var(--serif); font-size:1.5rem; font-weight:700; color:var(--green); font-variant-numeric:tabular-nums}
+.sh h2{font-family:var(--serif); font-size:1.4rem; line-height:1.4}
+h3{font-size:1.02rem; font-weight:600}
+
+.statement{
+  font-family:var(--serif); font-size:clamp(1.1rem,2.6vw,1.3rem); line-height:1.7; font-weight:600;
+  padding:22px 24px; background:var(--green-soft); border-radius:14px; max-width:68ch;
+}
+.statement em{font-style:normal; color:var(--green)}
+
+.names{display:grid; grid-template-columns:1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+@media(min-width:620px){.names{grid-template-columns:1fr 1fr}}
+.names div{background:var(--surface); padding:16px 20px; display:flex; flex-direction:column; gap:2px}
+.names b{font-size:1.08rem}
+
+/* tables */
+.tw{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface)}
+table{width:100%; border-collapse:collapse; font-size:.92rem; min-width:520px}
+th,td{text-align:left; padding:12px 16px; border-bottom:1px solid var(--line); vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+thead th{font-size:.74rem; letter-spacing:.08em; color:var(--ink-3); font-weight:600; background:var(--sunken); white-space:nowrap}
+td:first-child{font-weight:600; white-space:nowrap}
+td .sub{display:block; font-size:.84rem; color:var(--ink-3); margin-top:2px}
+tr.group td{background:var(--sunken); font-size:.78rem; letter-spacing:.08em; color:var(--ink-2); padding-block:8px}
+
+.chip{display:inline-block; font-size:.74rem; font-weight:600; padding:2px 9px; border-radius:999px; white-space:nowrap}
+.c-main{background:var(--green); color:var(--surface)}
+.c-must{background:var(--green-soft); color:var(--green)}
+.c-later{background:var(--amber-soft); color:var(--amber)}
+.c-out{background:var(--grey-soft); color:var(--ink-3)}
+.c-batch{background:var(--blue-soft); color:var(--blue)}
+.c-live{background:var(--green-soft); color:var(--green)}
+
+/* flows */
+.flows{display:grid; grid-template-columns:1fr; gap:18px}
+@media(min-width:760px){.flows{grid-template-columns:1fr 1fr}}
+.flow{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px 22px; display:flex; flex-direction:column; gap:14px}
+.flow header{display:flex; flex-direction:column; gap:6px}
+.flow ol{padding:0; margin:0; display:flex; flex-direction:column}
+.flow li{
+  list-style:none; position:relative; padding:0 0 14px 26px; font-size:.92rem;
+}
+.flow li::before{
+  content:""; position:absolute; left:4px; top:8px; width:9px; height:9px; border-radius:50%;
+  border:2px solid var(--blue); background:var(--surface);
+}
+.flow li::after{content:""; position:absolute; left:8px; top:19px; bottom:2px; width:1px; background:var(--line)}
+.flow li:last-child{padding-bottom:0}
+.flow li:last-child::after{display:none}
+.flow.live li::before{border-color:var(--green)}
+.flow li b{font-weight:600}
+.flow li .note{display:block; font-size:.83rem; color:var(--ink-3)}
+.when{font-variant-numeric:tabular-nums}
+
+.callout{display:flex; gap:12px; padding:14px 18px; border-radius:12px; background:var(--amber-soft); font-size:.92rem}
+.callout b{color:var(--amber); flex:none}
+
+/* roles */
+.process{display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.88rem}
+.process span{padding:6px 12px; border-radius:8px; background:var(--sunken); font-weight:500}
+.process i{font-style:normal; color:var(--ink-3)}
+
+footer{border-top:1px solid var(--line); padding-top:18px; display:flex; flex-direction:column; gap:4px}
+code{font-size:.82rem; background:var(--sunken); padding:1px 6px; border-radius:4px}
+a{color:var(--green)}
+</style>
+
+<div class="wrap">
+
+<header class="cover">
+  <div class="label">프로젝트 정의서</div>
+  <div>
+    <h1>안양 청년정책 AI 리서치 비서</h1>
+    <div class="en">Anyang Youth Policy Assistant</div>
+  </div>
+  <div class="meta">
+    <span><b>형태</b> PWA 웹앱</span>
+    <span><b>대상</b> 안양시 청년</span>
+    <span><b>기준일</b> 2026-09-28</span>
+    <span><b>결정권자</b> 사용자(프로젝트 오너)</span>
+  </div>
+  <ol class="toc">
+    <li><a href="#s1"><span>01</span>프로젝트명</a></li>
+    <li><a href="#s2"><span>02</span>한 줄 정의</a></li>
+    <li><a href="#s3"><span>03</span>해결하려는 문제</a></li>
+    <li><a href="#s4"><span>04</span>핵심 사용자</a></li>
+    <li><a href="#s5"><span>05</span>MVP 핵심 기능</a></li>
+    <li><a href="#s6"><span>06</span>자동화 흐름</a></li>
+    <li><a href="#s7"><span>07</span>기술 구성</a></li>
+    <li><a href="#s8"><span>08</span>역할과 진행 방식</a></li>
+    <li><a href="#s9"><span>09</span>MVP 성공 기준</a></li>
+    <li><a href="#s10"><span>10</span>고도화 방향</a></li>
+    <li><a href="#s11"><span>11</span>법적 · 개인정보 고려사항</a></li>
+  </ol>
+</header>
+
+<section id="s1">
+  <div class="sh"><span class="no">01</span><h2>프로젝트명</h2></div>
+  <div class="names">
+    <div><span class="fine">국문</span><b>안양 청년정책 AI 리서치 비서</b></div>
+    <div><span class="fine">영문 · 서비스 식별자</span><b>Anyang Youth Policy Assistant</b></div>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="sh"><span class="no">02</span><h2>프로젝트 한 줄 정의</h2></div>
+  <p class="statement">
+    안양시 청년이 <em>흩어진 청년정책 공지 속에서 나에게 해당되는 정보를 찾기 어려운 문제</em>를,
+    AI가 공지를 매일 자동으로 모아 이해해 두고 <em>대화로 설명</em>하며
+    <em>관심사에 맞는 새 공지를 원하는 시각에 알려 주는</em> 방식으로 해결하는 PWA 웹앱을 만든다.
+  </p>
+</section>
+
+<section id="s3">
+  <div class="sh"><span class="no">03</span><h2>해결하고자 하는 문제</h2></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>문제</th><th>설명</th><th>이 서비스의 대응</th></tr></thead>
+      <tbody>
+        <tr><td>정보 과다 · 분산</td><td>청년정책 공지는 양이 많고 흩어져 있어 한눈에 보기 어렵다</td><td>게시판 공지를 매일 자동 수집해 한곳에 모음</td></tr>
+        <tr><td>해당 여부 판단</td><td>내 나이·성별·직군·재학/재직 상황에 맞는 공지인지 스스로 가려내기 어렵다</td><td>나이대·상황을 반영해 AI가 대화로 설명</td></tr>
+        <tr><td>새 공지를 놓침</td><td>게시판을 매번 직접 들어가 확인해야 새 소식을 안다</td><td>관심사에 맞는 새 공지를 정한 시각에 푸시 알림</td></tr>
+        <tr><td>근거 확인</td><td>요약만 보면 원문이 무엇인지 확인하기 어렵다</td><td>답변과 함께 참고한 공지 카드를 보여 주고, 상세 화면에서 원문 링크 제공</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s4">
+  <div class="sh"><span class="no">04</span><h2>핵심 사용자</h2></div>
+  <p class="dim">프로필의 재학/재직 여부 선택지(학생 · 재직 · 구직/미취업 · 기타)를 기준으로 나눈다. 나이대는 19세 미만부터 40세 이상까지 청년정책 구간으로 본다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>사용자</th><th>필요</th></tr></thead>
+      <tbody>
+        <tr><td>구직 · 미취업 청년</td><td>취업 지원, 구직 활동 지원처럼 지금 신청할 수 있는 정책을 빠르게 알고 싶다</td></tr>
+        <tr><td>재학 중인 청년</td><td>학업과 병행할 수 있는 지원, 대상 나이대에 맞는 공지를 가려 보고 싶다</td></tr>
+        <tr><td>재직 청년</td><td>바쁜 일과 중 게시판을 확인할 시간이 없어, 필요한 것만 알림으로 받고 싶다</td></tr>
+        <tr><td>정책 탐색 입문자</td><td>어떤 지원이 있는지부터 편하게 물어보며 알아가고 싶다</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="sh"><span class="no">05</span><h2>MVP 핵심 기능</h2></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>기능</th><th>설명</th><th>우선순위</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="3">사용자 기능</td></tr>
+        <tr><td>AI 정책 상담 채팅</td><td>질문을 받으면 관련 공지를 찾아(RAG) 나이대·상황 조건을 반영해 답변을 실시간 스트리밍<span class="sub">대화형 AI: DeepSeek · 공지 검색: pgvector 유사도</span></td><td><span class="chip c-main">필수 · MAIN</span></td></tr>
+        <tr><td>근거 공지 카드</td><td>답변에 사용한 공지를 제목 · 게시일 카드로 답변 위에 표시. 누르면 공지 상세로 이동해 원문 링크 확인</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>추천 공지 목록 · 상세</td><td>대화에서 쌓인 관심사와 가까운 공지 목록. 관심사가 아직 없으면 최신순</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>맞춤 알림</td><td>사용자가 알림 시각을 자유롭게 정하고 켜고 끔. 관심사에 맞는 새 공지를 Web Push로 발송</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>AI가 기억하는 내 정보</td><td>대화에서 추출한 관심사 문장을 조회 · 수정 · 삭제</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>대화 기록</td><td>지난 대화 목록과 메시지 다시 보기</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>가입 · 프로필 · 동의</td><td>Google 또는 이메일 가입, 프로필 4항목, 개인정보 동의 2종, 처리방침 페이지, 탈퇴</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr class="group"><td colspan="3">운영 기능</td></tr>
+        <tr><td>관리자 화면</td><td>수집 관리(이력 · 수동 수집 · 공지 숨김), 알림 발송 현황, 사용자 통계 · 정지, AI 사용량. 대화 · 기억 원문은 볼 수 없음</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr><td>DB 저장</td><td>PostgreSQL + pgvector(Supabase 서울 리전)</td><td><span class="chip c-must">필수</span></td></tr>
+        <tr class="group"><td colspan="3">1차 출시 제외 · 보류</td></tr>
+        <tr><td>비밀번호 재설정</td><td>이메일 발송 수단이 없어 제외, Google 로그인으로 대체 안내</td><td><span class="chip c-out">1차 제외</span></td></tr>
+        <tr><td>공지 자격요건 구조화</td><td>연령 · 직군 조건을 별도 칸으로 정리해 필터링하는 기능</td><td><span class="chip c-out">1차 제외</span></td></tr>
+        <tr><td>포스터 이미지 글자 인식</td><td>이미지로만 된 공지 내용 읽기(OCR)</td><td><span class="chip c-later">데이터 확인 후 결정</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="sh"><span class="no">06</span><h2>자동화 흐름</h2></div>
+  <p class="dim">무거운 일(수집 · 내용 이해 · 알림)은 서버가 정해진 시각에 미리 처리하고, 사용자가 접속했을 때는 준비된 결과를 빠르게 꺼내 쓴다. 예약 실행은 Supabase의 <code>pg_cron</code>이 앱 API를 호출하는 방식이다.</p>
+  <div class="flows">
+    <article class="flow">
+      <header><span><span class="chip c-batch">배치</span></span><h3>A. 공지 수집 · 이해 파이프라인</h3><p class="fine">서버가 매일 자동 실행, 사용자 입력과 무관</p></header>
+      <ol>
+        <li><b class="when">매일 04:00</b> 예약 작업이 수집을 시작</li>
+        <li><b>안양시 청년 게시판</b> 목록 → 상세 순으로 읽기<span class="note">robots.txt 확인, 요청 사이 2초 간격</span></li>
+        <li><b>중복 걸러내기</b><span class="note">제목+본문 해시로 비교해 새 공지 · 바뀐 공지만 저장</span></li>
+        <li><b>내용 이해(임베딩)</b><span class="note">제목+본문을 Gemini로 벡터화해 저장, 공지가 바뀌면 다시 처리</span></li>
+        <li><b>검색 준비 완료</b><span class="note">채팅 · 추천 · 알림이 이 결과를 함께 사용</span></li>
+      </ol>
+    </article>
+    <article class="flow">
+      <header><span><span class="chip c-batch">배치</span></span><h3>A-2. 맞춤 알림 발송</h3><p class="fine">5분마다 자동 실행</p></header>
+      <ol>
+        <li><b class="when">5분마다</b> 지금 알림 받을 시각이 된 사용자 확인<span class="note">자정을 넘기는 시각도 처리</span></li>
+        <li><b>대상 공지 좁히기</b><span class="note">알림을 켠 이후 수집된 공지만</span></li>
+        <li><b>관심사 매칭</b><span class="note">사용자 관심사 벡터와 공지 벡터의 유사도가 기준 이상인 것만</span></li>
+        <li><b>중복 방지 기록 후 발송</b><span class="note">같은 공지는 한 사람에게 한 번만, 등록된 기기마다 Web Push</span></li>
+        <li><b>결과 기록</b><span class="note">한 기기라도 성공하면 성공, 실패한 기기 수 함께 기록</span></li>
+      </ol>
+    </article>
+    <article class="flow live">
+      <header><span><span class="chip c-live">실시간</span></span><h3>B. 채팅 응답 흐름</h3><p class="fine">사용자가 질문할 때만 실행</p></header>
+      <ol>
+        <li><b>질문 입력</b></li>
+        <li><b>개인정보 가림</b><span class="note">전화번호 · 이메일 · 주민등록번호 형태를 AI 전송 전에 가림</span></li>
+        <li><b>관련 공지 검색</b><span class="note">질문 + 기존 관심사로 유사한 공지 상위 몇 건, 숨긴 공지 제외</span></li>
+        <li><b>답변 생성</b><span class="note">나이대 구간 · 성별 · 직군 조건만 함께 전달(신원정보 없음)</span></li>
+        <li><b>근거 카드 + 답변 스트리밍</b></li>
+        <li><b>관심사 기억</b><span class="note">대화에서 드러난 관심사를 문장으로 요약해 저장 → 추천 · 알림에 반영</span></li>
+      </ol>
+    </article>
+    <article class="flow live">
+      <header><span><span class="chip c-live">실시간</span></span><h3>B-2. 추천 목록 서빙</h3><p class="fine">사용자가 목록을 열 때</p></header>
+      <ol>
+        <li><b>접속</b> 로그인 사용자 확인</li>
+        <li><b>이미 처리된 공지</b> 중 관심사와 가까운 것 조회<span class="note">새로 AI를 부르지 않고 저장된 벡터로 계산</span></li>
+        <li><b>관심사가 없으면</b> 최신 공지순으로 대체</li>
+        <li><b>화면 표시</b> 제목 · 발췌 · 게시일, 상세에서 원문 링크</li>
+      </ol>
+    </article>
+  </div>
+  <div class="callout">
+    <b>정리 작업</b>
+    <span>수집 이력 · AI 사용량 기록은 90일, 로그인 시도 기록은 1일 보관 후 지우는 예약 작업이 준비되어 있다. 되돌릴 수 없는 삭제라 실제 가동 시점은 오너가 따로 정한다. 알림 발송 기록은 중복 방지에 쓰여 지우지 않는다.</span>
+  </div>
+</section>
+
+<section id="s7">
+  <div class="sh"><span class="no">07</span><h2>기술 구성</h2></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>영역</th><th>선택</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td>앱</td><td>Next.js(App Router) 풀스택 · PWA</td><td>화면과 API를 한 프로젝트로</td></tr>
+        <tr><td>DB</td><td>PostgreSQL + pgvector</td><td>Supabase 무료 · 서울 리전, 공개 API 접근 차단</td></tr>
+        <tr><td>대화 AI</td><td>DeepSeek API</td><td>답변 생성 · 관심사 요약</td></tr>
+        <tr><td>임베딩</td><td>Google Gemini 임베딩(무료 티어)</td><td>공지 · 관심사 · 질문 벡터화</td></tr>
+        <tr><td>로그인</td><td>Google 소셜 로그인 + 이메일 · 비밀번호</td><td>관리자는 지정 이메일의 Google 로그인만</td></tr>
+        <tr><td>배포</td><td>Vercel Hobby(서울 <code>icn1</code>)</td><td>비상업 전용 조건, 수익화하면 Pro 전환</td></tr>
+        <tr><td>예약 실행</td><td>Supabase <code>pg_cron</code> + <code>pg_net</code></td><td>자체 서버(UNO Q)로 옮겨도 같은 API를 cron으로 호출</td></tr>
+        <tr><td>알림</td><td>Web Push(VAPID)</td><td>앱 설치 없이 브라우저 푸시</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s8">
+  <div class="sh"><span class="no">08</span><h2>역할과 진행 방식</h2></div>
+  <p class="dim">사람 한 명이 결정하고, 역할별 AI 개발 에이전트가 설계와 구현을 나눠 맡는다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>역할</th><th>담당</th></tr></thead>
+      <tbody>
+        <tr><td>프로젝트 오너(사용자)</td><td>범위 · 정책 결정, 설계 승인, 되돌릴 수 없는 작업 승인, 외부 키 준비</td></tr>
+        <tr><td>pm</td><td>요청 파악, 작업 분배, 확인이 필요한 항목 관리, 결과 취합</td></tr>
+        <tr><td>database</td><td>스키마 · 마이그레이션 · 벡터 인덱스 · 예약 작업 정의</td></tr>
+        <tr><td>backend</td><td>API 계약, 인증, 채팅 RAG, 수집기, 알림 발송</td></tr>
+        <tr><td>frontend</td><td>화면 설계와 구현, PWA</td></tr>
+        <tr><td>code-review</td><td>코드와 문서의 모순 검수(수정 권한 없음)</td></tr>
+        <tr><td>git-manager</td><td>기능 단위 커밋, push는 승인 후에만</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="process">
+    <span>설계</span><i>→</i><span>오너 승인</span><i>→</i><span>구현 · 테스트</span><i>→</i><span>검수</span><i>→</i><span>커밋</span>
+  </div>
+  <p class="fine">승인된 설계는 잠기며, 바꾸려면 다시 승인을 받는다.</p>
+</section>
+
+<section id="s9">
+  <div class="sh"><span class="no">09</span><h2>MVP 성공 기준</h2></div>
+  <div class="callout"><b>제안</b><span>아래 기준은 설계 문서의 동작과 테스트 방법에서 뽑은 제안이다. 오너 확정 전이다.</span></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>항목</th><th>기준</th></tr></thead>
+      <tbody>
+        <tr><td>자동 수집</td><td>예약 작업으로 게시판 공지가 중복 없이 DB에 쌓이고, 바로 검색 가능한 상태가 됨</td></tr>
+        <tr><td>채팅 품질</td><td>질문에 관련 공지를 근거 카드와 함께 답하고, 숨긴 공지는 나오지 않음</td></tr>
+        <tr><td>알림</td><td>정한 시각에서 5분 안에 도착, 같은 공지 중복 없음, 알림을 켜기 전 공지는 보내지 않음</td></tr>
+        <tr><td>개인정보</td><td>외부 AI 요청에 이름 · 이메일 · 계정 ID가 없고, 가림 대상 형태가 가려져 있음</td></tr>
+        <tr><td>관리자</td><td>관리자 외 접근 차단, 관리자 화면에 대화 · 기억 원문 없음</td></tr>
+        <tr><td>보안</td><td>공개 키로 DB 테이블을 직접 읽을 수 없음, 로그인 시도 제한 동작</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s10">
+  <div class="sh"><span class="no">10</span><h2>고도화 방향</h2></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>방향</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td>포스터 글자 인식</td><td>실제 수집 데이터로 매칭 품질을 본 뒤 이미지 공지 OCR 도입 재검토</td></tr>
+        <tr><td>프로필 기반 추천</td><td>대화 전 사용자도 프로필 조건으로 공지를 판정하는 방식. 설계까지 했다가 이번 버전에서는 취소, 필요하면 재검토</td></tr>
+        <tr><td>공지 자격요건 정리</td><td>연령 · 직군 조건을 별도 칸으로 구조화해 정확히 거르기</td></tr>
+        <tr><td>비밀번호 재설정</td><td>이메일 발송 수단 마련 후 추가</td></tr>
+        <tr><td>커스텀 도메인</td><td>서비스 주소를 전용 도메인으로 교체(주소는 환경변수로 받아 코드 변경 없음)</td></tr>
+        <tr><td>자체 서버 이전</td><td>Vercel + Supabase에서 보드 서버(UNO Q)로 양방향 전환 가능하게 설계, 전환 시 HTTPS 확보 방법 별도 조사</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s11">
+  <div class="sh"><span class="no">11</span><h2>법적 · 개인정보 고려사항</h2></div>
+  <p class="dim">개인정보를 받고 해외 AI를 쓰는 서비스라 따로 항목을 둔다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>항목</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td>수집 최소화</td><td>프로필은 생년 · 성별 · 직군 · 재학/재직 여부만. 소득 등은 받지 않음</td></tr>
+        <tr><td>동의 분리</td><td>"수집 · 이용"과 "국외 이전"을 따로 받고 동의 시각을 기록</td></tr>
+        <tr><td>국외 이전 고지</td><td>대화 AI(DeepSeek)와 Gemini 무료 티어로의 전송(대화 내용을 AI가 처리)을 가입 시 고지</td></tr>
+        <tr><td>재동의</td><td>개인정보 처리방침이 바뀌면 재동의를 강제</td></tr>
+        <tr><td>외부 전송 원칙</td><td>이름 · 이메일 · 계정 ID는 외부 AI로 보내지 않음. 출생연도 원값 대신 나이대 구간만 전달, 식별 형태는 정규식으로 가림</td></tr>
+        <tr><td>탈퇴</td><td>동의 기록은 증빙용으로 1년 보관 후 삭제</td></tr>
+        <tr><td>관리자 열람 제한</td><td>관리자도 개인 대화 · 기억 원문은 볼 수 없고 집계만 봄</td></tr>
+        <tr><td>수집 예절</td><td>대상 사이트 robots.txt 확인(제한 없음), 요청 사이 2초 간격</td></tr>
+        <tr><td>이용 조건</td><td>Vercel Hobby는 비상업 전용. 수익화 계획 없음, 수익화 시 Pro 전환 필요</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p class="fine">근거 문서: <code>AI-Sessions/wiki/projects/anyang-youth-policy-assistant.md</code> · <code>decisions/anyang-service-scope.md</code> · <code>design/anyang-backend-api.md</code></p>
+  <p class="fine">형식 참고: <code>AI-Sessions/raw/Team A 프로젝트 정의서_v1.docx</code></p>
+</footer>
+
+</div>

@@ -24,6 +24,7 @@
 - `AI-Sessions/wiki/projects/`: 프로젝트 맥락
 - `AI-Sessions/wiki/design/`: 디자인 가이드와 IA
 - `AI-Sessions/wiki/dev-tasks/`: 개발 태스크
+- `AI-Sessions/wiki/overview/`: 비개발자용 서비스 소개 문서(정의서·아키텍처 요약)
 - `.claude/agents/`: 개발 서브에이전트 정의 (pm, backend, frontend, database, code-review, git-manager)
 - `.claude/rules/knowledge-ops.md`: 지식 관리 규칙 (save/ingest/query/lint, 문서 형식)
 - `.claude/rules/dev-common.md`: 개발 에이전트 공통 규칙
@@ -59,6 +60,8 @@
 ## Concepts
 
 - [[glossary]] — 프로젝트 용어 사전. 같은 개념을 다른 이름으로 부르지 않도록 고정
+- [[서비스-소개]] — 안양 비서 비개발자용 서비스 소개(이용 흐름·기능·개인정보 원칙). 같은 내용 html 아티팩트 원본 포함
+- `AI-Sessions/wiki/overview/안양비서-{전체구성도,채팅요청흐름,수집알림파이프라인}.html` — 개발자용 아키텍처 다이어그램 3종(archify 생성, 같은 이름 .json이 원본. 코드·마이그레이션 기준 2026-09-28)
 
 ## Decisions
 

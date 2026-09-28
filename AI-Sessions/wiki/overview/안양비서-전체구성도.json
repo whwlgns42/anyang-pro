@@ -1,0 +1,342 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "안양 비서 전체 구성도",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/whwlgns42/anyang-pro",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "49252f3639139015245a032beffd5f571068e48e"
+    }
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "사용자 (PWA)",
+      "sublabel": "브라우저 · 모바일",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Next.js 웹앱",
+      "sublabel": "Next 16 · React 19",
+      "tag": "Vercel icn1",
+      "pos": [
+        260,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/next.config.ts"
+        },
+        {
+          "path": "web/vercel.json"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "/api/chat",
+      "sublabel": "RAG · SSE 스트리밍",
+      "tag": "maxDuration 300",
+      "pos": [
+        500,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/app/api/chat/route.ts"
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "type": "external",
+      "label": "DeepSeek",
+      "sublabel": "deepseek-chat",
+      "pos": [
+        800,
+        100
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/lib/deepseek.ts"
+        }
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth.js v5",
+      "sublabel": "Google · 이메일",
+      "tag": "15분/5회 제한",
+      "pos": [
+        260,
+        250
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/lib/auth.ts"
+        },
+        {
+          "path": "web/lib/auth-attempts.ts"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Supabase Postgres",
+      "sublabel": "pgvector 768 · 17 tables",
+      "tag": "공개 API 차단",
+      "pos": [
+        500,
+        250
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/db/migrations/0019_lock_public_api.up.sql"
+        },
+        {
+          "path": "web/lib/db.ts"
+        }
+      ]
+    },
+    {
+      "id": "gemini",
+      "type": "external",
+      "label": "Gemini 임베딩",
+      "sublabel": "gemini-embedding-001",
+      "pos": [
+        800,
+        250
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/lib/embeddings.ts"
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "type": "backend",
+      "label": "/api/jobs/*",
+      "sublabel": "collect · embed · notify",
+      "tag": "pg_cron 미등록",
+      "pos": [
+        500,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/app/api/jobs/collect/route.ts"
+        },
+        {
+          "path": "web/db/jobs/collect-job-trigger.sql"
+        }
+      ]
+    },
+    {
+      "id": "anyang",
+      "type": "external",
+      "label": "안양시 청년 게시판",
+      "sublabel": "cheerio 파싱",
+      "pos": [
+        800,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/lib/collector.ts"
+        }
+      ]
+    },
+    {
+      "id": "webpush",
+      "type": "external",
+      "label": "Web Push",
+      "sublabel": "VAPID",
+      "pos": [
+        260,
+        400
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/lib/web-push.ts"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-web",
+      "from": "users",
+      "to": "web",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-chat",
+      "from": "web",
+      "to": "chat",
+      "label": "질문 POST",
+      "variant": "emphasis"
+    },
+    {
+      "id": "chat-deepseek",
+      "from": "chat",
+      "to": "deepseek",
+      "label": "SSE 스트리밍",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-auth",
+      "from": "web",
+      "to": "auth",
+      "label": "로그인",
+      "variant": "security",
+      "labelAt": [
+        335,
+        207
+      ]
+    },
+    {
+      "id": "auth-db",
+      "from": "auth",
+      "to": "db",
+      "label": "계정 · 시도 기록"
+    },
+    {
+      "id": "chat-db",
+      "from": "chat",
+      "to": "db",
+      "label": "top-5 청크 검색",
+      "labelAt": [
+        575,
+        207
+      ]
+    },
+    {
+      "id": "chat-gemini",
+      "from": "chat",
+      "to": "gemini",
+      "label": "질문 임베딩",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "jobs-db",
+      "from": "jobs",
+      "to": "db",
+      "label": "공고 · 청크 저장"
+    },
+    {
+      "id": "jobs-anyang",
+      "from": "jobs",
+      "to": "anyang",
+      "label": "목록 수집",
+      "labelAt": [
+        764,
+        440
+      ]
+    },
+    {
+      "id": "jobs-gemini",
+      "from": "jobs",
+      "to": "gemini",
+      "label": "청크 임베딩",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "jobs-webpush",
+      "from": "jobs",
+      "to": "webpush",
+      "label": "알림 발송"
+    },
+    {
+      "id": "webpush-users",
+      "from": "webpush",
+      "to": "users",
+      "label": "푸시 알림",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "인증 · 보안",
+      "items": [
+        "Auth.js v5 (Google + 이메일/비밀번호), JWT 세션, argon2id",
+        "auth_attempts: 15분 5회 초과 시 429",
+        "DB는 서버 pg Pool로만 접속, 0019로 anon/authenticated 권한 차단"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "챗봇 (RAG)",
+      "items": [
+        "질문을 Gemini로 768차원 임베딩",
+        "notice_chunks에서 코사인 유사도 top-5 검색",
+        "DeepSeek 스트리밍 응답 + 출처(citations) 전송"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "배치 작업",
+      "items": [
+        "수집: 매일 04:00 KST, 알림: 5분마다 (설계값)",
+        "설계상 Supabase pg_cron이 호출하지만 아직 미등록",
+        "모든 잡은 x-scheduler-secret 헤더로 보호"
+      ]
+    }
+  ]
+}

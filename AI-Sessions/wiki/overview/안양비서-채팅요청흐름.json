@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "안양 비서 채팅 요청 흐름",
+    "viewBox": [
+      1080,
+      590
+    ],
+    "column_fit": "spread",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "사용자",
+      "sublabel": "채팅 화면"
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "웹앱",
+      "sublabel": "(tabs)/chat"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "/api/chat",
+      "sublabel": "세션 확인 · RAG"
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Postgres",
+      "sublabel": "pgvector"
+    },
+    {
+      "id": "gemini",
+      "type": "external",
+      "label": "Gemini",
+      "sublabel": "임베딩 768"
+    },
+    {
+      "id": "deepseek",
+      "type": "external",
+      "label": "DeepSeek",
+      "sublabel": "deepseek-chat"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 202,
+      "label": "요청 · 저장"
+    },
+    {
+      "from": 208,
+      "to": 284,
+      "label": "근거 검색"
+    },
+    {
+      "from": 290,
+      "to": 368,
+      "label": "스트리밍 응답"
+    },
+    {
+      "from": 374,
+      "to": 452,
+      "label": "응답 후 처리 after()"
+    }
+  ],
+  "messages": [
+    {
+      "id": "post",
+      "from": "web",
+      "to": "api",
+      "y": 160,
+      "label": "POST /api/chat",
+      "variant": "emphasis"
+    },
+    {
+      "id": "save-user",
+      "from": "api",
+      "to": "db",
+      "y": 188,
+      "label": "대화 · 사용자 메시지 저장"
+    },
+    {
+      "id": "embed-q",
+      "from": "api",
+      "to": "gemini",
+      "y": 216,
+      "label": "질문 임베딩 (PII 마스킹)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "search",
+      "from": "api",
+      "to": "db",
+      "y": 244,
+      "label": "선호 벡터 결합 · top-5 검색"
+    },
+    {
+      "id": "chunks",
+      "from": "db",
+      "to": "api",
+      "y": 272,
+      "label": "관련 공고 청크",
+      "variant": "return"
+    },
+    {
+      "id": "llm",
+      "from": "api",
+      "to": "deepseek",
+      "y": 300,
+      "label": "대화 + 근거로 스트리밍 요청",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sse",
+      "from": "api",
+      "to": "web",
+      "y": 328,
+      "label": "citations 이벤트 + 토큰 스트림",
+      "variant": "return"
+    },
+    {
+      "id": "render",
+      "from": "web",
+      "to": "user",
+      "y": 356,
+      "label": "답변 · 출처 표시",
+      "variant": "return"
+    },
+    {
+      "id": "save-answer",
+      "from": "api",
+      "to": "db",
+      "y": 384,
+      "label": "답변 저장",
+      "variant": "dashed"
+    },
+    {
+      "id": "summarize",
+      "from": "api",
+      "to": "deepseek",
+      "y": 412,
+      "label": "선호 요약 (6개마다)",
+      "variant": "dashed"
+    },
+    {
+      "id": "save-pref",
+      "from": "api",
+      "to": "db",
+      "y": 440,
+      "label": "선호 임베딩 → user_preferences",
+      "variant": "dashed"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "web",
+      "from": 160,
+      "to": 362,
+      "type": "frontend"
+    },
+    {
+      "participant": "api",
+      "from": 160,
+      "to": 446,
+      "type": "backend"
+    },
+    {
+      "participant": "db",
+      "from": 183,
+      "to": 194,
+      "type": "database"
+    },
+    {
+      "participant": "gemini",
+      "from": 211,
+      "to": 222,
+      "type": "external"
+    },
+    {
+      "participant": "db",
+      "from": 239,
+      "to": 278,
+      "type": "database"
+    },
+    {
+      "participant": "deepseek",
+      "from": 295,
+      "to": 334,
+      "type": "external"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "근거 검색 (RAG)",
+      "items": [
+        "질문·선호 벡터로 notice_chunks top-5 검색",
+        "PII 마스킹 후 Gemini 임베딩"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "스트리밍 응답",
+      "items": [
+        "DeepSeek 본문을 tee로 화면 전송·저장 분리",
+        "첫 SSE 이벤트로 출처 전송, 최대 300초"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "응답 후 처리",
+      "items": [
+        "after()로 응답 뒤 저장 완료 보장",
+        "6개마다 선호 요약 적재 (주기 미확정)"
+      ]
+    }
+  ]
+}
