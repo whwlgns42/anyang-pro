@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -26,7 +26,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
 
 ## Details
 
-### 작업 단위 (모두 [[anyang-backend-api]] 승인 후 착수, 값은 그 문서 기준 미확정)
+### 작업 단위 (모두 [[anyang-backend-api]] 승인 후 착수, 값은 그 문서 기준)
 
 1. **인증·동의** — Auth.js v5 설정(Google + Credentials provider, JWT 세션, `jwt`/`session`
    콜백에서 로그인 provider를 `token.provider`/`session`에 기록 — 12번 관리자 인가가
@@ -61,7 +61,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    게시판 HTML 구조는 2026-09-28 메인 세션이 확인했고 커밋 766ea20에서 구현·테스트됨
    (backend 설계 5절, [[2026-09-28_anyang-first-build-paused]]). 구조가 바뀌면 파서를 갱신한다.
 6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 기억 추출·주입). 공용 가림 함수
-   (`lib/mask-pii.ts` 등, 미확정 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·기억 추출 결과
+   (`lib/mask-pii.ts` 등 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·기억 추출 결과
    문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
    기존에는 Gemini 임베딩에만 적용). **인용 공지 스트림(확인 항목 22, backend 설계
    3-2절)** — RAG 검색 결과(notice_id 중복 제거)를 `event: citations` SSE 이벤트로 DeepSeek
@@ -77,8 +77,12 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    `summarizePreference`를 새 프롬프트·JSON 배열 출력(`extractPreferences` 제안 이름)으로
    교체, 파싱 실패는 빈 배열로 처리. 저장은
    [[anyang-database-schema#user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는
-   내 정보" 화면의 데이터]]의 중복 방지·갱신 쿼리(UPDATE 실패 시 INSERT)를 따른다. 3번 의존.
-   테스트: 3-3절·3-3-1절·3절 5번의 테스트 방법([[anyang-backend-api#테스트 방법]]) 참고.
+   내 정보" 화면의 데이터]]의 중복 방지·갱신 쿼리(UPDATE 실패 시 INSERT)를 따른다. **부분
+   답변 저장(확인 항목 43-b, backend 설계 3-3-2절)** — 스트림 읽기 중 예외·중단이 나도
+   그때까지 모은 `assistantText`가 비어 있지 않으면 `messages`에 저장한다(빈 문자열이면
+   저장하지 않음, 기존 `if (assistantText)` 조건 유지). 잘린 답변 표시는 두지 않는다. 3번
+   의존. 테스트: 3-3절·3-3-1절·3-3-2절·3절 5번의 테스트 방법([[anyang-backend-api#테스트
+   방법]]) 참고.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
@@ -123,12 +127,6 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     승인이 적혀 있는지 반드시 확인한다. 승인 기록이 없으면 등록하지 않고 멈춰서 보고한다.
     16번과 대상 테이블·보존 기간이 달라 별도 작업 단위로 둔다(YAGNI에 위배되지 않음 —
     합치면 오히려 조건 분기가 늘어난다).
-
-### 선택 항목(사용자 결정 대기, 확인 항목 43)
-
-- **스트림 읽기 예외 시 부분 저장** — [[anyang-backend-api#3-3-2. 부수 관찰 — 메시지 1개짜리
-  대화(AI 답변 미저장) 원인 확인 (2026-09-29, 확인 항목 43)]]의 제안. 6번 작업에 포함할지는
-  재승인 때 결정된다. 포함되지 않으면 이번 라운드에서 구현하지 않는다.
 
 ### 순서 제안
 

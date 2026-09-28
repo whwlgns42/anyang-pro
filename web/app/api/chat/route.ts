@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/require-auth";
 import { maskPii } from "@/lib/mask-pii";
 import { ageBandLabel } from "@/lib/age-band";
 import { embedText } from "@/lib/embeddings";
-import { streamDeepSeekChat, summarizePreference, type ChatMessage } from "@/lib/deepseek";
+import { streamDeepSeekChat, extractPreferences, type ChatMessage } from "@/lib/deepseek";
 
 // anyang-backend-api 3절 — 채팅 + RAG. DeepSeek 스트리밍 응답을 tee()해 클라이언트로는 원본
 // SSE 바이트를 그대로 전달하고, 다른 분기는 서버가 읽어 조립·저장한다(스트림 형식 자체는
@@ -14,7 +14,12 @@ import { streamDeepSeekChat, summarizePreference, type ChatMessage } from "@/lib
 export const maxDuration = 300;
 
 const RAG_TOP_K = 5;
-const PREFERENCE_EXTRACTION_EVERY_N_MESSAGES = 6; // 제안값(미확정) — 메시지 6개(왕복 3회)마다
+// anyang-backend-api 3-3절(확인 항목 43, 확정) — 최근 N개 + 유사 K개, 합계 최대 10개.
+const MEMORY_RECENT_N = 5;
+const MEMORY_SIMILAR_K = 5;
+const MEMORY_MAX_TOTAL = 10;
+// database 설계(user_preferences 절) — 코사인 거리 0.08 미만(유사도 0.92 이상)이면 갱신.
+const PREFERENCE_UPDATE_DISTANCE_THRESHOLD = 0.08;
 
 function internalDeepSeekUserId(userId: string): string {
   // 실제 user_id/email이 아닌, 사용자별로 고정된 무작위 성격의 내부 ID(anyang-backend-api 3절 3번).
@@ -35,38 +40,90 @@ export async function buildQueryVector(userId: string, messageEmbedding: number[
   return messageEmbedding.map((v, i) => 0.5 * v + 0.5 * avgPref[i]);
 }
 
-async function maybeExtractPreference(conversationId: string, userId: string): Promise<void> {
-  const { rows } = await pool.query<{ count: string }>(
-    `select count(*)::text as count from messages where conversation_id = $1`,
-    [conversationId],
-  );
-  const messageCount = Number(rows[0]?.count ?? 0);
-  if (messageCount === 0 || messageCount % PREFERENCE_EXTRACTION_EVERY_N_MESSAGES !== 0) return;
-
-  const { rows: historyRows } = await pool.query<{ role: string; content: string }>(
-    `select role, content from messages where conversation_id = $1 order by created_at asc`,
-    [conversationId],
-  );
-  const conversationText = historyRows.map((m) => `${m.role}: ${maskPii(m.content)}`).join("\n");
-
-  let summary: string | null;
+// anyang-backend-api 3-3절 — 최근 N개 + 유사 K개(합계 최대 10, 최근 우선, 중복 제거)를
+// 채팅 시스템 프롬프트 주입과 3-3-1절 추출의 "기존 기억 목록"에 함께 쓴다. 최근 기억 조회가
+// 실패하면 기억 절 자체를 생략하고, 유사 기억 조회만 실패하면 최근 기억만으로 진행한다(폴백).
+async function fetchMemories(userId: string, messageEmbedding: number[]): Promise<string[]> {
+  let recent: { id: string; preference_text: string }[];
   try {
-    summary = await summarizePreference(conversationText);
+    const { rows } = await pool.query<{ id: string; preference_text: string }>(
+      `select id, preference_text, updated_at from user_preferences
+        where user_id = $1 order by updated_at desc limit $2`,
+      [userId, MEMORY_RECENT_N],
+    );
+    recent = rows;
+  } catch {
+    return [];
+  }
+
+  let similar: { id: string; preference_text: string }[];
+  try {
+    const { rows } = await pool.query<{ id: string; preference_text: string }>(
+      `select id, preference_text, embedding <=> $2 as distance from user_preferences
+        where user_id = $1 order by embedding <=> $2 limit $3`,
+      [userId, JSON.stringify(messageEmbedding), MEMORY_SIMILAR_K],
+    );
+    similar = rows;
+  } catch {
+    similar = [];
+  }
+
+  const seenIds = new Set<string>();
+  const merged: string[] = [];
+  for (const row of [...recent, ...similar]) {
+    if (seenIds.has(row.id)) continue;
+    seenIds.add(row.id);
+    merged.push(row.preference_text);
+    if (merged.length >= MEMORY_MAX_TOTAL) break;
+  }
+  return merged;
+}
+
+// anyang-backend-api 3절 5번·3-3-1절 — consumeAndStore가 답변을 저장한 직후 매번 호출한다
+// (기존 6의 배수 게이트는 제거됨). knownFacts는 채팅 요청 시 이미 조회한 fetchMemories 결과를
+// 재사용한다(추가 조회 없음). 저장은 database 설계의 중복 방지·갱신 쿼리(UPDATE 실패 시 INSERT)를 따른다.
+async function extractAndStorePreference(
+  conversationId: string,
+  userId: string,
+  userMessage: string,
+  assistantText: string,
+  knownFacts: string[],
+): Promise<void> {
+  const conversationText = `사용자: ${maskPii(userMessage)}\n어시스턴트: ${maskPii(assistantText)}`;
+
+  let facts: string[];
+  try {
+    facts = await extractPreferences(conversationText, knownFacts);
   } catch {
     return; // 선호 추출 실패는 채팅 자체를 실패시키지 않는다(부가 기능)
   }
-  if (!summary) return;
 
-  const maskedSummary = maskPii(summary);
-  try {
-    const embedded = await embedText(maskedSummary);
-    await pool.query(
-      `insert into user_preferences (user_id, preference_text, embedding, embedding_model, source_conversation_id)
-       values ($1, $2, $3, $4, $5)`,
-      [userId, maskedSummary, JSON.stringify(embedded.embedding), embedded.model, conversationId],
-    );
-  } catch {
-    // 임베딩 실패 시 이 회차의 선호 저장만 건너뛴다.
+  for (const fact of facts) {
+    const maskedFact = maskPii(fact);
+    try {
+      const embedded = await embedText(maskedFact);
+      const embeddingJson = JSON.stringify(embedded.embedding);
+      const updateResult = await pool.query<{ id: string }>(
+        `update user_preferences
+            set preference_text = $2, embedding = $3, embedding_model = $4,
+                source_conversation_id = $5, updated_at = now()
+          where id = (
+            select id from user_preferences where user_id = $1 order by embedding <=> $3 limit 1
+          )
+            and (embedding <=> $3) < $6
+          returning id`,
+        [userId, maskedFact, embeddingJson, embedded.model, conversationId, PREFERENCE_UPDATE_DISTANCE_THRESHOLD],
+      );
+      if (updateResult.rows.length === 0) {
+        await pool.query(
+          `insert into user_preferences (user_id, preference_text, embedding, embedding_model, source_conversation_id)
+           values ($1, $2, $3, $4, $5)`,
+          [userId, maskedFact, embeddingJson, embedded.model, conversationId],
+        );
+      }
+    } catch {
+      // 임베딩/저장 실패 시 이 문장만 건너뛴다.
+    }
   }
 }
 
@@ -74,31 +131,38 @@ export async function consumeAndStore(
   stream: ReadableStream<Uint8Array>,
   conversationId: string,
   userId: string,
+  userMessage: string,
+  knownFacts: string[],
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let assistantText = "";
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const payload = trimmed.slice(5).trim();
-      if (payload === "[DONE]") continue;
-      try {
-        const json = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) assistantText += delta;
-      } catch {
-        // 부분/비-JSON 청크는 무시. 클라이언트에는 별도 tee 분기로 원본이 이미 전달됐다.
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const json = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
+          const delta = json.choices?.[0]?.delta?.content;
+          if (delta) assistantText += delta;
+        } catch {
+          // 부분/비-JSON 청크는 무시. 클라이언트에는 별도 tee 분기로 원본이 이미 전달됐다.
+        }
       }
     }
+  } catch {
+    // anyang-backend-api 3-3-2절(확인 항목 43-b) — 스트림 읽기 중 예외·중단(취소 포함)이 나도
+    // 그때까지 모은 assistantText가 있으면 아래에서 저장을 시도한다. 잘린 답변 표시는 두지 않는다.
   }
 
   if (assistantText) {
@@ -107,7 +171,7 @@ export async function consumeAndStore(
       assistantText,
     ]);
     await pool.query(`update conversations set updated_at = now() where id = $1`, [conversationId]);
-    await maybeExtractPreference(conversationId, userId);
+    await extractAndStorePreference(conversationId, userId, userMessage, assistantText, knownFacts);
   }
 }
 
@@ -149,13 +213,19 @@ export async function POST(request: NextRequest) {
 
   const maskedMessage = maskPii(message);
 
+  let messageEmbedding: number[];
   let queryVector: number[];
   try {
     const embedded = await embedText(maskedMessage);
+    messageEmbedding = embedded.embedding;
     queryVector = await buildQueryVector(authResult.userId, embedded.embedding);
   } catch {
     return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 502 });
   }
+
+  // anyang-backend-api 3-3절(확인 항목 43) — 가공 전 원본 메시지 임베딩을 재사용(추가 임베딩
+  // 호출 없음). 이 목록은 아래 프롬프트 주입과 3-3-1절 추출의 "기존 기억 목록"에 함께 쓴다.
+  const memories = await fetchMemories(authResult.userId, messageEmbedding);
 
   const { rows: notices } = await pool.query<{
     id: string;
@@ -210,9 +280,15 @@ export async function POST(request: NextRequest) {
     ? notices.map((n, i) => `[${i + 1}] ${n.title}\n${n.chunk_text}`).join("\n\n")
     : "(관련 공지 없음)";
 
+  // anyang-backend-api 3-3절(확인 항목 43) — 기억이 1건 이상이면 "사용자 조건" 절과 "관련
+  // 공지" 절 사이에 끼워 넣는다. 0건이면 헤더를 포함해 절 전체를 생략한다.
+  const memoryBlock = memories.length
+    ? `\n\n기억하는 사용자 정보:\n${memories.map((m) => `- ${m}`).join("\n")}`
+    : "";
+
   const systemPrompt =
     "당신은 안양시 청년정책 안내 비서입니다. 아래 사용자 조건에 맞는 공지를 우선 언급하며 " +
-    `답하세요.\n\n사용자 조건 - ${conditionText}\n\n관련 공지:\n${noticesText}`;
+    `답하세요.\n\n사용자 조건 - ${conditionText}${memoryBlock}\n\n관련 공지:\n${noticesText}`;
 
   const { rows: historyRows } = await pool.query<{ role: string; content: string }>(
     `select role, content from messages where conversation_id = $1 order by created_at asc`,
@@ -238,7 +314,7 @@ export async function POST(request: NextRequest) {
   const [clientStream, captureStream] = deepseekRes.body.tee();
   const conversationIdForStorage = conversationId;
   const runConsumeAndStore = () =>
-    consumeAndStore(captureStream, conversationIdForStorage, authResult.userId).catch((err) => {
+    consumeAndStore(captureStream, conversationIdForStorage, authResult.userId, message, memories).catch((err) => {
       console.error("chat: failed to store assistant message", err);
     });
   // Vercel 서버리스 함수는 응답을 반환하면 곧바로 종료될 수 있어, await 없는 fire-and-forget
