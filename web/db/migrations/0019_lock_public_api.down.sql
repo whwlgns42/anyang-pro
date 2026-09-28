@@ -1,3 +1,5 @@
+begin;
+
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon')
@@ -22,3 +24,5 @@ begin
     execute format('alter table public.%I disable row level security', t.tablename);
   end loop;
 end $$;
+
+commit;

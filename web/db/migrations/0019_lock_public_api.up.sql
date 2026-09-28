@@ -1,3 +1,5 @@
+begin;
+
 do $$
 declare
   t record;
@@ -22,3 +24,5 @@ begin
       revoke all on functions from anon, authenticated;
   end if;
 end $$;
+
+commit;
