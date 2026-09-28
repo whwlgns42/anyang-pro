@@ -12,7 +12,8 @@ owner: database
 PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 기록, 공지(notice)와 그 벡터
 조각, 대화, 선호(preference) 벡터, 푸시 구독, 알림 설정 테이블을 둔다. 관리자 기능(수집 이력,
 공지 숨김, 알림 발송 로그, 계정 정지, 외부 API 사용량)을 위한 로그성 테이블도 두되 개인별
-대화·기억 원문은 담지 않는다. 스케줄은 Supabase
+대화·기억 원문은 담지 않는다. 로그인 실패·가입 시도 제한을 위한 `auth_attempts` 테이블과
+알림 발송 시 실패 기기 수를 기록하는 `notify_logs` 컬럼을 둔다. 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
 사용자 설계 승인으로 확정되기 전까지 ``이다.
@@ -48,6 +49,14 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
   관리·통계, 외부 API 사용량)는 확정이나, 이를 담을 로그성 테이블 구조·컬럼·보존 기간은 모두
   이 문서의 다른 값과 마찬가지로 (미확정) 제안이다. 관리자 화면에서도 개인별 대화·기억 원문은
   보이지 않는다(집계·메타데이터만) — 이 원칙에 따라 아래 로그 테이블은 대화 내용을 담지 않는다.
+- **2026-09-28 개정(확인 항목 29·30, [[anyang-youth-policy-assistant#확인이 필요한 항목]])**:
+  로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과, 회원가입 시도는 같은 IP
+  15분에 5회 초과 시 일시 차단(확정, user, 2026-09-28) — 외부 서비스 없이 DB 기록 방식으로
+  판정한다(확정). 비밀번호 최소 8자(확정, 검증은 backend). 알림 발송은 사용자가 등록한 기기
+  (구독) 중 한 대라도 성공하면 `notify_logs.result='success'`로 보고, 실패한 기기 수를 함께
+  기록한다(확정, user, 2026-09-28). 이를 담을 새 테이블(`auth_attempts`)과 `notify_logs`
+  컬럼 추가는 이 문서의 다른 값과 마찬가지로 (미확정) 제안이며, 새 마이그레이션(0017·0018)
+  계획을 아래에 둔다.
 
 ## Details
 
@@ -111,6 +120,74 @@ DB에 세션을 저장하지 않는다. 이 문서에는 `sessions` 테이블을
 
 - Auth.js 표준 스키마에는 없는 테이블이라 backend가 자체 credentials provider를 쓸 때만 필요.
   backend 조율에서 최종 확정.
+- **비밀번호 최소 길이(확정, 8자, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 29,
+  user, 2026-09-28)**: 이 테이블 스키마와 무관하다 — `password_hash`는 해시만 저장하므로
+  길이 컬럼이나 제약을 두지 않는다. 최소 8자 검증은 회원가입 API가 해시하기 전에 수행한다
+  (애플리케이션 책임, backend 소관).
+
+#### auth_attempts — 로그인 실패·가입 시도 제한 (신규, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 29)
+
+로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과, 회원가입 시도는 같은 IP
+15분에 5회 초과 시 일시 차단하는 것은 확정이다(user, 2026-09-28). 외부 서비스(Redis,
+rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다. 아래 테이블 구조·해시 방식·
+판정 쿼리·보존 방식은 이 문서의 다른 신규 값과 마찬가지로 (미확정) 제안이다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| id | uuid, PK | |
+| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안(미확정) |
+| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안(미확정) |
+| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고(미확정) |
+| created_at | timestamptz, not null, default now() | 시도 시각 |
+
+- 인덱스: `(attempt_type, identifier_type, identifier_hash, created_at)` — 창 안 횟수를
+  세는 조회에 쓴다(제안).
+- **원값/해시 선택 (제안, 미확정)**: 개인정보 최소화 관점에서 이메일·IP 원값 대신 SHA-256
+  해시(`sha256(lower(trim(email)))`, `sha256(ip_text)`)로 저장한다 — 판정에는 "같은 값인지"
+  비교만 필요하고 원값 복원이 필요 없다(단방향 해시로 충분). `identifier_type='email'`이면
+  판정 시점에 로그인 시도에 쓰인 이메일을 같은 해시 함수로 계산해 비교하면 되므로, 관리자가
+  특정 이메일·IP의 최근 시도를 찾아야 할 때도 같은 방식으로 재계산해 대조할 수 있다(원값이
+  없어도 조회 가능). IP는 `inet` 대신 `text` 해시로 저장해 IPv4/IPv6 형식 차이를 신경 쓰지
+  않는다(제안).
+- **판정 쿼리 예시 (제안)**:
+  ```sql
+  -- 최근 15분 내 실패(또는 시도) 횟수. 로그인은 identifier_type을 'email'과 'ip' 각각
+  -- 조회해 둘 중 하나라도 5회 초과면 차단. 가입은 identifier_type='ip'만 조회.
+  select count(*) from auth_attempts
+  where attempt_type = $1        -- 'login_failure' 또는 'signup_attempt'
+    and identifier_type = $2     -- 'email' 또는 'ip'
+    and identifier_hash = $3
+    and created_at > now() - interval '15 minutes';
+  ```
+- **기록 방식 (제안, 미확정)**: 로그인 실패마다(비밀번호 불일치, 존재하지 않는 이메일 등)
+  `identifier_type='email'`·`identifier_type='ip'` 각각 1행씩(총 2행) 기록해 이메일 기준·IP
+  기준 판정을 독립된 행으로 센다. 회원가입 시도는 성공·실패와 무관하게 매
+  `POST /api/auth/register` 호출마다 `identifier_type='ip'` 1행을 기록한다(제안 — 스팸성
+  대량 가입 자체를 막는 목적이므로 성공한 가입도 횟수에 포함한다). 로그인 성공 시에는 행을
+  남기지 않는다(제안 — 정상 사용자의 반복 로그인이 차단에 영향을 주지 않게 하기 위함).
+  차단 여부 판정 시점(요청 처리 전 사전 확인 vs. 실패 확정 후 기록)과 정확한 처리 순서는
+  backend가 구현 단계에서 정한다.
+- **차단 지속 시간 (제안)**: 별도 "차단 해제 시각" 컬럼을 두지 않고 슬라이딩 윈도우로
+  계산한다 — "15분 안에 5회 초과"라는 조건이 매 요청 시점에 재평가되므로, 가장 오래된 초과
+  유발 시도가 15분을 넘어가면 자연히 차단이 풀린다. 차단 중에도 계속 시도하면 새 행이 쌓여
+  차단이 연장된다(의도된 동작, 제안).
+- 응답 코드·메시지(예: 429 여부, 에러 코드 문자열)는 backend 제안이다
+  ([[anyang-backend-api#1-4. 403 응답 에러 코드]]와 같은 방식으로 코드를 추가할 수 있다).
+- **보존·정리 (제안, 미확정, 되돌릴 수 없는 삭제)**: 판정에 필요한 창이 15분뿐이므로 오래
+  보관할 이유가 적다. `collect_runs`/`api_usage_logs`와 같은 방식(pg_cron 트리거)으로 1일
+  보존 후 정리한다(제안 — 15분보다 길게 두어 관리자가 최근 차단 이력을 잠깐 확인할 여유는
+  남기되, 개인정보 최소화 원칙에 따라 기존 로그 90일보다 훨씬 짧게 잡는다).
+  ```sql
+  -- 제안: 매시간 1일 지난 인증 시도 기록 정리 (보존 1일은 제안, 실행 주기·시각도 제안)
+  select cron.schedule(
+    'cleanup-auth-attempts',
+    '0 * * * *',
+    $$ delete from auth_attempts where created_at < now() - interval '1 day'; $$
+  );
+  ```
+  이 정리 잡도 데이터 삭제이므로 되돌릴 수 없는 마이그레이션 취급이다(dev-common.md 규칙).
+  구현 단계 지시서에 이 정리 잡 등록에 대한 사용자 승인이 별도로 적혀 있어야 실행한다 —
+  없으면 등록하지 않고 멈춰서 보고한다(위 `consents`/`cleanup-logs`와 동일한 규칙).
 
 #### profiles (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위와 코드값 셋은 확정)
 
@@ -368,7 +445,22 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | sent_at | timestamptz, null 허용 | 실제 발송(성공/실패 확정) 시각. `pending` 상태에서는 null |
 | result | text, not null, default 'pending' | `pending`(선점됨, 발송 전) / `success` / `failed`. 값 셋은 제안 |
 | error_summary | text, null 허용 | 실패 사유 요약(예: push 구독 만료) |
+| failed_device_count | integer, not null, default 0 | 이번 발송에서 실패한 기기(구독) 수(미확정, 신규). 아래 "다중 기기 발송 판정" 참고 |
 
+- **다중 기기 발송 판정 (신규, 제안, 미확정, [[anyang-youth-policy-assistant#확인이 필요한
+  항목]] 30)**: 한 사용자가 `push_subscriptions`를 여러 개(기기 여러 대) 등록할 수 있다.
+  notify-job은 한 (사용자, 공지) 조합에 대해 그 사용자의 모든 `push_subscriptions`에 전송을
+  시도한다(제안, backend 소관). 하나라도 성공하면 `result='success'`로 기록하고(확정, user,
+  2026-09-28 — 한 대라도 성공하면 success), 모두 실패하면 `result='failed'`로 기록한다. 이
+  전송 시도 중 성공하지 못한 기기 수를 `failed_device_count`에 채운다(확정 — 실패 기기 수를
+  함께 기록). 만료된 구독(410/404 — [[anyang-backend-api#8. Web Push (VAPID)]] 소관)을
+  전송 전/후 어느 시점에 삭제할지, 삭제된 만료 구독을 이 실패 수에 포함할지는 backend가
+  이미 정한 "만료 구독 삭제, 실패로 세지 않음" 방침([[anyang-backend-api]] 참고)을 따르는
+  것이 이 컬럼의 취지와 맞다(제안 — 만료돼 삭제한 구독은 "이번에 실패한 기기"라기보다 더 이상
+  유효하지 않은 기기이므로). 최종 집계 기준(어떤 실패까지 셀지)은 backend 조율 후 확정한다.
+- **관리자 화면 표시 (제안, 미확정)**: 13-2절 "날짜별 발송·실패 수" 집계에 `failed_device_count`
+  합계를 추가할지는 이번 설계 범위 밖(필요하면 backend가 조회 쿼리에 `sum(failed_device_count)`
+  를 더하면 된다, 스키마 변경 불필요).
 - **중복 발송 방지 + pending 흐름 (제안, 프로젝트 문서 확인 항목 17과 연결)**: `unique(user_id,
   notice_id)` 제약을 둔다. notify-job은 다음 순서로 처리한다(제안, backend 구현 단계에서
   정확한 순서 확정).
@@ -593,6 +685,32 @@ select cron.schedule(
 - 개발/운영 Supabase 프로젝트는 별도로 둔다([[anyang-deployment-portability]] 확정). 각 환경은
   독립된 `DATABASE_URL`을 쓰고, 같은 마이그레이션 파일을 순서대로 적용한다.
 
+### 마이그레이션 계획 (0017·0018, 확인 항목 29·30)
+
+기존 마이그레이션은 `web/db/migrations/0000_extensions` ~ `0016_collect_runs_triggered_by_set_null`
+(파일당 `.up.sql`/`.down.sql` 쌍, 순수 SQL)까지 있다(구현 완료분, 실제 파일 확인).
+새 결정 29·30을 위한 마이그레이션 2건을 다음 번호로 계획한다(제안, 파일은 구현 단계에서
+생성 — 이번 설계 단계에서는 만들지 않는다).
+
+- **0017_auth_attempts** — `auth_attempts` 테이블 생성(위 절 참고).
+  - up: `create table auth_attempts (id uuid primary key default gen_random_uuid(), attempt_type text not null, identifier_type text not null, identifier_hash text not null, created_at timestamptz not null default now()); create index auth_attempts_lookup_idx on auth_attempts (attempt_type, identifier_type, identifier_hash, created_at);`
+  - down: `drop table auth_attempts;`
+  - 롤백: 신규 테이블 생성이므로 `DROP TABLE`로 완전히 되돌릴 수 있다. 되돌릴 수 없는
+    마이그레이션이 아니다(테이블 삭제는 "새로 만든 것을 되돌리는" 것이지 기존 데이터 삭제가
+    아니다).
+- **0018_notify_logs_failed_device_count** — `notify_logs`에 `failed_device_count` 컬럼 추가.
+  - up: `alter table notify_logs add column failed_device_count integer not null default 0;`
+  - down: `alter table notify_logs drop column failed_device_count;`
+  - 롤백: 컬럼 추가이므로 `DROP COLUMN`으로 되돌릴 수 있다. 기존 행은 `default 0`으로
+    채워지므로 마이그레이션 자체가 기존 데이터를 깨지 않는다. 되돌릴 수 없는 마이그레이션이
+    아니다.
+- 두 마이그레이션 모두 테이블/컬럼 신설이라 "되돌릴 수 없는 마이그레이션"(테이블·컬럼 삭제,
+  데이터 삭제, 타입 축소)에 해당하지 않는다 — 구현 단계에서 특별한 사용자 승인 없이도
+  실행할 수 있다(dev-common.md 규칙 4단계, "구현 단계 지시서에 승인 내용 확인" 절차는 여전히
+  따른다). 단, 이 두 마이그레이션이 여는 정리 잡(`cleanup-auth-attempts`, 위 `auth_attempts`
+  절)은 데이터 삭제이므로 별도로 되돌릴 수 없는 작업이며 그 잡 등록 자체에 대한 사용자 승인이
+  구현 단계 지시서에 적혀 있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
+
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
@@ -607,6 +725,12 @@ select cron.schedule(
   (user, 2026-09-27, [[anyang-service-scope]]), `cleanup-logs`와 마찬가지로 구현 단계 지시서에
   이 정리 잡 등록에 대한 별도 사용자 승인이 적혀 있어야 실제로 등록한다. 없으면 등록하지 않고
   멈춰서 보고한다.
+- `auth_attempts` 정리 잡(`cleanup-auth-attempts`, 위 `auth_attempts` 절)도 되돌릴 수 없는
+  삭제다. 1일 보존은 제안(미확정)이므로 보존 기간 자체가 먼저 설계 승인으로 확정돼야 하고,
+  그 뒤 구현 단계에서도 이 정리 잡 등록에 대한 별도 사용자 승인이 지시서에 적혀 있어야
+  실제로 등록한다. 없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
+  마이그레이션)와 `notify_logs.failed_device_count` 컬럼(0018 마이그레이션)은 위
+  "마이그레이션 계획" 절에 적힌 대로 되돌릴 수 없는 마이그레이션이 아니다.
 
 ## 테스트 방법 (제안)
 
@@ -644,6 +768,16 @@ select cron.schedule(
   재동의 대상으로 분류하는지 확인한다.
 - 동의 기록 보관 확인(보관 기간 확정 후): 탈퇴 처리 시 `consents.withdrawn_at`이 채워지고
   `user_id`가 null이 되는지, 보관 기간이 지난 뒤 정리 잡이 실행되면 그 행이 삭제되는지 확인한다.
+- 로그인·가입 시도 제한 확인(0017, 확인 항목 29): 같은 `identifier_hash`로
+  `attempt_type='login_failure'` 행을 15분 이내에 6번 넣고 판정 쿼리(위 `auth_attempts`
+  절)의 count가 6으로 5 초과인지 확인한다. 15분보다 오래된 행만 있을 때는 count가 창 밖
+  행을 세지 않는지도 확인한다. `attempt_type='signup_attempt'`도 같은 방식으로 확인한다.
+- `auth_attempts` 정리 잡 확인(승인 후 구현 시): 1일 지난 `created_at` 값을 가진 테스트 행을
+  넣고 `cleanup-auth-attempts` 잡 실행 후 삭제됐는지 확인한다.
+- 알림 다중 기기 성공/실패 확인(0018, 확인 항목 30): 한 사용자에게 `push_subscriptions` 2개
+  이상을 등록한 뒤, 그중 하나만 성공하도록 만들고 `notify_logs.result`가 `success`로,
+  `failed_device_count`가 실패한 기기 수(예: 1)로 기록되는지 확인한다. 모두 실패하면
+  `result='failed'`이고 `failed_device_count`가 시도한 기기 수 전체와 같은지 확인한다.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -692,6 +826,14 @@ select cron.schedule(
 - `consents.policy_version` 부여 방식(날짜 기반 문자열 등)과 "현재 처리방침 버전" 상수 관리
   위치 — 해결(backend): 환경변수가 아니라 코드 상수(`lib/consent.ts`(미확정 경로)의
   `POLICY_VERSION`)로 관리하는 것으로 채택 ([[anyang-backend-api#1. 인증 (Auth.js v5)]]).
+- 로그인 실패·가입 시도 제한 값 — 해결(2026-09-28, user): 로그인 실패는 같은 이메일 또는
+  같은 IP 기준 15분에 5회 초과, 가입은 같은 IP 15분에 5회 초과 시 일시 차단, 외부 서비스
+  없이 DB 기록. 비밀번호 최소 8자. [[anyang-youth-policy-assistant#확인이 필요한 항목]] 29.
+  담을 `auth_attempts` 테이블 구조·해시 방식·보존 기간(1일 제안)은 아직 (미확정)이다(위
+  `auth_attempts` 절 참고).
+- 알림 다중 기기 성공/실패 판정 — 해결(2026-09-28, user): 기기 중 한 대라도 성공하면
+  `success`, 실패 기기 수를 함께 기록. [[anyang-youth-policy-assistant#확인이 필요한 항목]]
+  30. `notify_logs.failed_device_count` 컬럼(미확정)으로 반영(위 `notify_logs` 절 참고).
 
 ## Links
 
@@ -704,3 +846,4 @@ select cron.schedule(
 - [[anyang-backend-api]]
 - [[anyang-backend-tasks]]
 - [[anyang-frontend-screens]]
+- [[anyang-backend-api-mihwakjeong-removal-corruption]]
