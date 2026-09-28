@@ -72,6 +72,10 @@ export function MemoryClient() {
   return (
     <main className="page">
       <h1>AI가 기억하는 내 정보</h1>
+      <p className="hint-text">
+        AI가 대화에서 알려주신 이름이나 호칭 같은 사실을 기억해 다음 대화에 활용해요. 기억한
+        내용은 여기서 확인하고 언제든 지울 수 있어요.
+      </p>
       {error && (
         <p className="error-text" role="alert">
           {error}

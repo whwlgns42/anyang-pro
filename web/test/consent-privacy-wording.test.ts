@@ -19,3 +19,24 @@ describe("consent/privacy-policy wording (확인 항목 41)", () => {
     }
   });
 });
+
+// 확인 항목 43(user, 2026-09-29): 이름·호칭 기억 고지가 처리방침 "AI 처리" 절에,
+// 안내 문구가 "AI가 기억하는 내 정보" 화면에 남아 있어야 한다. 금지 문자열 규칙은 위와 동일하다.
+describe("memory notice wording (확인 항목 43)", () => {
+  it("privacy-policy mentions name/nickname memory without forbidden strings", () => {
+    const src = readFileSync(join(__dirname, "..", "app", "privacy-policy", "page.tsx"), "utf-8");
+    expect(src).toContain("이름이나 호칭");
+    expect(src).toContain("AI가 기억하는 내 정보");
+    for (const word of FORBIDDEN) {
+      expect(src.includes(word)).toBe(false);
+    }
+  });
+
+  it("memory settings page shows the fixed notice", () => {
+    const src = readFileSync(
+      join(__dirname, "..", "app", "(tabs)", "settings", "memory", "memory-client.tsx"),
+      "utf-8",
+    );
+    expect(src).toContain("이름이나 호칭 같은 사실을 기억해");
+  });
+});
