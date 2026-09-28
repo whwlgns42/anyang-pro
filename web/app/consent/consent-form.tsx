@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthLayout } from "../_lib/auth-layout";
 
-// anyang-frontend-screens 7절: 체크박스 2개(수집·이용, 국외 이전) 모두 필수. 재동의 진입 시에도
-// 같은 화면을 재사용하고, 탈퇴 경로(8-1절, /settings/account)를 함께 보여준다.
+// anyang-frontend-screens 7절: 체크박스 2개(수집·이용, AI 활용) 모두 필수. 재동의 진입 시에도
+// 같은 화면을 재사용하고, 탈퇴 경로(8-1절, /settings/account)를 함께 보여준다. 두 번째
+// 체크박스 문구는 확인 항목 41(user, 2026-09-28)로 국가명·서비스명 없는 표현으로 단순화됐다
+// — 코드 식별자 overseas_transfer·필수 검증·API body는 그대로다.
 export default function ConsentFormInner() {
   const router = useRouter();
   const [collectionUse, setCollectionUse] = useState(false);
@@ -55,7 +57,7 @@ export default function ConsentFormInner() {
           </div>
         </fieldset>
         <fieldset>
-          <legend>국외 이전 동의 (필수)</legend>
+          <legend>AI 활용 동의 (필수)</legend>
           <div className="radio-row">
             <input
               id="consent-overseas"
@@ -64,9 +66,8 @@ export default function ConsentFormInner() {
               onChange={(e) => setOverseasTransfer(e.target.checked)}
             />
             <label htmlFor="consent-overseas">
-              대화 메시지·선호 요약이 채팅 응답과 RAG 검색을 위해 DeepSeek(중국 서버)·Gemini(임베딩,
-              국외)로 전송되는 것에 동의합니다. 전송 전 전화번호·이메일·주민등록번호 형태는
-              가려집니다.
+              대화 내용을 AI가 처리하는 것에 동의합니다. 대화 내용 중 전화번호·이메일·
+              주민등록번호 형태는 전송 전 가려집니다.
             </label>
           </div>
         </fieldset>

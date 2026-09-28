@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -56,7 +56,7 @@ draft 반영에 의존한다.
    `collection_use`·`overseas_transfer`) 모두 필수. 두 번째 체크박스 라벨·legend는
    2026-09-28 개정(확인 항목 41)으로 국가명·서비스명 없는 단순 문구("AI 활용 동의" 계열)로
    바뀐다 — 코드 식별자·필수 검증·API body는 바뀌지 않는다. 전화번호·이메일·주민등록번호
-   가림 안내는 남기는 방향으로 제안(미확정). 세부는
+   가림 안내는 남기는 방향으로 제안. 세부는
    [[anyang-frontend-screens#7. 개인정보 동의 화면 (`/consent`)]] 참고.
    `POST /api/auth/register`/`POST /api/auth/consent`의 `consents` body 연동. 재동의
    강제(공통 가드가 403 + `CONSENT_REQUIRED`를 감지해 이 화면으로 리다이렉트, 1번 작업과
