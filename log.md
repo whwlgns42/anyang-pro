@@ -49,3 +49,4 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-28 --:-- | save | 안양 비서 로그인·인증 화면 시각 개선(사용자 피드백): ca0e5c9, 중앙 카드·데스크톱 2단·로고 마크, test 170·tsc 통과, build는 dev 서버 충돌 우려로 미실행 | [[anyang-youth-policy-assistant]]
 2026-09-28 --:-- | flag | [rule-skip] 로그인 시각 개선 커밋 ca0e5c9를 npm run build 없이 커밋(dev 서버 3100 실행 중이라 tsc로 대체) — build 확인 필요 | .claude/rules/dev-common.md 규칙 4
 2026-09-28 --:-- | lint | flag 해결(2026-09-28 --:--): 메인 세션이 ca0e5c9 기준 npm run build 통과 확인(dev 서버 중지 후 실행·재기동, /login 200) | [[anyang-youth-policy-assistant]]
+2026-09-28 --:-- | save | 안양 비서 마이그레이션 19개(0000~0018) Supabase 원격 적용(user 요청, database, MCP) 전부 성공, schema_migrations 기록. 확인 항목 34(대상 프로젝트 개발/운영 미확인)·35(RLS 꺼짐, 설계 없음) | [[anyang-youth-policy-assistant]] [[anyang-database-schema]]

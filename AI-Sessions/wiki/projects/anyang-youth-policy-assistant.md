@@ -52,6 +52,7 @@ owner: pm
 - 2026-09-28: 사용자가 확인 항목 32 승인(정리 잡 pg_cron 등록은 보류), 27 보류 해제 → 33 설계. 설계 5종을 승인된 설계에서 빼고 database(app_settings·notice_profile_matches, 0019·0020 계획) → backend(6-1절 Jev 매칭, 13-0-1절 관리자 설정 API, TYPESAFE_API_KEY) → frontend(10-1절 /admin/settings 토글, API 사용량 Jev) draft. 기존 확정값의 괄호 안 (미확정) 표기 정리(database 40·backend 45·frontend 88건). TypeSafe JS/HTTP 호출 형태·처리 국가·재동의 여부는 웹 확인 도구가 없어 확인 필요로 남음. 33 구현은 사용자 승인 뒤.
 - 2026-09-28: 사용자가 27·33 취소. 각 소유자가 33 내용 제거(database·backend·frontend 설계 문서, pm 결정 문서 행), 5종 status active, 승인된 설계 재기록.
 - 2026-09-28: 사용자 피드백(로그인 화면 중앙 정렬 안 됨·허전함)으로 frontend 시각 개선 ca0e5c9(taste-skill 호출). 로그인 데스크톱 2단(소개·핵심 가치 3개 + 카드), 모바일 1단, 로고 마크·한 줄 소개·G 아이콘·"또는" 구분선·처리방침 링크, /consent·/onboarding·/suspended 공통 중앙 카드 레이아웃(/post-login은 리다이렉트 전용이라 제외). 기능·API·흐름 변경 없음. npm test 170개·tsc 통과, **npm run build는 개발 서버(3100)와 .next 충돌 우려로 미실행**.
+- 2026-09-28: 사용자 요청으로 database가 Supabase MCP로 `web/db/migrations/` up 파일 19개(0000_extensions ~ 0018_notify_logs_failed_device_count)를 순서대로 원격 DB에 적용 — 전부 성공, 건너뜀·실패 없음(적용 전 빈 프로젝트). migrate.sh와 같은 추적을 위해 각 적용에 `public.schema_migrations` 기록을 함께 넣음(19개 version). public 테이블 17개(schema_migrations 포함). `web/db/jobs/`(pg_cron 트리거·정리 잡)와 down 파일은 적용 안 함. 저장소 파일 변경 없음. 확인 항목 34·35.
 
 ### 설계 문서
 
@@ -113,7 +114,9 @@ owner: pm
     - 32 해결(2026-09-28, user): 위 제안값 전부 확정. 단 `cleanup-auth-attempts` pg_cron **등록**은 보류(DB 연결 후 결정, 다른 정리 잡과 같음). x-forwarded-for: Vercel은 이 헤더를 자체 값으로 덮어써 위조할 수 없다(메인 세션 확인, https://vercel.com/docs/headers/request-headers). 보드 서버(UNO Q) 등으로 이전하면 프록시 구성에 따라 다시 검토한다.
 33. 27 후속 — 프로필 기반 Jev 매칭 설계(2026-09-28, user 결정): 프로필 조건 × 공지 대상 여부를 Jev(Noul)로 판정. 관리자 화면 토글로 켜고 끔(기본 OFF). 적용 대상은 선호(기억)가 없는 사용자만, 선호가 있는 사용자는 기존 벡터 유사도. 장애·키 없음이면 OFF와 같은 동작. 설계 draft 후 사용자 승인, 구현은 승인 뒤. 전송 범위는 [[anyang-ai-models-data-transfer]].
     - 설계 draft 완료(2026-09-28): [[anyang-database-schema]] app_settings·notice_profile_matches, [[anyang-backend-api]] 6-1·13-0-1절, [[anyang-frontend-screens]] 10-1절, tasks 두 문서. 재승인 대기.
-    - **취소(2026-09-28, user)**: 하지 않는다. 처리방침 반영도 불필요. b39f76a로 설계 문서·결정 문서에 넣은 33 내용은 모두 제거했다(32 승인 반영·(미확정) 표기 정리는 유지). 재검토용 메모는 "Jev 도입 제안" 절에만 둔다.
+    - **취소(2026-09-28, user)**: 하지 않는다. 처리방침 반영도 불필요.
+34. **사용자 확인 필요(2026-09-28, 마이그레이션 적용 후 database 제기)**: Supabase MCP가 연결된 프로젝트의 이름·ref가 MCP 응답에 나오지 않아, 19개 마이그레이션이 적용된 곳이 개발용 프로젝트인지 운영용인지 확인하지 못했다([[anyang-deployment-portability]]는 개발/운영 분리). 사용자가 Supabase 대시보드에서 확인 필요.
+35. **설계 결정 필요(2026-09-28, 동일)**: 새 테이블 17개 모두 RLS가 꺼져 있다. Supabase는 public 스키마를 Data API로 노출하므로 anon 키로 모든 행을 읽고 쓸 수 있다는 경고가 나왔다(Supabase MCP `list_tables` 경고). [[anyang-database-schema]]에는 RLS·Data API 노출에 대한 설계가 없다. 앱은 `DATABASE_URL` 서버 접속만 쓰므로 선택지 예: (a) 모든 테이블 RLS 활성화 + 정책 없음(서버 접속 역할은 영향 없음, anon·authenticated 차단), (b) Data API에서 public 스키마 노출 해제. 설계 변경이라 database 설계 → 사용자 승인 필요. 그때까지 노출 상태이며 실제 개인정보를 넣기 전에 결정해야 한다. b39f76a로 설계 문서·결정 문서에 넣은 33 내용은 모두 제거했다(32 승인 반영·(미확정) 표기 정리는 유지). 재검토용 메모는 "Jev 도입 제안" 절에만 둔다.
 
 ## 승인된 설계
 
