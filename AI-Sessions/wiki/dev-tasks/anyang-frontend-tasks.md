@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -21,7 +21,7 @@ owner: frontend
 `occupation_type`, `enrollment_status`)도 [[anyang-service-scope]] "프로필 선택지" 행(user,
 2026-09-27)에서 확정됐다. `occupation_type`의 온보딩 입력 컴포넌트(select vs 라디오, 8개
 선택지 때문에 나온 제안)는 설계 승인(2026-09-27)으로 네이티브 select로 확정됐다
-([[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`, 미확정)]]).
+([[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`)]]).
 
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
@@ -30,6 +30,10 @@ owner: frontend
 **2026-09-28 추가(확인 항목 29)**: 아래 2-1 작업 단위를 추가했다. 이미 1차 구현된 2번(로그인/
 가입 화면)에 대한 추가 작업이며, [[anyang-frontend-screens#1-1. 비밀번호 길이·시도 제한 안내 (신규, 확인 항목 29)]]
 draft 반영에 의존한다.
+
+**2026-09-28 추가(확인 항목 33, 27 후속)**: 아래 12-1 작업 단위를 추가했다(신규 화면,
+프로필 기반 Jev 매칭 관리자 토글). [[anyang-frontend-screens#10-1. 관리자 — 프로필 매칭 설정 (`/admin/settings`, 신규, 확인 항목 33)]]
+draft 반영에 의존한다. 값은 모두 (미확정)이며 사용자 재승인 대상이다.
 
 ## Details
 
@@ -60,7 +64,7 @@ draft 반영에 의존한다.
    탈퇴 경로(3-1번) 링크도 함께 둔다. 세부 문구는 법률 검토 확정 후 교체(구조 변경 아님,
    제안).
 3-1. **계정 탈퇴 화면** (`/settings/account`) — 확인 다이얼로그(네이티브 `window.confirm` 또는
-   모달, 미확정), `DELETE /api/account` 연동(재동의 필요·정지 상태에서도 호출 가능, backend
+   모달, 제안), `DELETE /api/account` 연동(재동의 필요·정지 상태에서도 호출 가능, backend
    1절·1-2절 예외), 1년 보관 안내 문구 표시.
 4. **온보딩 화면** (`/onboarding`) — 프로필 입력 폼(4개 확정 항목·코드값 셋 확정 기준 —
    [[anyang-service-scope]]), `PUT /api/profile` 연동. `occupation_type` 입력 컴포넌트(select
@@ -69,7 +73,7 @@ draft 반영에 의존한다.
    `POST /api/chat` 연동. (1차 구현은 인용 카드 없이 텍스트만 표시 — 인용 카드는 5-1번.)
 5-1. **채팅 인용 카드 반영** (`/chat`, 신규 — 확인 항목 22) — SSE 파서에 `event: citations`
    블록 분기 추가, 인용 카드(제목·게시일, `/notices/[id]` 링크) 렌더링, 빈 목록 시 카드 행
-   생략. 세부는 [[anyang-frontend-screens#3. 채팅 화면 (`/chat`, 미확정)]] "인용 공지 카드"
+   생략. 세부는 [[anyang-frontend-screens#3. 채팅 화면 (`/chat`)]] "인용 공지 카드"
    절. 5번 이후 착수.
 6. **추천 공지 피드·상세** (`/notices`, `/notices/[id]`) — `GET /api/notices/recommended`,
    `GET /api/notices/:id` 연동.
@@ -87,17 +91,22 @@ draft 반영에 의존한다.
     전송한다는 국외 이전 고지, 동의 기록 1년 보관 고지 포함. 법률 검토된 문구 확정 후
     콘텐츠만 채운다(구조는 이번에 만든다).
 12. **관리자 공통 레이아웃·가드** (`/admin`) — 관리자 API 응답 코드(401/403 `ADMIN_ONLY`)
-    기준 접근 판정([[anyang-frontend-screens#공통 레이아웃 (모바일 우선, 미확정)]]의 "관리자
+    기준 접근 판정([[anyang-frontend-screens#공통 레이아웃 (모바일 우선)]]의 "관리자
     가드" 절 — 판정은 `ADMIN_EMAILS` + 이번 세션의 로그인이 Google인 경우만 통과, 계정이
     아니라 이번 로그인 방식(JWT provider 클레임) 기준, backend 13-0절), 확인 다이얼로그
-    공통 컴포넌트(정지·정지 해제·삭제 공용). 13~15번이 의존.
+    공통 컴포넌트(정지·정지 해제·삭제 공용). 12-1·13~15번이 의존.
+12-1. **프로필 매칭 설정 화면** (`/admin/settings`, 신규 — 확인 항목 33) — 토글 1개(프로필
+    기반 Jev 매칭 on/off), 현재 상태·마지막 변경자·시각 표시, `GET/PATCH /api/admin/settings`
+    연동, 저장 실패 시 롤백·인라인 오류 표시, 12번 관리자 내비게이션에 연결. 세부는
+    [[anyang-frontend-screens#10-1. 관리자 — 프로필 매칭 설정 (`/admin/settings`, 신규, 확인 항목 33)]].
+    12번 이후 착수. 14번(외부 API 사용량 화면)은 기존 표를 그대로 재사용하므로 별도 수정 없음.
 13. **공지 수집 관리 화면** (`/admin/collect-runs`) — 실행 이력, 수동 수집 실행(최대 300초
     진행 상태 표시). `GET/POST /api/admin/collect-runs` 연동. (1차 구현은 실행 이력·수동
     수집만 있고 숨김 UI 없음 — 공지 목록·숨김/해제는 13-1번.)
 13-1. **공지 목록 탭 반영** (`/admin/collect-runs`, 신규 — 확인 항목 23) — "실행 이력"/
     "공지 목록" 탭 전환, `GET /api/admin/notices`(상태 필터·페이지 이동) 연동, 숨김/해제
     확인 다이얼로그 경유 `PATCH /api/admin/notices/:id/hide|unhide` 연동, 400/5xx 에러 표시.
-    세부는 [[anyang-frontend-screens#11. 공지 수집 관리 (`/admin/collect-runs`, 미확정)]]
+    세부는 [[anyang-frontend-screens#11. 공지 수집 관리 (`/admin/collect-runs`)]]
     "공지 목록 탭" 절. 13번 이후 착수, 12번(관리자 공통 가드)에도 의존.
 14. **알림 발송 현황·외부 API 사용량 화면** (`/admin/notify-logs`, `/admin/api-usage`) — 날짜
     범위 표. `GET /api/admin/notify-logs/summary`, `GET /api/admin/api-usage/summary` 연동.
@@ -110,7 +119,7 @@ draft 반영에 의존한다.
 
 1 → 2 → 2-1(2와 파일 겹치면 순차, 아니면 병렬 가능) → 3 → 3-1(3과 파일 겹치지 않으면 병렬
 가능) → 4 → (5, 6 병렬 가능, 파일 겹치지 않음) → 5-1 → (7, 8 함께) → 9, 10(각각 병렬 가능,
-파일 겹치지 않음) → 11 → 12 → (13, 14, 15 각각 병렬 가능, 파일 겹치지 않음) → 13-1.
+파일 겹치지 않음) → 11 → 12 → (12-1, 13, 14, 15 각각 병렬 가능, 파일 겹치지 않음) → 13-1.
 
 ## 테스트 방법
 

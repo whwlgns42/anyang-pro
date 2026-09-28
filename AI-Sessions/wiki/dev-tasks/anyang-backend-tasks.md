@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -19,7 +19,8 @@ database의 마이그레이션이 먼저 적용돼야 한다.
 notice_chunks/conversations/messages/user_preferences/push_subscriptions/notify_settings/
 consents/collect_runs/notify_logs/api_usage_logs/auth_attempts, users.suspended_at,
 notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션돼 있어야 아래
-작업을 시작할 수 있다. 서비스 범위는
+작업을 시작할 수 있다. 신규(확인 항목 33): `app_settings`(0019)·`notice_profile_matches`
+(0020)도 아래 7-1번 작업의 선행 조건이다 — 설계 승인 뒤 database가 먼저 적용한다. 서비스 범위는
 [[anyang-service-scope]](수집 대상 게시판 1개, 프로필 4항목, 알림 자유 시각+on/off, 기억·
 대화 히스토리 화면, 인증 부가 테이블 미사용, 가입 시 동의, 관리자 페이지 `ADMIN_EMAILS`
 기반 기능 4종)로 확정됐다.
@@ -73,6 +74,18 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
    `result='success'`, `failed_device_count`에 실패 기기 수 기록(만료 구독 삭제분 제외).
    3·8번 의존. 중복 발송 방지 방식은 database·backend 조율 완료(backend 설계 7절).
+7-1. **프로필 기반 Jev 매칭 (신규, 확인 항목 33)** — `lib/jev.ts`(TypeSafe 호출, 서버
+   전용), `lib/app-settings.ts`, `lib/profile-match.ts`(`lib/age-band.ts` 재사용, 캐시→
+   미판정분만 Jev→캐시 저장→임계값), 2-1번 추천 API·7번 알림 잡의 선호 0건 분기 변경,
+   `GET/PATCH /api/admin/settings`(12번 `requireAdmin` 재사용, 값 검증 400)
+   (backend 설계 6-1절, 13-0-1절). 장애·키 없음·타임아웃 시 OFF와 동일 동작 +
+   `api_usage_logs`에 `provider='jev'` 오류 기록. **착수 전 확인**: TypeSafe JS SDK/HTTP
+   API 정확한 호출 형태(backend 설계 6-1절 "확인 필요" — 이번 설계 세션은 WebFetch 없이
+   진행돼 Python SDK 구조로만 추정했다), TypeSafe 처리 국가·재동의 필요 여부(같은 절,
+   확인 불가). 3(임베딩 유틸의 재시도·타임아웃 처리 참고)·12(`requireAdmin`)·app_settings/
+   notice_profile_matches 마이그레이션(0019·0020) 의존. 테스트: 토글 OFF/ON 분기, 캐시
+   적중 시 Jev 미호출, 장애 시 OFF 동작, 관리자 아닌 계정 403
+   ([[anyang-backend-api#6-1. 프로필 기반 Jev 매칭 (신규, 확인 항목 33)]] 테스트 방법).
 8. **Web Push** — `POST/DELETE /api/push/subscribe`, `web-push` 연동.
 9. **스케줄러 공유 시크릿 미들웨어** — `/api/jobs/*` 공통 인증. 4·5·7번이 의존.
 10. **환경변수·배포 설정** — `output: 'standalone'`, Vercel 프로젝트 설정(icn1), 9절 환경변수
@@ -115,10 +128,11 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
 
 ### 순서 제안
 
-3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
+3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 7-1 → 13, 14 → 10, 16, 17. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 11은 나머지가 끝난 뒤
 여유 있을 때. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
-적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨).
+적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨). 7-1은 database의 0019·0020
+마이그레이션과 이 설계(확인 항목 33) 승인이 먼저 필요하다.
 
 ## 테스트 방법
 

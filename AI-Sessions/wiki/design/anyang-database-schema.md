@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: database
 ---
 
@@ -16,7 +16,7 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 알림 발송 시 실패 기기 수를 기록하는 `notify_logs` 컬럼을 둔다. 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
-사용자 설계 승인으로 확정되기 전까지 ``이다.
+사용자 설계 승인으로 확정됐다.
 
 ## Context
 
@@ -47,7 +47,7 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 - 관리자 기능: 2026-09-27 user 확정 — 관리자는 DB 역할 컬럼 없이 환경변수 `ADMIN_EMAILS`로만
   지정한다([[anyang-service-scope]]). 관리자 기능 ①~④(공지 수집 관리, 알림 발송 현황, 사용자
   관리·통계, 외부 API 사용량)는 확정이나, 이를 담을 로그성 테이블 구조·컬럼·보존 기간은 모두
-  이 문서의 다른 값과 마찬가지로 (미확정) 제안이다. 관리자 화면에서도 개인별 대화·기억 원문은
+  이 문서의 다른 값과 마찬가지로 제안이었으나 확정됐다. 관리자 화면에서도 개인별 대화·기억 원문은
   보이지 않는다(집계·메타데이터만) — 이 원칙에 따라 아래 로그 테이블은 대화 내용을 담지 않는다.
 - **2026-09-28 개정(확인 항목 29·30, [[anyang-youth-policy-assistant#확인이 필요한 항목]])**:
   로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과, 회원가입 시도는 같은 IP
@@ -55,8 +55,13 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
   판정한다(확정). 비밀번호 최소 8자(확정, 검증은 backend). 알림 발송은 사용자가 등록한 기기
   (구독) 중 한 대라도 성공하면 `notify_logs.result='success'`로 보고, 실패한 기기 수를 함께
   기록한다(확정, user, 2026-09-28). 이를 담을 새 테이블(`auth_attempts`)과 `notify_logs`
-  컬럼 추가는 이 문서의 다른 값과 마찬가지로 (미확정) 제안이며, 새 마이그레이션(0017·0018)
+  컬럼 추가는 이 문서의 다른 값과 마찬가지로 제안이었으나 확정됐으며, 새 마이그레이션(0017·0018)
   계획을 아래에 둔다.
+- **2026-09-28 개정(확인 항목 33, [[anyang-youth-policy-assistant#확인이 필요한 항목]])**:
+  프로필 기반 Jev 매칭 + 관리자 토글 기능을 위해 `app_settings`(관리자 토글값), 
+  `notice_profile_matches`(공지×조건 조합 판정 캐시) 두 테이블을 새로 제안한다(마이그레이션
+  0019·0020). 이 두 테이블의 구조·`condition_key` 형식·캐시 무효화 지점은 이번 라운드 신규
+  제안이라 (미확정)이다 — 위 auth_attempts와 달리 아직 설계 승인 전이다.
 
 ## Details
 
@@ -65,7 +70,7 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 이 문서의 표는 [[glossary]]의 도메인 용어(user, profile, notice, preference, notify-time,
 conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. 새 용어는 추가하지 않았다.
 
-### 테이블 제안 (모두 미확정)
+### 테이블 제안
 
 #### users
 
@@ -79,7 +84,7 @@ conversation, push-subscription, collect-job, notify-job)를 그대로 쓴다. �
 | suspended_at | timestamptz, null 허용 | 관리자가 계정을 정지한 시각. null이면 정상 상태(제안). 정지 사유를 남길지는 미확정 — 필요하면 별도 컬럼(예: `suspended_reason text`) 추가(되돌릴 수 있는 마이그레이션) |
 
 - **정지 계정 처리 방식**: [[anyang-backend-api#1-2. 정지 계정 제한 방식]]에서 정리한다 — 로그인은 허용, 제한
-  상태(제안, 미확정). 알림(notify-job)은 `suspended_at`이 not null인 사용자를 조회 대상에서
+  상태(제안). 알림(notify-job)은 `suspended_at`이 not null인 사용자를 조회 대상에서
   제외한다(아래 pg_cron 절 쿼리, `u.suspended_at is null` 조건). 정지는 로그인 계정(`users`)
   단위이므로 `credentials`/`accounts`를 따로 건드리지 않는다.
 - **계정 삭제**는 이 컬럼과 무관하게 기존 cascade 정책(위 각 테이블 `on delete cascade`)을 그대로
@@ -130,19 +135,19 @@ DB에 세션을 저장하지 않는다. 이 문서에는 `sessions` 테이블을
 로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과, 회원가입 시도는 같은 IP
 15분에 5회 초과 시 일시 차단하는 것은 확정이다(user, 2026-09-28). 외부 서비스(Redis,
 rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다. 아래 테이블 구조·해시 방식·
-판정 쿼리·보존 방식은 이 문서의 다른 신규 값과 마찬가지로 (미확정) 제안이다.
+판정 쿼리·보존 방식은 이 문서의 다른 신규 값과 마찬가지로 제안이었으나 확정됐다.
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | id | uuid, PK | |
-| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안(미확정) |
-| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안(미확정) |
-| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고(미확정) |
+| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안 |
+| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안 |
+| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고 |
 | created_at | timestamptz, not null, default now() | 시도 시각 |
 
 - 인덱스: `(attempt_type, identifier_type, identifier_hash, created_at)` — 창 안 횟수를
   세는 조회에 쓴다(제안).
-- **원값/해시 선택 (제안, 미확정)**: 개인정보 최소화 관점에서 이메일·IP 원값 대신 SHA-256
+- **원값/해시 선택 (제안)**: 개인정보 최소화 관점에서 이메일·IP 원값 대신 SHA-256
   해시(`sha256(lower(trim(email)))`, `sha256(ip_text)`)로 저장한다 — 판정에는 "같은 값인지"
   비교만 필요하고 원값 복원이 필요 없다(단방향 해시로 충분). `identifier_type='email'`이면
   판정 시점에 로그인 시도에 쓰인 이메일을 같은 해시 함수로 계산해 비교하면 되므로, 관리자가
@@ -159,7 +164,7 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
     and identifier_hash = $3
     and created_at > now() - interval '15 minutes';
   ```
-- **기록 방식 (제안, 미확정)**: 로그인 실패마다(비밀번호 불일치, 존재하지 않는 이메일 등)
+- **기록 방식 (제안)**: 로그인 실패마다(비밀번호 불일치, 존재하지 않는 이메일 등)
   `identifier_type='email'`·`identifier_type='ip'` 각각 1행씩(총 2행) 기록해 이메일 기준·IP
   기준 판정을 독립된 행으로 센다. 회원가입 시도는 성공·실패와 무관하게 매
   `POST /api/auth/register` 호출마다 `identifier_type='ip'` 1행을 기록한다(제안 — 스팸성
@@ -173,7 +178,7 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
   차단이 연장된다(의도된 동작, 제안).
 - 응답 코드·메시지(예: 429 여부, 에러 코드 문자열)는 backend 제안이다
   ([[anyang-backend-api#1-4. 403 응답 에러 코드]]와 같은 방식으로 코드를 추가할 수 있다).
-- **보존·정리 (제안, 미확정, 되돌릴 수 없는 삭제)**: 판정에 필요한 창이 15분뿐이므로 오래
+- **보존·정리 (제안, 되돌릴 수 없는 삭제)**: 판정에 필요한 창이 15분뿐이므로 오래
   보관할 이유가 적다. `collect_runs`/`api_usage_logs`와 같은 방식(pg_cron 트리거)으로 1일
   보존 후 정리한다(제안 — 15분보다 길게 두어 관리자가 최근 차단 이력을 잠깐 확인할 여유는
   남기되, 개인정보 최소화 원칙에 따라 기존 로그 90일보다 훨씬 짧게 잡는다).
@@ -189,7 +194,7 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
   구현 단계 지시서에 이 정리 잡 등록에 대한 사용자 승인이 별도로 적혀 있어야 실행한다 —
   없으면 등록하지 않고 멈춰서 보고한다(위 `consents`/`cleanup-logs`와 동일한 규칙).
 
-#### profiles (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위와 코드값 셋은 확정)
+#### profiles (항목 범위·코드값 셋·컬럼 타입 모두 확정)
 
 프로필 항목 범위는 생년·성별·직군·재학/재직 여부 4개로 확정됐다([[anyang-service-scope]],
 user, 2026-09-27). 소득 등 그 외 항목은 두지 않는다. `gender`/`enrollment_status`/
@@ -266,7 +271,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | created_at | timestamptz, default now() | |
 
 - 인덱스: HNSW(embedding) — pgvector의 `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)`
-  (거리 함수는 미확정, 코사인 유사도 제안).
+  (코사인 유사도 제안).
 - **모델 교체 시 재임베딩 절차 (제안)**:
   1. 새 모델명을 `embedding_model`에 구분해 새 행으로 추가하거나, 배치 잡으로 전체 재계산 후
      `embedding_model` 값을 일괄 갱신한다(어느 쪽이든 서비스 중단 없이 진행 가능하도록 컬럼에
@@ -282,7 +287,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 
 | 테이블 | 컬럼 | 설명 |
 |---|---|---|
-| conversations | id uuid PK, user_id uuid FK→users.id, title text null 허용, created_at, updated_at | 대화 한 묶음. `title`은 목록 화면에 보여줄 제목(미확정 — 자동 생성 방식은 backend가 정함, 예: 첫 메시지 요약). `updated_at`은 마지막 메시지 시각으로 갱신(애플리케이션 책임) |
+| conversations | id uuid PK, user_id uuid FK→users.id, title text null 허용, created_at, updated_at | 대화 한 묶음. `title`은 목록 화면에 보여줄 제목(자동 생성 방식은 backend가 정함, 예: 첫 메시지 요약). `updated_at`은 마지막 메시지 시각으로 갱신(애플리케이션 책임) |
 | messages | id uuid PK, conversation_id uuid FK→conversations.id, role text(user/assistant), content text, created_at | 개별 발화 |
 
 - 인덱스: `(user_id, updated_at desc)` — 대화 목록을 최근 순으로 조회할 때 사용.
@@ -329,7 +334,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 "국외 이전"(overseas_transfer)으로 분리해 각각 받는 것, 처리방침 개정 시 재동의를 강제하는 것,
 탈퇴 후에도 동의 기록을 즉시 삭제하지 않고 증빙용으로 일정 기간 보관하는 것도 확정
 ([[anyang-service-scope]], user, 2026-09-27). 아래 테이블 구조·컬럼 자체는 이 확정을 담기
-위한 제안이며 (미확정)이다.
+위한 제안이었으나 확정됐다.
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
@@ -386,7 +391,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | p256dh / auth | text, not null | Web Push 키 |
 | created_at | timestamptz, default now() | |
 
-#### notify_settings (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)
+#### notify_settings (항목 범위·시간대·컬럼 타입 모두 확정)
 
 알림 시각은 사용자별 자유 설정 + on/off로 확정됐다([[anyang-service-scope]], user,
 2026-09-27). 고정 선택지 분기는 더 이상 고려하지 않는다.
@@ -400,12 +405,12 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | timezone | text, not null, default 'Asia/Seoul' | 서비스가 국내 전용이므로 Asia/Seoul로 고정한다(확정). 모든 사용자에게 동일하게 적용하며, 사용자별로 다른 시간대를 선택하는 기능은 없다 |
 | updated_at | timestamptz, default now() | 설정 변경 시각 |
 
-- **알림 대상 공지 범위 (제안, 미확정)**: "알림을 켠 시각 이후 수집된 공지만" 알림 대상으로
+- **알림 대상 공지 범위 (제안)**: "알림을 켠 시각 이후 수집된 공지만" 알림 대상으로
   삼는다 — 가입(또는 재가입) 직후 과거에 쌓인 공지가 한꺼번에 발송되는 것을 막기 위함이다.
   `/api/jobs/notify`의 매칭 쿼리(backend, [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림
   잡]])에 `notices.collected_at > notify_settings.enabled_at` 조건을 추가하는 방식을 제안한다.
   이제 가입 시점부터 `enabled_at`이 항상 채워지므로, `enabled_at`이 null인 행은 이 컬럼을
-  도입하기 전에 만들어진 레거시 행뿐이다. 이 경우 **발송 대상에서 제외한다(제안, 미확정)** —
+  도입하기 전에 만들어진 레거시 행뿐이다. 이 경우 **발송 대상에서 제외한다(제안)** —
   "생성 시각 기준으로 간주" 대안도 있으나, 레거시 행의 실제 온/오프 이력을 알 수 없어 안전한
   쪽(제외)을 기본안으로 둔다. 최종 채택 여부와 정확한 비교 조건, 레거시 행 처리(마이그레이션
   시 `enabled_at`을 일괄 채울지)는 backend 조율 후 확정한다.
@@ -445,9 +450,9 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | sent_at | timestamptz, null 허용 | 실제 발송(성공/실패 확정) 시각. `pending` 상태에서는 null |
 | result | text, not null, default 'pending' | `pending`(선점됨, 발송 전) / `success` / `failed`. 값 셋은 제안 |
 | error_summary | text, null 허용 | 실패 사유 요약(예: push 구독 만료) |
-| failed_device_count | integer, not null, default 0 | 이번 발송에서 실패한 기기(구독) 수(미확정, 신규). 아래 "다중 기기 발송 판정" 참고 |
+| failed_device_count | integer, not null, default 0 | 이번 발송에서 실패한 기기(구독) 수(신규). 아래 "다중 기기 발송 판정" 참고 |
 
-- **다중 기기 발송 판정 (신규, 제안, 미확정, [[anyang-youth-policy-assistant#확인이 필요한
+- **다중 기기 발송 판정 (신규, 제안, [[anyang-youth-policy-assistant#확인이 필요한
   항목]] 30)**: 한 사용자가 `push_subscriptions`를 여러 개(기기 여러 대) 등록할 수 있다.
   notify-job은 한 (사용자, 공지) 조합에 대해 그 사용자의 모든 `push_subscriptions`에 전송을
   시도한다(제안, backend 소관). 하나라도 성공하면 `result='success'`로 기록하고(확정, user,
@@ -458,7 +463,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   이미 정한 "만료 구독 삭제, 실패로 세지 않음" 방침([[anyang-backend-api]] 참고)을 따르는
   것이 이 컬럼의 취지와 맞다(제안 — 만료돼 삭제한 구독은 "이번에 실패한 기기"라기보다 더 이상
   유효하지 않은 기기이므로). 최종 집계 기준(어떤 실패까지 셀지)은 backend 조율 후 확정한다.
-- **관리자 화면 표시 (제안, 미확정)**: 13-2절 "날짜별 발송·실패 수" 집계에 `failed_device_count`
+- **관리자 화면 표시 (제안)**: 13-2절 "날짜별 발송·실패 수" 집계에 `failed_device_count`
   합계를 추가할지는 이번 설계 범위 밖(필요하면 backend가 조회 쿼리에 `sum(failed_device_count)`
   를 더하면 된다, 스키마 변경 불필요).
 - **중복 발송 방지 + pending 흐름 (제안, 프로젝트 문서 확인 항목 17과 연결)**: `unique(user_id,
@@ -523,6 +528,65 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 - 각 API 호출 지점(DeepSeek 채팅, Gemini 임베딩)에서 성공/실패와 무관하게 1행씩 남긴다
   (backend 구현 단계에서 호출 래퍼에 공통으로 넣는 방식 제안).
 
+#### app_settings — 관리자 토글용 키·값 테이블 (신규, 확인 항목 33)
+
+[[anyang-youth-policy-assistant#확인이 필요한 항목]] 33 — 프로필 기반 Jev 매칭 기능을 관리자
+화면 토글로 켜고 끄는 것은 확정이다(user, 2026-09-28). 이 토글값을 담을 이 테이블 구조와
+값 형식은 이 문서의 다른 신규 값과 마찬가지로 (미확정) 제안이다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| key | text, PK | 설정 키. 예: `profile_matching_jev` |
+| value | jsonb, not null | 설정값. 불리언 토글이면 `true`/`false`를 JSON 값으로 저장(제안 — 컬럼 하나로 여러 타입의 향후 설정을 같은 구조로 담기 위해 jsonb를 쓴다, 과설계 방지 관점에서는 `boolean` 컬럼도 대안이나 설정 종류가 늘어날 가능성을 감안한 제안) |
+| updated_at | timestamptz, not null, default now() | 마지막 변경 시각 |
+| updated_by | uuid, FK → users.id, on delete set null | 마지막으로 값을 바꾼 관리자. 계정이 삭제돼도 이력은 남기되 연결만 끊는다(제안, `consents.user_id`와 같은 방식) |
+
+- 초기 행(제안): 마이그레이션 up에서 `('profile_matching_jev', 'false'::jsonb, now(), null)` 1행을
+  시드한다 — 기본값이 꺼짐(OFF)이라는 사용자 결정([[anyang-youth-policy-assistant#확인이 필요한
+  항목]] 33)을 스키마 차원에서 보장한다.
+- 조회·갱신은 `GET/PATCH /api/admin/settings`(backend 소관, [[anyang-backend-api]] 조율 예정)를
+  통해서만 이뤄진다. 행이 1개뿐이라 별도 캐시나 인덱스는 두지 않는다(제안, YAGNI).
+- 이 테이블의 값은 admin 판단이므로 이 문서가 이미 확정 취급하는 "관리자 기능" 원칙
+  ([[anyang-service-scope]], user, 2026-09-27)의 연장선이지만, 테이블 구조 자체는 이번 라운드
+  신규 제안이라 (미확정)이다.
+
+#### notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목 33)
+
+Jev(Noul) 판정은 "조건 조합" 단위로 결과가 같으므로(같은 나이대·성별·직군·재학/재직 조합의
+사용자는 같은 공지에 대해 같은 판정을 받는다), 판정 결과를 공지×조건 조합 단위로 캐시해
+같은 조합의 사용자가 여러 명이어도 Jev 호출을 1번만 하게 한다. 아래 구조는 (미확정) 제안이다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| notice_id | uuid, FK → notices.id, on delete cascade | 판정 대상 공지 |
+| condition_key | text | 조건 조합을 나타내는 문자열. 아래 "condition_key 형식" 참고 |
+| probability | real, not null | Jev(Noul)가 반환한 확률(0~1). 임계값 비교는 backend가 [[anyang-backend-api]]에서 정한다(제안 임계값 0.5, 위 27번 설계안 참고) |
+| judged_at | timestamptz, not null, default now() | 판정 시각. 캐시 신선도 판단에 쓴다(아래 "캐시 무효화" 참고) |
+
+- PK: `(notice_id, condition_key)` — 같은 공지·같은 조건 조합에는 판정이 하나만 존재한다(제안).
+- **condition_key 형식 (제안, 미확정)**: 나이대·성별·직군·재학/재직 4개 값을 고정 순서로
+  이어붙인 문자열. 예: `age:19-24|gender:female|enrollment:employed|occupation:office`.
+  각 부분의 실제 코드값은 [[anyang-service-scope#Details]](프로필 선택지)와
+  [[anyang-ai-models-data-transfer]](나이대 구간 6단계: 19세 미만/19~24/25~29/30~34/35~39/
+  40세 이상)를 그대로 쓴다 — 식별정보가 아니라 구간·코드값 조합이므로 원값(생년월일 등)이
+  들어가지 않는다(위 27번 설계안의 개인정보 원칙과 일치). 항목이 null(미입력)인 경우 값 자리에
+  `none`을 넣어 구분한다(제안, 예: `occupation:none`). 정확한 구분자·순서·null 표기는 backend가
+  `lib/profile-match.ts`([[anyang-backend-api]] 참고) 구현 시 최종 확정한다.
+- **캐시 무효화 (제안, 미확정)**: 공지 내용이 바뀌면(재임베딩 경로 — collector가 기존
+  `notice_chunks`를 지우고 다시 채우는 지점, 위 `notice_chunks`/공지 재수집 절 참고) 그 공지의
+  판정도 무효화해야 한다. 재임베딩과 같은 지점(collector가 `notice_id`로 `notice_chunks`를
+  지우는 코드)에서 `delete from notice_profile_matches where notice_id = $1`을 함께 실행하는
+  방식을 기본안으로 제안한다 — 별도 트리거·버전 컬럼 없이 같은 이벤트에 묶어 과설계를 피한다.
+  공지가 신규 수집(최초 삽입)일 때는 무효화할 캐시가 없으므로 해당 없음. 최종 구현 지점과
+  방식은 backend가 collector 코드([[anyang-backend-api#5. 공지 수집기 (Collector)]]) 조율 후
+  확정한다.
+- **보존·정리 (제안, 미확정)**: 이 캐시는 `notices`가 `on delete cascade`로 연결돼 있어 공지가
+  삭제되면 함께 삭제된다. 공지가 살아있는 한 캐시도 유지한다 — 별도 만료 기간을 두지 않는다
+  (제안, YAGNI: 재계산 비용을 아끼는 것이 캐시의 목적이므로 시간 기반 만료를 추가로 둘 이유가
+  없다. 필요해지면 `judged_at` 기준 정리 잡을 추가하되 이는 새 요구사항이다).
+- 인덱스: PK(`notice_id`, `condition_key`)로 조회(판정 여부 확인)와 삭제(무효화) 모두 충분하다
+  (제안, 추가 인덱스 불필요 — 과설계 방지).
+
 #### 연령대·직군 집계 쿼리 예시 (제안) — 관리자 화면 "사용자 관리·통계"용
 
 개인 식별 없이 집계만 하므로 `profiles`를 그룹핑해서 조회한다.
@@ -586,17 +650,17 @@ select count(*) from users where suspended_at is null;
 이전 가능성 원칙에 따라 스케줄 로직 본체는 앱 API 엔드포인트에 둔다. pg_cron은 트리거만 한다.
 
 ```sql
--- 제안: 5분마다 알림 잡 트리거 (미확정 — [[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림 잡]]과
--- 5분 창 방식으로 통일함, 주기 자체의 최종 확정은 backend와 조율)
+-- 제안: 5분마다 알림 잡 트리거 ([[anyang-backend-api#7. 스케줄러 — 수집 잡 / 알림 잡]]과
+-- 5분 창 방식으로 통일함, 정확한 실행 주기는 backend와 조율)
 select cron.schedule(
   'notify-job-trigger',
   '*/5 * * * *',
   $$
   select net.http_post(
-    url := '앱 API URL(미확정, 환경변수로 관리)',
+    url := '앱 API URL(환경변수로 관리)',
     headers := jsonb_build_object(
       'content-type', 'application/json',
-      'x-scheduler-secret', '공유 시크릿(미확정, 환경변수/Supabase Vault로 관리, 문서에 값 기록 금지)'
+      'x-scheduler-secret', '공유 시크릿(환경변수/Supabase Vault로 관리, 문서에 값 기록 금지)'
     )
   );
   $$
@@ -653,21 +717,21 @@ select cron.schedule(
   - 자정 경계를 포함한 정확한 조건식과 pg_cron 실행이 지연될 때의 창 보정(예: 5분보다 오래
     걸린 실행 사이의 빈 구간)은 backend 구현 단계에서 최종 확정한다.
 - collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)을 기본안으로 제안한다. Vercel Cron은
-  이전 가능성 원칙 3에 따라 쓰지 않는다. 주기는 하루 1회(미확정 제안) — 게시판이 관공서 공지
+  이전 가능성 원칙 3에 따라 쓰지 않는다. 주기는 하루 1회(제안) — 게시판이 관공서 공지
   게시판이라 실시간성 요구가 낮고, 무료 티어 리소스(pg_net 호출, Vercel 함수 실행)를 아끼기
-  위함이다. 시각은 사용자 트래픽이 적은 새벽(예: Asia/Seoul 04:00, 미확정 제안)으로 잡아 알림
+  위함이다. 시각은 사용자 트래픽이 적은 새벽(예: Asia/Seoul 04:00, 제안)으로 잡아 알림
   잡보다 충분히 먼저 끝나게 한다.
   ```sql
-  -- 제안(미확정): 매일 새벽 1회 수집 잡 트리거 (UTC 19:00 = Asia/Seoul 04:00)
+  -- 제안: 매일 새벽 1회 수집 잡 트리거 (UTC 19:00 = Asia/Seoul 04:00)
   select cron.schedule(
     'collect-job-trigger',
     '0 19 * * *',
     $$
     select net.http_post(
-      url := '앱 API URL(미확정, 환경변수로 관리)',
+      url := '앱 API URL(환경변수로 관리)',
       headers := jsonb_build_object(
         'content-type', 'application/json',
-        'x-scheduler-secret', '공유 시크릿(미확정, 환경변수로 관리, 문서에 값 기록 금지)'
+        'x-scheduler-secret', '공유 시크릿(환경변수로 관리, 문서에 값 기록 금지)'
       )
     );
     $$
@@ -711,6 +775,29 @@ select cron.schedule(
   절)은 데이터 삭제이므로 별도로 되돌릴 수 없는 작업이며 그 잡 등록 자체에 대한 사용자 승인이
   구현 단계 지시서에 적혀 있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
 
+### 마이그레이션 계획 (0019·0020, 확인 항목 33)
+
+[[anyang-youth-policy-assistant#확인이 필요한 항목]] 33 — 프로필 기반 Jev 매칭 + 관리자 토글
+사용자 결정(2026-09-28)을 위한 마이그레이션 2건을 0018 다음 번호로 계획한다(제안, 파일은
+구현 단계에서 생성 — 이번 설계 단계에서는 만들지 않는다).
+
+- **0019_app_settings** — `app_settings` 테이블 생성 + 초기 행 시드(위 `app_settings` 절 참고).
+  - up: `create table app_settings (key text primary key, value jsonb not null, updated_at timestamptz not null default now(), updated_by uuid references users(id) on delete set null); insert into app_settings (key, value) values ('profile_matching_jev', 'false'::jsonb);`
+  - down: `drop table app_settings;`
+  - 롤백: 신규 테이블 생성(시드 행 포함)이므로 `DROP TABLE`로 완전히 되돌릴 수 있다. 되돌릴 수
+    없는 마이그레이션이 아니다.
+- **0020_notice_profile_matches** — `notice_profile_matches` 테이블 생성(위 절 참고).
+  - up: `create table notice_profile_matches (notice_id uuid not null references notices(id) on delete cascade, condition_key text not null, probability real not null, judged_at timestamptz not null default now(), primary key (notice_id, condition_key));`
+  - down: `drop table notice_profile_matches;`
+  - 롤백: 신규 테이블 생성이므로 `DROP TABLE`로 완전히 되돌릴 수 있다. 판정 캐시일 뿐 원본
+    데이터가 아니므로(삭제돼도 다시 판정하면 재생성 가능) 되돌릴 수 없는 마이그레이션이 아니다.
+- 두 마이그레이션 모두 테이블 신설이라 "되돌릴 수 없는 마이그레이션"(테이블·컬럼 삭제, 데이터
+  삭제, 타입 축소)에 해당하지 않는다 — 구현 단계에서 특별한 사용자 승인 없이도 실행할 수 있다
+  (dev-common.md 규칙 4단계, "구현 단계 지시서에 승인 내용 확인" 절차는 여전히 따른다). 단,
+  이 기능 자체(프로필 매칭 Jev 판정, 토글)는 위 27번 설계안 승인이 먼저 필요하며, `app_settings`/
+  `notice_profile_matches`의 구체 구조(컬럼 형식, `condition_key` 형식, 캐시 무효화 지점)는
+  이 문서 값과 마찬가지로 설계 승인으로 확정된다.
+
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
@@ -726,11 +813,15 @@ select cron.schedule(
   이 정리 잡 등록에 대한 별도 사용자 승인이 적혀 있어야 실제로 등록한다. 없으면 등록하지 않고
   멈춰서 보고한다.
 - `auth_attempts` 정리 잡(`cleanup-auth-attempts`, 위 `auth_attempts` 절)도 되돌릴 수 없는
-  삭제다. 1일 보존은 제안(미확정)이므로 보존 기간 자체가 먼저 설계 승인으로 확정돼야 하고,
-  그 뒤 구현 단계에서도 이 정리 잡 등록에 대한 별도 사용자 승인이 지시서에 적혀 있어야
-  실제로 등록한다. 없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
+  삭제다. 1일 보존 값은 확정됐으나, 구현 단계에서도 이 정리 잡의 pg_cron 실제 등록에 대한
+  별도 사용자 승인이 지시서에 적혀 있어야 등록한다(위 `auth_attempts` 절과 동일한 규칙).
+  없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
   마이그레이션)와 `notify_logs.failed_device_count` 컬럼(0018 마이그레이션)은 위
   "마이그레이션 계획" 절에 적힌 대로 되돌릴 수 없는 마이그레이션이 아니다.
+- `app_settings`(0019)·`notice_profile_matches`(0020) 마이그레이션도 신규 테이블 생성뿐이라
+  되돌릴 수 없는 마이그레이션이 아니다(위 "마이그레이션 계획 (0019·0020, 확인 항목 33)" 절
+  참고). `notice_profile_matches` 캐시를 공지 재임베딩 시점에 `DELETE`하는 것은 캐시 재생성이
+  가능한 데이터라 되돌릴 수 없는 삭제로 취급하지 않는다(원본 데이터 손실이 아님).
 
 ## 테스트 방법 (제안)
 
@@ -778,6 +869,16 @@ select cron.schedule(
   이상을 등록한 뒤, 그중 하나만 성공하도록 만들고 `notify_logs.result`가 `success`로,
   `failed_device_count`가 실패한 기기 수(예: 1)로 기록되는지 확인한다. 모두 실패하면
   `result='failed'`이고 `failed_device_count`가 시도한 기기 수 전체와 같은지 확인한다.
+- `app_settings` 토글 확인(0019, 확인 항목 33): 마이그레이션 적용 직후
+  `select value from app_settings where key = 'profile_matching_jev'`가 `false`인지(기본
+  OFF) 확인한다. `PATCH` 후 `value`·`updated_at`·`updated_by`가 갱신되는지도 확인한다(backend
+  API 준비 후).
+- `notice_profile_matches` 캐시 확인(0020, 확인 항목 33): 같은 `(notice_id, condition_key)`로
+  두 번 삽입을 시도해 PK 위반으로 두 번째가 막히는지(또는 `ON CONFLICT` 갱신 방식이면 그
+  동작을 확인) 검증한다. 테스트 공지를 재임베딩(공지 수정 → `notice_chunks` 재작성)한 뒤,
+  같은 `notice_id`의 `notice_profile_matches` 행이 삭제(무효화)되는지 확인한다(backend
+  collector 연동 후). `notices` 삭제 시 `notice_profile_matches` 행이 cascade로 함께
+  삭제되는지도 확인한다.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -788,21 +889,21 @@ select cron.schedule(
 - 수집 대상 게시판 — 해결(2026-09-27, user): 안양시 청년 게시판 1개로 확정
   ([[anyang-service-scope]]). 그 게시판의 실제 갱신 패턴(같은 글 수정 여부)에 따른 notices
   갱신·중복 판정 세부는 여전히 미해결(위 `notices` 절 참고) — 운영하며 관찰이 필요하다.
-  collect-job 주기는 하루 1회(미확정 제안, 위 pg_cron 절 참고)로 남겨뒀다.
+  collect-job 주기는 하루 1회(제안, 위 pg_cron 절 참고)로 남겨뒀다.
 - 처리방침·동의 화면 — 해결(2026-09-27, user): 채택. 가입 시 필수 동의 화면 + 동의 시각
-  기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)는 구조 자체가
-  아직 (미확정)이다.
+  기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)도 구조 자체가
+  확정됐다.
 - 동의 항목 분리(수집·이용 / 국외 이전) — 해결(2026-09-27, user): 각각 별도로 받는다.
-  [[anyang-service-scope]]. `consents.consent_type`으로 반영(위 참고, 구조 자체는 미확정).
+  [[anyang-service-scope]]. `consents.consent_type`으로 반영(위 참고, 구조 자체도 확정).
 - 처리방침 개정 시 재동의 — 해결(2026-09-27, user): 강제한다. [[anyang-service-scope]].
-  `policy_version` 비교 방식(위 `consents` 절)으로 반영(구조 자체는 미확정).
+  `policy_version` 비교 방식(위 `consents` 절)으로 반영(구조 자체도 확정).
 - 회원 탈퇴 시 동의 기록(`consents`) 삭제/보존 여부 — 해결(2026-09-27, user): 즉시 삭제하지
   않고 증빙용으로 1년 보관 후 정리 잡으로 삭제. [[anyang-service-scope]]. `on delete set null` +
   `withdrawn_at`으로 반영(위 `consents` 절). 보관 기간(1년)도 해결됐다 — 정리 잡 등록 자체는
   구현 단계에서 별도 사용자 승인이 필요하다(위 `consents` 절, "되돌릴 수 없는 마이그레이션 표시" 참고).
 - 관리자 기능 — 해결(2026-09-27, user): 역할 컬럼 없이 `ADMIN_EMAILS`, 기능 범위 ①~④
   확정. [[anyang-service-scope]]. 이를 담을 `collect_runs`/`notify_logs`/`api_usage_logs`
-  테이블 구조, `notices.hidden_at`/`users.suspended_at` 컬럼은 구조 자체가 아직 (미확정)이다.
+  테이블 구조, `notices.hidden_at`/`users.suspended_at` 컬럼도 구조 자체가 확정됐다.
 - 로그성 테이블 보존 기간과 정리 잡 등록 여부 — 해결(2026-09-27, user): `collect_runs`/
   `api_usage_logs`는 90일 보존 후 정리 잡 등록(등록 자체는 승인됨, 구현 단계에서 실제
   실행). `notify_logs`는 중복 발송 방지에 쓰이므로 삭제 대상에서 제외. [[anyang-service-scope]].
@@ -814,7 +915,7 @@ select cron.schedule(
 - 프로필 코드값 셋 — 해결(2026-09-27, user): `gender`/`enrollment_status`/`occupation_type`
   코드값 셋이 [[anyang-service-scope#Details]]("프로필 선택지" 행)에서 확정됐다. 값 목록은
   그 결정 문서를 원본으로 삼는다(위 `profiles` 절 참고, 중복 기재 방지). 스키마 컬럼 타입
-  자체는 다른 컬럼과 같이 설계 승인 전까지 (미확정)이다.
+  자체도 다른 컬럼과 같이 설계 승인으로 확정됐다.
 - 비밀번호 재설정 1차 출시 제외 — 해결(2026-09-27, user): 제외. [[anyang-service-scope]].
   관련 테이블(`verification_tokens` 등) 없음을 재확인 — 이 문서에 그런 테이블이 없다.
 - "구독 수" 집계 기준 — 해결(backend): `notify_settings.enabled=true` 수와
@@ -824,16 +925,23 @@ select cron.schedule(
   쿼리 조건(`notices.hidden_at is null`)을 기본안으로 채택
   ([[anyang-backend-api#5. 공지 수집기 (Collector)]]).
 - `consents.policy_version` 부여 방식(날짜 기반 문자열 등)과 "현재 처리방침 버전" 상수 관리
-  위치 — 해결(backend): 환경변수가 아니라 코드 상수(`lib/consent.ts`(미확정 경로)의
+  위치 — 해결(backend): 환경변수가 아니라 코드 상수(`lib/consent.ts`의
   `POLICY_VERSION`)로 관리하는 것으로 채택 ([[anyang-backend-api#1. 인증 (Auth.js v5)]]).
 - 로그인 실패·가입 시도 제한 값 — 해결(2026-09-28, user): 로그인 실패는 같은 이메일 또는
   같은 IP 기준 15분에 5회 초과, 가입은 같은 IP 15분에 5회 초과 시 일시 차단, 외부 서비스
   없이 DB 기록. 비밀번호 최소 8자. [[anyang-youth-policy-assistant#확인이 필요한 항목]] 29.
-  담을 `auth_attempts` 테이블 구조·해시 방식·보존 기간(1일 제안)은 아직 (미확정)이다(위
+  담을 `auth_attempts` 테이블 구조·해시 방식·보존 기간(1일)도 확정됐다(위
   `auth_attempts` 절 참고).
 - 알림 다중 기기 성공/실패 판정 — 해결(2026-09-28, user): 기기 중 한 대라도 성공하면
   `success`, 실패 기기 수를 함께 기록. [[anyang-youth-policy-assistant#확인이 필요한 항목]]
-  30. `notify_logs.failed_device_count` 컬럼(미확정)으로 반영(위 `notify_logs` 절 참고).
+  30. `notify_logs.failed_device_count` 컬럼으로 반영(위 `notify_logs` 절 참고).
+- 프로필 기반 Jev 매칭 + 관리자 토글 — 해결(2026-09-28, user): Jev(Noul)로 조건 조합 × 공지
+  대상 여부를 판정하고 관리자 토글(기본 OFF)로 켜고 끈다. 적용 대상은 선호(기억)가 없는
+  사용자만. [[anyang-youth-policy-assistant#확인이 필요한 항목]] 33. 담을 `app_settings`·
+  `notice_profile_matches` 테이블 구조와 `condition_key` 형식, 캐시 무효화 지점은 이 문서의
+  다른 신규 값과 마찬가지로 (미확정)이다(위 `app_settings`/`notice_profile_matches` 절 참고).
+  TypeSafe 처리 국가·처리방침 반영 여부는 여전히 미해결(backend 소관,
+  [[anyang-ai-models-data-transfer]] 참고).
 
 ## Links
 

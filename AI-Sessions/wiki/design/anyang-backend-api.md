@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -13,13 +13,13 @@ Next.js(App Router) Route Handler로 인증(동의 게이트 포함), 프로필 
 "AI가 기억하는 내 정보"(조회·수정·삭제), 대화 히스토리 조회, 채팅(DeepSeek 스트리밍 + RAG),
 Gemini 임베딩, 공지 수집기(안양시 청년 게시판 1개), 임베딩 파이프라인, 스케줄러(수집·알림 잡),
 Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 스키마는
-[[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이며 ``이고,
+[[anyang-database-schema]]를 따른다. 이 문서의 엔드포인트·값은 모두 제안이고,
 사용자 설계 승인으로 확정된다.
 
 **2026-09-28 개정(확인 항목 22·23)**: 채팅 응답에 인용 공지 스트림 계약(3-2절)과 관리자용
 `GET /api/admin/notices`(13-1절)를 추가했다. 둘 다 기존 스키마
 ([[anyang-database-schema]])로 구현 가능하며 스키마 변경이 필요하지 않다. 값은 모두
-``이며 재승인 대상이다.
+재승인 대상이다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -74,7 +74,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 - 마운트: `app/api/auth/[...nextauth]/route.ts` (미확정 — Auth.js v5 App Router 컨벤션).
 - Provider: `Google`(OAuth), `Credentials`(email/password).
 - 세션 전략: `strategy: "jwt"`. DB에 세션 테이블을 두지 않는다.
-- 비밀번호 해시: `argon2id`(제안, 미확정) — bcrypt보다 GPU 공격 저항이 높다. 파라미터
+- 비밀번호 해시: `argon2id`(제안) — bcrypt보다 GPU 공격 저항이 높다. 파라미터
   (memory/time cost)는 미확정.
 - 전용 엔드포인트(Auth.js가 커버하지 않는 것만):
   - `POST /api/auth/register` — body
@@ -90,7 +90,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 - **Google 로그인 시 동의**: Auth.js 표준 콜백(`signIn`)에서 `users` 테이블에 없는 신규
   사용자면 로그인을 바로 완료시키지 않고, 프런트가 동의 화면을 먼저 보여준 뒤
   `POST /api/auth/consent`(미확정, 세션 필요)를 호출해 `consents` 행을 남겨야 가입이 완료된
-  것으로 처리한다(제안, 미확정) — Google OAuth 콜백 자체에서 동의를 막을 수 없어 "가입 완료"
+  것으로 처리한다(제안) — Google OAuth 콜백 자체에서 동의를 막을 수 없어 "가입 완료"
   여부를 두 `consent_type` 모두의 현재 `POLICY_VERSION` 동의 존재 여부로 판단하는 방식.
   body: `{ consents: { collection_use: true, overseas_transfer: true } }` — 회원가입과
   같은 형식, 둘 다 `true`가 아니면 400. 이 엔드포인트는 재동의(아래)에도 그대로 재사용한다.
@@ -164,13 +164,13 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
    아니라고 판단한다(제안, 기존 유지) — JWT에 정지 여부만 캐싱하고 매 요청 재확인을 생략하면
    정지 후에도 세션 만료까지 계속 접근 가능해지는 문제가 더 크다(위 1번의 `session.suspended`
    는 안내 화면 표시용일 뿐, 접근 차단 판정에는 쓰지 않는다 — 판정은 이 미들웨어의 매 요청
-   DB 조회로만 한다). `DELETE /api/account`를 예외로 두는 이유(제안, 미확정): 정지된
+   DB 조회로만 한다). `DELETE /api/account`를 예외로 두는 이유(제안): 정지된
    사용자도 탈퇴할 권리 자체는 막지 않는다 — 정지가 서비스 이용 제한이지 계정 삭제 금지는
    아니라고 판단했다.
 4. notify-job은 [[anyang-database-schema#pg_cron / pg_net 잡 정의]]의 쿼리대로
    `u.suspended_at is null` 조건으로 대상에서 제외한다(database 제안 그대로 채택, 변경 없음).
 
-### 1-3. 사용자 탈퇴 API (제안, 미확정)
+### 1-3. 사용자 탈퇴 API (제안)
 
 탈퇴 시 동의 기록(`consents`)은 즉시 삭제하지 않고 증빙용으로 보관한 뒤 삭제한다(확정,
 [[anyang-service-scope]], user, 2026-09-27). [[anyang-database-schema#consents —
@@ -193,7 +193,7 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
   처리, 미확정 구현).
 - 탈퇴 확인 다이얼로그는 frontend 소관(제안).
 
-### 1-4. 403 응답 에러 코드 (제안, 미확정)
+### 1-4. 403 응답 에러 코드 (제안)
 
 frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 분기해 다른 화면을 보여줄 수
 있도록, 인증 필요 API가 반환하는 403 응답 body에 아래 문자열 중 하나를 `{ error: "<code>" }`
@@ -204,7 +204,7 @@ frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 �
 | `ACCOUNT_SUSPENDED` | 1-2절 정지 확인 | 계정이 정지되어 이용이 제한됨(로그인 자체는 허용, 1-2절 허용 경로 외 API 차단) |
 | `CONSENT_REQUIRED` | 1절 재동의 판정 | 처리방침 개정으로 재동의 필요 |
 | `ADMIN_ONLY` | 13-0절 관리자 인가 | 로그인은 됐으나 관리자가 아님(로그인 provider가 google이 아니거나 `ADMIN_EMAILS`에 없음) |
-| `ADMIN_EMAIL_RESERVED` | 1절 가입 시점 차단(13-0절 신규) | `ADMIN_EMAILS`에 있는 이메일로 Credentials 가입을 시도함(제안, 미확정) |
+| `ADMIN_EMAIL_RESERVED` | 1절 가입 시점 차단(13-0절 신규) | `ADMIN_EMAILS`에 있는 이메일로 Credentials 가입을 시도함(제안) |
 
 - 관리자 거부는 **404가 아니라 403**으로 통일한다(13-0절에서 이미 결정한 대로 — 이 서비스는
   공개 attack surface가 아니므로 엔드포인트 존재를 숨길 필요가 낮고, 403이 frontend 처리도
@@ -214,7 +214,7 @@ frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 �
 - 로그인·가입 시도 제한(신규, 확인 항목 29)은 403이 아니라 429 응답이라 이 표에 넣지
   않는다 — 코드 `TOO_MANY_ATTEMPTS`는 1-6절 참고.
 
-### 1-5. 이메일 계정 연결 정책 (신규, 제안, 미확정)
+### 1-5. 이메일 계정 연결 정책 (신규, 제안)
 
 이메일 인증이 없으므로(1-1절) 타인의 이메일 주소로 먼저 이메일·비밀번호 가입을 해버리면 두
 가지 문제가 생길 수 있다.
@@ -229,7 +229,7 @@ frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 �
    자신이 정한 비밀번호로 계속 그 계정(진짜 주인의 프로필·기억)에 접근할 수 있다 — 1번보다
    위험하므로 채택하지 않는다.
 
-**처리 경로(제안, 미확정, 채택)**: 자동 연결 off를 유지한다. Google 로그인이
+**처리 경로(제안, 채택)**: 자동 연결 off를 유지한다. Google 로그인이
 `OAuthAccountNotLinked`로 실패하면 frontend가 안내 메시지("이 이메일은 이미 비밀번호로
 가입되어 있습니다. 비밀번호로 로그인하거나, 본인 계정이 아니면 관리자에게 문의해 주세요")를
 보여준다(**frontend 반영 필요**). 이메일 인증이 없어 서버가 "진짜 주인"을 자동으로 판별할
@@ -246,17 +246,19 @@ Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 �
 최소 8자, 로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과 시 일시 차단, 회원가입
 시도는 같은 IP 기준 15분에 5회 초과 시 일시 차단. 판정은 외부 서비스 없이 DB 기록
 ([[anyang-database-schema#auth_attempts]])으로 한다(확정). 아래 응답 코드·메시지·IP
-추출 방법·Auth.js 흐름 반영 방식은 backend 제안이며 (미확정)이다.
+추출 방법·Auth.js 흐름 반영 방식은 backend 제안이다.
 
 - **비밀번호 최소 길이**: `POST /api/auth/register`가 `password`를 해시하기 전에 길이
   8자 이상을 검증한다(값은 확정, 검증 위치는 제안). 8자 미만이면 400(에러 코드
   `PASSWORD_TOO_SHORT`, 제안, 미확정 — 1-4절 표에는 403 코드만 있어 별도 관리).
-- **IP 추출 방법(제안, 미확정)**: Vercel 배포 환경에서는 요청 헤더 `x-forwarded-for`의
+- **IP 추출 방법(제안)**: Vercel 배포 환경에서는 요청 헤더 `x-forwarded-for`의
   첫 번째 값을 클라이언트 IP로 쓴다(Vercel Functions 표준 방식). 헤더가 없는 로컬 개발
-  환경에서는 `127.0.0.1` 등으로 대체한다(제안). UNO Q 전환 시 리버스 프록시 설정에 따라
-  같은 헤더를 유지하거나 다른 헤더로 교체가 필요할 수 있다 — 12절 runbook에는 아직
-  반영하지 않았고 전환 시점에 재확인한다.
-- **로그인 실패 판정(제안, 미확정)**: Auth.js Credentials provider의 `authorize()` 콜백
+  환경에서는 `127.0.0.1` 등으로 대체한다(제안). Vercel은 이 헤더를 자체 값으로 덮어써
+  위조할 수 없다(메인 세션 확인 2026-09-28, https://vercel.com/docs/headers/request-headers,
+  [[anyang-youth-policy-assistant#확인이 필요한 항목]] 32). UNO Q 전환 시 리버스 프록시
+  설정에 따라 같은 헤더를 유지하거나 다른 헤더로 교체가 필요할 수 있다 — 보드 서버 이전 시
+  재검토한다. 12절 runbook에는 아직 반영하지 않았고 전환 시점에 재확인한다.
+- **로그인 실패 판정(제안)**: Auth.js Credentials provider의 `authorize()` 콜백
   안에서 비밀번호 검증 **전에** [[anyang-database-schema#auth_attempts]]의 판정 쿼리로
   이번 요청의 이메일·IP 각각의 최근 15분 실패 횟수를 확인한다. 둘 중 하나라도 5회를
   초과했으면 실제 비밀번호 대조 없이 즉시 로그인 실패로 처리한다(계정 존재 여부와 무관하게
@@ -268,16 +270,16 @@ Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 �
   확정되면(차단 여부와 무관하게 매 실패마다) `identifier_type='email'`·`identifier_type='ip'`
   각 1행을 `auth_attempts`에 기록한다(database 제안 방식 그대로,
   [[anyang-database-schema#auth_attempts]] "기록 방식" 절).
-- **가입 시도 판정(제안, 미확정)**: `POST /api/auth/register`가 1절 동의 검사보다 먼저
+- **가입 시도 판정(제안)**: `POST /api/auth/register`가 1절 동의 검사보다 먼저
   IP 기준 최근 15분 시도 횟수를 확인한다. 5회를 초과했으면 429(에러 코드
   `TOO_MANY_ATTEMPTS`, 제안, 미확정 — 로그인과 같은 코드명 재사용, YAGNI)로 거부하고
   `auth_attempts` 행을 추가로 기록하지 않는다(이미 초과 상태라 불필요, 제안). 차단 상태가
   아니면 성공·실패(동의 누락 400, 이메일 중복 409 등)와 무관하게 요청마다
   `identifier_type='ip'` 1행을 기록한다(database 제안, [[anyang-database-schema#auth_attempts]]
   "기록 방식" 절 그대로).
-- **응답 코드(제안, 미확정)**: 로그인 차단·가입 차단 모두 429(Too Many Requests)로
+- **응답 코드(제안)**: 로그인 차단·가입 차단 모두 429(Too Many Requests)로
   통일한다 — 1-4절의 403 목록은 인가 실패용이라 성격이 다른 이 경우는 별도 상태 코드를
-  쓴다. body는 1-4절과 같은 형식 `{ error: "TOO_MANY_ATTEMPTS" }`(제안, 미확정).
+  쓴다. body는 1-4절과 같은 형식 `{ error: "TOO_MANY_ATTEMPTS" }`(제안).
 - **frontend 계약(신규, 확정)**: 회원가입 폼은 비밀번호가 8자 미만이면 안내 문구를
   보여준다(최소 길이 값은 확정, 문구·UI는 frontend 소관). 로그인·가입 모두 429 +
   `{ error: "TOO_MANY_ATTEMPTS" }` 응답을 받으면 "잠시 후 다시 시도해 주세요" 계열
@@ -306,12 +308,12 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 | GET | `/api/notices/:id` | 공지 상세 1건 |
 
 - `/api/notices/recommended` 매칭 로직은 7절 `/api/jobs/notify`의 코사인 유사도 방식을
-  재사용(제안, 미확정) — **프로필은 임베딩하지 않는다**([[anyang-ai-models-data-transfer]]
+  재사용(제안) — **프로필은 임베딩하지 않는다**([[anyang-ai-models-data-transfer]]
   확정). 선호(`user_preferences.embedding`)와 `notice_chunks` 유사도 상위 N건(N 미확정)을
   고른다. 프로필 조건(나이대·성별·직군)은 이 벡터 유사도 계산에 들어가지 않고, 3절과 같이
   DeepSeek 프롬프트 조건으로만 쓰이거나(채팅), 이 피드에서는 아예 쓰이지 않는다(제안,
   미확정 — 프로필 조건을 이 목록에도 반영할지는 이번 스콥에서 정하지 않는다).
-- **선호가 없는 신규 사용자(제안, 미확정)**: `user_preferences` 행이 없으면(대화 이력이 없어
+- **선호가 없는 신규 사용자(제안)**: `user_preferences` 행이 없으면(대화 이력이 없어
   선호가 추출되지 않은 상태) 유사도 계산 자체가 불가능하므로, 이 경우 최신 공지 순
   (`notices.collected_at desc`, `hidden_at is null`)으로 대체해 반환한다 — 빈 목록보다
   낫다는 판단(제안).
@@ -362,7 +364,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
   Gemini 재임베딩을 호출해 `embedding`/`embedding_model`/`updated_at`을 함께 갱신한 뒤
   응답한다([[anyang-database-schema#user_preferences — 대화에서 추출한 선호,
   벡터. "AI가 기억하는 내 정보" 화면의 데이터]]의 "수정 시 재임베딩 필요" 절 반영). 재임베딩
-  실패(4절 재시도 소진) 시 트랜잭션 롤백, 텍스트도 갱신하지 않고 5xx 응답(제안, 미확정) —
+  실패(4절 재시도 소진) 시 트랜잭션 롤백, 텍스트도 갱신하지 않고 5xx 응답(제안) —
   텍스트와 임베딩이 어긋난 상태로 저장되면 검색 결과가 틀어지므로 둘을 한 트랜잭션으로 묶는다.
 - 삭제는 행 DELETE로 충분(확정, [[anyang-service-scope]]).
 - 인증 필요, 본인 것만 접근.
@@ -372,7 +374,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 `POST /api/chat` — body `{ conversation_id?, message }`. SSE/스트리밍 응답
 (Vercel Fluid 함수의 스트리밍 응답 사용, 미확정).
 
-**흐름 (제안, 미확정)**:
+**흐름 (제안)**:
 
 0. **가림 처리(제안, 미확정 — 2차 재점검 반영: 적용 범위 확장)**: 사용자 메시지를 Gemini
    또는 DeepSeek로 보내기 전에 전화번호·이메일·주민등록번호 형태를 **정규식으로 가린다**
@@ -419,7 +421,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
      [[anyang-ai-models-data-transfer#Details]]가 정한 청년정책 구간(19세 미만 / 19~24 /
      25~29 / 30~34 / 35~39 / 40세 이상) 문자열만 전달한다 — `profiles.birth_year` 원값은
      DeepSeek에 보내지 않는다. 만 나이는 `Asia/Seoul 기준 현재 연도 − birth_year`로
-     계산한다(확정). **경계·예외 처리(제안, 미확정)**: `birth_year`가 null이면(2절 프로필
+     계산한다(확정). **경계·예외 처리(제안)**: `birth_year`가 null이면(2절 프로필
      4항목 모두 null 허용) 나이대 조건 자체를 프롬프트에서 생략한다(제안 — 모르는 값을
      임의 구간으로 채우지 않는다). 계산된 나이가 구간 경계값과 같을 때(만 19세·40세 등)는
      위 구간 표기의 하한 포함 규칙을 그대로 따른다(예: 19는 "19~24" 구간, 40은 "40세 이상"
@@ -429,7 +431,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
    앞에 3-2절의 인용 이벤트 1개를 먼저 보낸 뒤, 이어서 DeepSeek SSE 청크를 그대로(tee)
    전달한다. 완료 후 `messages`에 저장(role=assistant, 인용 목록 자체는 저장하지 않는다 —
    2-b의 검색 결과에서 매번 다시 구할 수 있어 저장할 필요가 없다, YAGNI).
-5. **선호 추출(제안, 미확정)**: 대화 종료 또는 N턴마다(N 미확정) DeepSeek에 "이 대화에서
+5. **선호 추출(제안)**: 대화 종료 또는 N턴마다(N 미확정) DeepSeek에 "이 대화에서
    드러난 선호를 문장으로 요약" 요청(식별정보 없이 대화 내용만 전송) → 결과 문장에도 0번의
    가림 함수를 적용한 뒤(제안, 채택, 2차 재점검 반영 — 사용자가 대화 중 언급한 전화번호·
    이메일·주민등록번호 형태가 요약 문장에 그대로 옮겨질 수 있으므로) Gemini로 임베딩해
@@ -442,7 +444,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
 코드가 지킨다 — database 문서에도 기록됨). 가림 함수는 0번에서 정의한 공용 함수 하나를
 DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 
-**`api_usage_logs` 기록 지점(제안, 미확정)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
+**`api_usage_logs` 기록 지점(제안)**: DeepSeek 호출(위 3번)과 아래 4절 Gemini 임베딩
 호출을 각각 감싸는 공통 래퍼 함수 안에서, 성공·실패와 무관하게 호출 직후 1행을 기록한다
 (user_id 없음, [[anyang-database-schema#api_usage_logs]] 그대로). 값 셋(제안):
 `provider`는 `deepseek` / `gemini`, `operation`은 DeepSeek는 `chat`, Gemini는 `embedding`
@@ -463,10 +465,10 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 - `messages`/`conversations` 테이블은 [[anyang-database-schema#conversations / messages]]에 있다(컬럼: `conversations.id/user_id/title/created_at/updated_at`,
   `messages.id/conversation_id/role/content/created_at`). 목록은
   `(user_id, updated_at desc)` 인덱스로 최근 순 조회(database 문서 인덱스 제안).
-- **`conversations.title` 자동 생성(제안, 미확정)**: 대화의 첫 사용자 메시지를 앞에서부터
+- **`conversations.title` 자동 생성(제안)**: 대화의 첫 사용자 메시지를 앞에서부터
   잘라(예: 30자, 미확정) 제목으로 저장한다. DeepSeek을 별도로 호출해 요약 제목을 생성하는
   방식은 이번 스콥에서 채택하지 않는다(YAGNI — 호출·비용·지연이 추가되는데 잘라내기로도
-  목록 식별은 충분). 제목은 최초 생성 후 수정 API를 두지 않는다(제안, 미확정).
+  목록 식별은 충분). 제목은 최초 생성 후 수정 API를 두지 않는다(제안).
 - 인증 필요, 본인 것만 접근.
 
 ### 3-2. 채팅 인용 공지 스트림 계약 (신규, 제안, 미확정 — 확인 항목 22 반영)
@@ -476,7 +478,7 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 기존 구현 유지) — 인용 목록은
 그 앞에 별도 이벤트로 한 번만 보낸다.
 
-- **이벤트 형식(제안, 미확정)**: SSE 커스텀 이벤트 `event: citations`, 뒤이어
+- **이벤트 형식(제안)**: SSE 커스텀 이벤트 `event: citations`, 뒤이어
   `data: <JSON>\n\n` 한 줄. JSON 배열의 각 원소:
   `{ id, title, source_url, posted_at }` — `posted_at`은 `notices.published_at`
   ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]], null 허용
@@ -484,7 +486,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   {"choices":[...]}`형)와 구분하려고 `event:` 필드를 쓴다 — 클라이언트가 `event:` 없는
   줄(`data:`만 있는 줄)은 기존처럼 OpenAI 호환 델타로, `event: citations`가 붙은 블록만
   인용 목록으로 파싱한다(제안, 미확정 — 정확한 파서 분기는 frontend 소관).
-- **전송 시점(제안, 미확정)**: DeepSeek 호출(3절 3번) 직전, 2-b RAG 검색이 끝난 직후 스트림
+- **전송 시점(제안)**: DeepSeek 호출(3절 3번) 직전, 2-b RAG 검색이 끝난 직후 스트림
   헤더를 연 뒤 이 이벤트 1개를 가장 먼저 쓰고, 그다음 DeepSeek 응답 스트림을 이어붙인다.
   인용 이벤트는 대화당 1회만 보낸다(대화 도중 갱신 없음, YAGNI).
 - **원천(확정 — 위 2-b 반영)**: 2-b RAG 검색으로 이미 구한 상위 K개 `notice_chunks` 결과를
@@ -494,7 +496,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 - **숨김 공지 제외(확정)**: 2-b 검색 쿼리 자체가 `notices.hidden_at is null` 조건을 이미
   포함하므로(위 2-b 수정 반영) 별도 필터가 필요 없다 — 검색 결과에 숨김 공지가 애초에
   섞이지 않는다.
-- **빈 목록 처리(제안, 미확정)**: 2-b 검색 결과가 0건이면(관련 공지 없음, 3절 기존
+- **빈 목록 처리(제안)**: 2-b 검색 결과가 0건이면(관련 공지 없음, 3절 기존
   `noticesText`의 "(관련 공지 없음)" 분기와 동일 조건) `event: citations` 이벤트를
   `data: []`(빈 배열)로 보낸다 — 이벤트 자체를 생략하지 않는다(제안, 채택 — 프런트가 항상
   같은 이벤트를 기다리면 되므로 "이벤트가 없으면 아직 안 왔다 vs 원래 없다"를 구분할 필요가
@@ -516,7 +518,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   확인, 출처: 위 문서 및
   https://discuss.ai.google.dev/t/gemini-embedding-free-tier-documentation/112553 — 두
   출처 간 수치 차이가 있어 아래 재시도·배치 전제를 유지한다).
-- **재시도·배치(제안, 미확정)**: 무료 티어 RPD(1,000/일)가 낮아 배치 임베딩을 전제로 한다.
+- **재시도·배치(제안)**: 무료 티어 RPD(1,000/일)가 낮아 배치 임베딩을 전제로 한다.
   429/5xx 응답 시 지수 백오프(예: 1s, 2s, 4s, 최대 3회 재시도, 값 미확정). 임베딩 대상은
   `notice_chunks.embedding IS NULL` / `user_preferences.embedding IS NULL`인 행을 큐로
   보고, 한 번의 `/api/jobs/embed` 호출에서 여러 건을 묶어 보낸다(배치 크기 미확정, 제안
@@ -543,7 +545,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   - 인코딩은 UTF-8.
 - 흐름(파서 부분 확인됨, 나머지 미확정 표시 유지):
   1. robots.txt 404(제한 없음) 확인을 거쳐 수집을 실행한다.
-  2. `robots.txt`에 `Crawl-delay`가 없으므로 기본 요청 간격 2초(제안, 미확정)를 요청 사이에
+  2. `robots.txt`에 `Crawl-delay`가 없으므로 기본 요청 간격 2초(제안)를 요청 사이에
      둔다.
   3. 목록 페이지 → 상세 페이지 순으로 위 확인된 셀렉터로 HTML을 파싱한다(파서 라이브러리는
      `cheerio`, 구현됨).
@@ -565,6 +567,130 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 - 청크 분할 여부: 미확정([[anyang-database-schema#notice_chunks — 벡터 검색용]]
   참고). 공지 본문이 길면(임계값 미확정) 분할, 짧으면 통째로 1개 청크.
 
+### 6-1. 프로필 기반 Jev 매칭 (신규, 확인 항목 33)
+
+사용자 결정(2026-09-28, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 33): 선호(기억)가
+없는 사용자에게 한해, 관리자 토글(기본 OFF)이 켜졌을 때 TypeSafe Jev(Noul)로 "이 조건의
+사람이 이 공지의 대상인가"를 판정해 2-1절 추천 피드와 7절 알림 잡에 쓴다. 전송 범위는
+[[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행(조건 조합 + 공지 제목·본문,
+식별정보·출생연도 원값 금지)을 따른다. 스키마는
+[[anyang-database-schema#app_settings — 관리자 토글용 키·값 테이블 (신규, 확인 항목 33)]],
+[[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목 33)]]를
+링크한다(값을 옮겨 적지 않는다).
+
+**TypeSafe 호출 형태 — 확인 필요(이번 세션에는 WebFetch 도구가 없어 공식 문서
+https://docs.typesafe.ai 를 직접 열람하지 못했다)**: `.claude/skills/typesafe-ai`(실제 경로
+`.agents/skills/typesafe-ai/SKILL.md`) 스킬 문서 자체도 "라이브 문서가 원본이니 작업 중
+읽어라"고 안내할 뿐 API 호출 형태를 문서에 담고 있지 않다. 이 저장소 안에서 실제로 확인
+가능한 유일한 사실은 `scripts/jev.py`(vault 지식관리용, Python SDK)가 쓰는 호출
+형태뿐이다(출처: 이 저장소 `scripts/jev.py`, 읽기만 함) —
+
+```python
+from typesafe_sdk import TypeSafeClient, TypeSafeError
+with TypeSafeClient(api_key=key, timeout=30) as client:
+    result = client.system_one(state=state, questions=questions)
+    result.answers  # {"<id>": {"noul": 0.0~1.0}, ...} 형태(Noul 질문 기준)
+questions = {
+    "<id>": {"type": "noul", "instructions": "..."},   # Noul: 예/아니오 확률
+    # type: "score"면 "criteria"(단계 목록)도 필요
+}
+```
+
+이 호출 형태는 **Python SDK 확인 사실**이며, `lib/jev.ts`는 Node/TypeScript에서 호출해야
+하므로 그대로 옮겨 쓸 수 없다(미확정 — 확인 필요). JavaScript SDK의 정확한 패키지명·
+import·메서드명(`docs/sdk/javascript.md` 대상)이나 HTTP API 직접 호출 형태(`docs/api.md`
+대상)는 이번 세션에서 확인하지 못했다. **구현 착수 전 backend가 반드시**
+`https://docs.typesafe.ai/sdk/javascript.md`(JS SDK) 또는
+`https://docs.typesafe.ai/api.md`(HTTP API)를 웹 접근 가능한 세션에서 읽고 정확한 호출
+형태를 이 절에 반영해야 한다 — 그때까지 아래 `lib/jev.ts` 설계는 "Python SDK와 같은
+개념(상태 + 질문 목록 + Noul 질문 타입)일 것"이라는 **미확정 가정**이다.
+
+- **`lib/jev.ts`(서버 전용, 미확정 — 위 확인 필요 사항에 의존)**: 공지 여러 건을 한 요청에
+  묶어 호출한다(제안 — Python SDK 예시가 여러 질문을 한 번의 `system_one` 호출에 담아
+  병렬 판정하는 구조를 보여주므로(`scripts/jev.py`의 `per_doc` 패턴), JS SDK도 같은 개념일
+  것으로 가정, 확인 필요). 질문 문구(제안, 미확정): "이 조건(`conditions`: 나이대·성별·직군·
+  재학/재직)의 사람이 이 공지(`notice.title`, `notice.body` 앞부분 — 길이 미확정)의
+  신청·참여 대상에 해당하는가" — Noul 타입(예/아니오 확률). 질문 id는 공지 `notice_id`로
+  키를 잡아(제안) 응답을 다시 `notice_id`별로 매핑한다. `TYPESAFE_API_KEY`가 없거나 호출이
+  타임아웃(제안, 미확정 값 — 예: 5초)·오류를 반환하면 예외를 던지지 않고 "판정 불가"를
+  나타내는 값(제안, 미확정 — `null` 또는 빈 결과)을 반환해 호출부가 장애 시 OFF 동작으로
+  분기할 수 있게 한다(아래 "장애 시 동작" 참고). 호출 여부와 무관하게
+  `lib/api-usage-log.ts`(3절 기존 래퍼 재사용)로 사용량을 기록한다 — `provider='jev'`,
+  `operation='profile_match'`(제안, 미확정 값 — `api_usage_logs.provider`/`operation`은
+  text 컬럼이라 스키마 변경 없이 새 값을 추가할 수 있다, database 재조율 불필요). 오류
+  시에도 `status='error'`로 1행 기록한다(3절 기존 관례와 동일).
+- **`lib/app-settings.ts`(제안, 미확정)**: `getSetting(key)`/`setSetting(key, value,
+  updatedBy)` — [[anyang-database-schema#app_settings — 관리자 토글용 키·값 테이블 (신규,
+  확인 항목 33)]]을 요청마다 직접 조회·갱신한다(행 1개뿐이라 별도 캐시 없음, YAGNI —
+  database 문서와 동일 판단).
+- **`lib/profile-match.ts`(제안, 미확정)**:
+  1. 사용자 프로필(생년·성별·직군·재학재직)로 `condition_key` 문자열을 만든다 — 나이대는
+     기존 `lib/age-band.ts`의 `ageBandLabel()`을 그대로 재사용한다(YAGNI — 같은 나이대 계산
+     로직을 두 번 만들지 않는다). 형식·구분자·null 표기는
+     [[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인
+     항목 33)]]의 "condition_key 형식" 절 예시(`age:19-24|gender:female|...`)를 그대로 따른다.
+  2. 판정 대상 공지 목록(2-1절은 최근 N건, 7절은 `enabled_at` 이후 신규 공지) 각각에 대해
+     `notice_profile_matches`에서 `(notice_id, condition_key)` 캐시를 먼저 조회한다.
+  3. 캐시에 없는 (공지, 조건 조합) 쌍만 모아 `lib/jev.ts`로 한 번에 판정 요청한다(캐시 적중
+     분은 Jev를 호출하지 않는다 — 같은 조건 조합의 사용자가 여러 명이어도 공지당 조합 수만큼만
+     호출).
+  4. 새로 받은 판정 결과를 `notice_profile_matches`에 저장한다(insert, PK 충돌 시 갱신은
+     제안, 미확정 — 같은 판정이 동시에 두 번 계산되는 경쟁 상황이 드물다고 보고 `ON CONFLICT
+     DO NOTHING`으로 충분하다고 가정, YAGNI).
+  5. 캐시(기존 + 신규) 확률이 임계값(제안 0.5, [[anyang-youth-policy-assistant]] 27번
+     설계안이 제시한 값) 이상인 공지만 반환한다.
+- **2-1절 `/api/notices/recommended` 선호 0건 분기 갱신(제안, 미확정)**: 기존 "선호 0건 →
+  최신순" 분기를, 토글 ON이고 프로필 항목이 하나라도 있으면 다음으로 바꾼다 — 최근 공지
+  N건(제안, 미확정 — 예: 50)을 `lib/profile-match.ts`로 판정해 확률 내림차순으로 반환한다.
+  판정 결과가 0건이면(임계값 미만만 있거나 장애로 판정 자체가 안 됨) 기존 최신순 분기로
+  대체한다(제안 — 빈 목록보다 낫다는 기존 2-1절 판단을 그대로 유지). 토글 OFF이거나 프로필이
+  전부 비어 있으면 기존 최신순 분기를 그대로 쓴다(변경 없음).
+- **7절 `/api/jobs/notify` 선호 0건 분기 갱신(제안, 미확정)**: 기존 "선호 0건 → 매칭 없음"
+  분기를, 토글 ON이고 프로필 항목이 하나라도 있으면 다음으로 바꾼다 — `notify_settings.
+  enabled_at` 이후 수집된 신규 공지(7절 1번 조건과 동일 범위)를 `lib/profile-match.ts`로
+  판정해 임계값 이상만 발송 후보로 삼는다. 중복 발송 방지는 7절 기존 `notify_logs` pending
+  2단계 흐름을 그대로 재사용한다(YAGNI — 매칭 방식이 바뀌어도 발송 파이프라인은 동일).
+  토글 OFF이거나 프로필이 전부 비어 있으면 기존대로 매칭 없음(발송 안 함)을 유지한다.
+- **장애 시 OFF와 동일 동작(확정, user 2026-09-28)**: `TYPESAFE_API_KEY`가 없거나 호출이
+  타임아웃·오류를 반환하면, 그 요청/잡 실행에서는 토글이 꺼진 것과 같은 동작으로 처리한다 —
+  2-1절은 최신순 대체, 7절은 매칭 없음(발송 안 함)으로 떨어진다(제안 — 새 오류 분기를 따로
+  만들지 않고 기존 "선호 0건일 때의 대체 경로"에 합류시킨다, YAGNI). 오류는
+  `lib/api-usage-log.ts`에 `status='error'`로 기록되므로 13-4절 사용량 화면에서 장애
+  빈도를 관리자가 확인할 수 있다(별도 알림 채널은 만들지 않는다, YAGNI).
+- **관리자 API(제안, 미확정)**: `GET /api/admin/settings`, `PATCH /api/admin/settings`.
+  13-0절 `requireAdmin`을 그대로 재사용한다(새 인가 규칙 없음, YAGNI). `GET` 응답:
+  `{ profile_matching_jev: { value: boolean, updated_at, updated_by } }`(제안, 미확정 —
+  설정이 늘어나도 같은 키·값 구조를 재사용할 수 있게 `app_settings` 행 전체를 키 기준
+  객체로 감싼다). `PATCH` body: `{ profile_matching_jev: boolean }`(제안, 미확정) — 값이
+  `boolean`이 아니면 400(`{ error: "INVALID_REQUEST" }`, 13-1절 관례 재사용). 성공 시
+  `app_settings.updated_at`·`updated_by`(현재 관리자 `user_id`)를 함께 갱신한다.
+  관리자 API 사용량 화면(13-4절)에서 `provider='jev'` 행이 그대로 보이므로 이 기능을 위한
+  별도 화면 추가는 없다(YAGNI, `api_usage_logs.provider`는 text 컬럼이라 database 재조율
+  없이 새 값을 쓸 수 있다).
+- **환경변수**: `TYPESAFE_API_KEY`(서버 전용, 9절 표에 추가) — 클라이언트 코드에는 두지 않는다
+  (dev-common "Jev 도입 제안" 절, "Jev 호출은 backend를 거친다" 원칙).
+- **TypeSafe 처리 국가·처리방침 반영·재동의 필요 여부 — 확인 불가(이번 세션 한정)**: 이번
+  세션에는 WebFetch 도구가 없어 TypeSafe 공식 문서(개인정보처리방침·서비스 약관·데이터
+  처리 위치 안내 페이지)를 직접 열람하지 못했다. `.agents/skills/typesafe-ai/SKILL.md`도
+  법무·개인정보 관련 페이지를 링크하지 않는다(API·SDK·개념 문서 링크만 있음). 따라서
+  TypeSafe가 데이터를 처리하는 국가, 처리방침 페이지의 외부 처리자 목록에 TypeSafe를
+  추가해야 하는지, 재동의가 필요한지는 이번 설계에서 **확인하지 못했다** — 웹 접근이
+  가능한 세션(메인 세션 등)이 공식 문서로 확인해야 한다. 확인 전까지는 보내는 값이 비식별
+  조건 조합(나이대·성별·직군·재학재직)과 공지 제목·본문뿐이라는 사실
+  ([[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행)만 근거로 남긴다 —
+  이 사실만으로 재동의 필요 여부를 단정할 수 없다(추측 금지).
+- **테스트 방법(제안)**: 토글 OFF일 때 2-1·7절이 기존 동작(최신순/매칭 없음) 그대로인지
+  확인. 토글 ON + 선호 0건 + 프로필 있음일 때 Jev를 모킹해 확률 내림차순으로 추천 목록이
+  오는지, 임계값 미만 공지가 알림 후보에서 빠지는지 확인. 같은 (공지, 조건 조합) 요청을
+  두 번 하면 두 번째는 `notice_profile_matches` 캐시만 조회하고 Jev를 호출하지 않는지(모킹
+  호출 횟수 검증) 확인. `TYPESAFE_API_KEY` 미설정·모킹 타임아웃·모킹 오류 각각에서 OFF와
+  같은 동작(최신순/매칭 없음)으로 떨어지고 `api_usage_logs`에 `status='error'`가 남는지
+  확인. 관리자 아닌 계정 `PATCH /api/admin/settings` 403, `boolean`이 아닌 값 400 확인.
+  공지가 재수집(재임베딩)되면 그 공지의 `notice_profile_matches` 캐시가 무효화(삭제)되는지
+  — 5절 수집기의 재임베딩 지점에서 함께 처리한다(제안, database
+  [[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목
+  33)]]의 "캐시 무효화" 절과 동일 지점).
+
 ### 7. 스케줄러 — 수집 잡 / 알림 잡
 
 이전 가능성 원칙에 따라 잡 로직은 앱 API 엔드포인트에, 트리거는 pg_cron+pg_net(클라우드)
@@ -576,10 +702,10 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 | `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 미확정, 제안: 수집 잡 직후 |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
 
-- **공유 시크릿 인증(제안, 미확정)**: 요청 헤더 `x-scheduler-secret`을 환경변수
+- **공유 시크릿 인증(제안)**: 요청 헤더 `x-scheduler-secret`을 환경변수
   `SCHEDULER_SHARED_SECRET` 값과 상수 시간 비교(`crypto.timingSafeEqual`, 미확정 구현
   방식). 불일치 시 401. 값은 문서에 남기지 않는다(dev-common 규칙 9).
-- **알림 시각 정밀도(제안, 미확정)** — pg_cron 트리거 주기 5분 전제
+- **알림 시각 정밀도(제안)** — pg_cron 트리거 주기 5분 전제
   ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]): pg_cron은 지정한 크론
   표현식 그대로(예: `*/5 * * * *`) 정확히 실행되므로(Vercel Cron처럼 1시간 창 안 임의
   시점이 아니다), `/api/jobs/notify`는 "직전 실행 이후 지금까지" 창을 본다 — Asia/Seoul
@@ -609,7 +735,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
     - **정체된 `pending` 재시도(제안, 미확정 — 프로젝트 문서 확인 항목 17 후속)**: 함수가
       전송 도중 중단되면 `result='pending'`인 채로 영영 남아 그 사용자는 해당 공지 알림을
       영구히 못 받는다. 이를 막기 위해 2번에서 삽입이 안 된(이미 있던) 조합을 만나면 기존
-      행의 `reserved_at`을 확인한다 — 잡 트리거 주기(제안 5분)의 2배인 10분(제안, 미확정)
+      행의 `reserved_at`을 확인한다 — 잡 트리거 주기(제안 5분)의 2배인 10분(제안)
       보다 오래된 `pending` 행은 정체된 것으로 보고, `UPDATE notify_logs SET reserved_at =
       now() WHERE user_id = $1 AND notice_id = $2 AND result = 'pending' AND reserved_at <
       now() - interval '10 minutes'`로 재선점(영향 받은 행 수 1이면 재선점 성공)한 뒤 다시
@@ -621,7 +747,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
       문서 확인 항목 17 해결에 반영).
   - `timezone` 컬럼은 항상 `'Asia/Seoul'` 고정([[anyang-database-schema#notify_settings
     (미확정 — 컬럼 타입은 설계 승인 전, 항목 범위·시간대는 확정)]]).
-- `/api/jobs/notify` 매칭 로직(제안, 미확정): 위 시각 창에 든 사용자마다, 후보 공지를 다음
+- `/api/jobs/notify` 매칭 로직(제안): 위 시각 창에 든 사용자마다, 후보 공지를 다음
   두 조건으로 좁힌 뒤 Web Push 전송(8절) 여부를 정한다.
   1. **알림 대상 공지 범위(제안, database 제안 채택 — 2차 재점검 반영: null 처리 변경)**:
      `notices.collected_at > notify_settings.enabled_at` — 사용자가 알림을 켠(또는 다시 켠)
@@ -675,6 +801,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 클라이언트(서비스워커/`PushManager.subscribe`)가 구독 생성에 쓰는 공개키. `VAPID_PUBLIC_KEY`와 같은 값이며 `NEXT_PUBLIC_` 접두사로 브라우저에 노출된다(확정, 확인 항목 31) |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
+| `TYPESAFE_API_KEY` | TypeSafe Jev 호출(6-1절 프로필 기반 매칭). 서버 전용, 클라이언트 코드에 두지 않는다(신규, 확인 항목 33) |
 
 ### 10. Vercel 배포 설정
 
@@ -683,7 +810,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 - **함수 실행 시간 한도**: Fluid Compute 사용 시 함수 최대 300초(2026-09-27 확인, 출처:
   https://vercel.com/docs/functions/configuring-functions/duration). DeepSeek 스트리밍
   응답은 이 한도 안에서 끝나야 한다 — 300초를 넘길 만큼 긴 응답은 없다고 가정하되, 응답이
-  느려질 경우를 대비해 타임아웃 처리(제안, 미확정)를 채팅 핸들러에 둔다.
+  느려질 경우를 대비해 타임아웃 처리(제안)를 채팅 핸들러에 둔다.
 - **Cron 정밀도**: Vercel Hobby Cron은 하루 1회, 지정 시각의 1시간 안 임의 시점에 실행된다
   (2026-09-27 확인, 출처: https://vercel.com/docs/cron-jobs/usage-and-pricing). 그래서
   이 부정확성을 피하려 알림 잡 트리거는 Vercel Cron이 아니라 Supabase `pg_cron`(정확한
@@ -705,7 +832,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 더 이상 "확인 못 함"인 항목은 없다. 남은 구현 전 확인 사항은 수집 대상 게시판의
 `robots.txt`·HTML 구조뿐이다(5절).
 
-### 12. Runbook — Vercel+Supabase ↔ UNO Q 전환 절차 (제안, 미확정)
+### 12. Runbook — Vercel+Supabase ↔ UNO Q 전환 절차 (제안)
 
 이전 가능성 원칙([[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO
 Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 + DNS 변경.
@@ -753,7 +880,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 관리자 지정·기능 범위·"대화·기억 원문 비노출" 원칙은 확정
 ([[anyang-service-scope]], user, 2026-09-27). 아래 엔드포인트·응답 필드·구현 방식은 제안이며
-``이다.
+(미확정)이다.
 
 #### 13-0. 공통 인가
 
@@ -778,7 +905,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
     (YAGNI — 요청당 DB 왕복 1회를 없앤다). 과거에 Google로 가입했던 계정이라도 이번 세션이
     Credentials로 로그인했다면(예: 같은 계정에 두 provider가 있는 경우) 이번 로그인 방식을
     기준으로 판정하는 것이 "지금 이 요청이 실제로 어떻게 인증됐는가"에 더 부합한다.
-  - **가입 시점 차단(신규, 제안, 미확정)**: `POST /api/auth/register`(이메일·비밀번호 가입)에서
+  - **가입 시점 차단(신규, 제안)**: `POST /api/auth/register`(이메일·비밀번호 가입)에서
     요청 email이 `ADMIN_EMAILS`에 있으면 계정 생성 자체를 403(에러 코드 `ADMIN_EMAIL_RESERVED`
     제안, 미확정 — 1-4절 표에 추가 필요)으로 거부한다. 이 비교도 위 649행의 관리자 판정과
     동일하게 대소문자 무시·앞뒤 공백 제거 후 비교한다(제안). 관리자 이메일은 Google 로그인으로만
@@ -788,6 +915,12 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   않으므로 과설계 방지).
 - 관리자 화면 API 응답에는 어떤 엔드포인트에서도 `messages.content`, `user_preferences.
   preference_text` 등 대화·기억 원문을 포함하지 않는다(확정 원칙, 이 문서 전체에 적용).
+
+#### 13-0-1. 관리자 — 프로필 매칭 설정 (신규, 확인 항목 33)
+
+`GET/PATCH /api/admin/settings`는 6-1절에 이미 정의했다(이 절에서는 중복 기재하지 않고
+링크만 둔다) — [[anyang-backend-api#6-1. 프로필 기반 Jev 매칭 (신규, 확인 항목 33)]]. 13-0절
+`requireAdmin` 공통 인가를 그대로 쓴다.
 
 #### 13-1. 공지 수집 관리
 
@@ -800,7 +933,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
 
 - `POST /api/admin/collect-runs`는 5절 수집기 로직을 `trigger_type='manual'`,
-  `triggered_by=<관리자 user_id>`로 동기 실행한다(제안, 미확정). Vercel Fluid Compute 함수
+  `triggered_by=<관리자 user_id>`로 동기 실행한다(제안). Vercel Fluid Compute 함수
   한도(300초, 11절)를 넘기지 않는다는 전제 — 게시판 1개, 신규/변경분만 저장하는 구조라 매
   실행이 300초를 넘길 가능성은 낮다고 판단(YAGNI, 별도 잡 큐를 두지 않는다). 실행이 오래
   걸리는 경우가 실제로 생기면 그때 비동기 큐 도입을 재검토한다(설계 변경 대상).
@@ -812,15 +945,15 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]]에 있어
   **스키마 변경 없이** 이 API를 만들 수 있다(database 문서 확인 완료, 이번 세션에서 스키마
   변경 요청 없음).
-  - 쿼리 파라미터(제안, 미확정): `page`(1부터 시작, 기본 1), `page_size`(기본 20, 최대
+  - 쿼리 파라미터(제안): `page`(1부터 시작, 기본 1), `page_size`(기본 20, 최대
     100 — 다른 관리자 목록과 별도 상한을 둘 이유가 없어 13-3절 사용자 목록과 같은 관례를
     따른다, 제안). 숨김 여부로 걸러 보고 싶을 수 있어 `hidden`(선택, `true`/`false`/생략 —
     생략 시 전체) 파라미터도 둔다(제안, 미확정 — 필터 없이 전체를 다 내려도 되지만 관리자가
     "숨김만" 또는 "정상만" 보고 싶을 수 있어 추가, YAGNI에 크게 위배되지 않는 선에서 쿼리
     파라미터 1개 추가).
-  - 정렬(제안, 미확정): `collected_at desc`(최신 수집순 고정, 정렬 기준 선택 파라미터는
+  - 정렬(제안): `collected_at desc`(최신 수집순 고정, 정렬 기준 선택 파라미터는
     두지 않는다 — 다른 관리자 목록도 정렬 옵션이 없다, YAGNI).
-  - 응답(제안, 미확정): `{ items: [{ id, title, source_url, published_at, collected_at,
+  - 응답(제안): `{ items: [{ id, title, source_url, published_at, collected_at,
     hidden_at, hidden_reason }], page, page_size, total_count }`. `total_count`는
     `count(*)` 별도 쿼리(제안 — 다른 관리자 목록 페이지네이션과 같은 관례가 아직 이
     문서에 없어 새로 정한다, 페이지네이션이 미확정인 `collect-runs`와 달리 이 API는
@@ -846,7 +979,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | GET | `/api/admin/notify-logs/summary` | 날짜별 발송·실패 수 + 구독 수 |
 
 - 쿼리 파라미터: `from`, `to`(날짜 범위, 기본값 최근 30일 제안).
-- 응답(제안, 미확정): `{ daily: [{ day, success_count, failed_count }], notify_enabled_count,
+- 응답(제안): `{ daily: [{ day, success_count, failed_count }], notify_enabled_count,
   push_device_count }`. `daily`는
   [[anyang-database-schema#notify_logs]]의 집계 쿼리 예시를 그대로 쓴다.
 - **"구독 수" 집계 기준(제안, 채택)**: database가 제기한 미확정 질문(두 지표 중 택1)을
@@ -868,12 +1001,12 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | PATCH | `/api/admin/users/:id/unsuspend` | 정지 해제 |
 | DELETE | `/api/admin/users/:id` | 계정 삭제 |
 
-- `GET /api/admin/users` 응답 필드 최소화(제안, 미확정): `{ id, email, created_at,
+- `GET /api/admin/users` 응답 필드 최소화(제안): `{ id, email, created_at,
   suspended_at }`만 반환한다. `name`, 프로필 상세(생년·성별·직군), 대화·기억 관련 필드는
   목록에 넣지 않는다 — 정지/삭제 조작에는 `id`만 있으면 되고, 계정 식별에는 `email`이
   필요하다고 판단(그 이상은 "개인별 통계 노출 최소화" 원칙에 어긋남). 프로필 집계는
   `/api/admin/stats`에서 개인 식별 없이 개수로만 제공한다.
-- `GET /api/admin/stats` 응답(제안, 미확정): `{ total_users, by_birth_decade: [{ decade,
+- `GET /api/admin/stats` 응답(제안): `{ total_users, by_birth_decade: [{ decade,
   count }], by_occupation_type: [{ occupation_type, count }], by_enrollment_status:
   [{ enrollment_status, count }] }`.
   [[anyang-database-schema#연령대·직군 집계 쿼리 예시 (제안) — 관리자 화면 "사용자 관리·통계"용]]
@@ -902,7 +1035,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | GET | `/api/admin/api-usage/summary` | 제공자별 호출 수·오류·토큰, 무료 한도 대비 사용량 |
 
 - 쿼리 파라미터: `from`, `to`(기본값 오늘, database 집계 쿼리 예시와 동일 범위 제안).
-- 응답(제안, 미확정): `{ providers: [{ provider, day, success_count, rate_limited_count,
+- 응답(제안): `{ providers: [{ provider, day, success_count, rate_limited_count,
   error_count, input_tokens, output_tokens, limit_note }] }`.
   [[anyang-database-schema#api_usage_logs]]의 집계 쿼리를 그대로 쓴다.
 - **무료 한도 값의 출처**: 이 문서 11절 "공식 문서로 확인한 수치" 표를 그대로 링크한다(값을
@@ -1036,25 +1169,31 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   해결책은 없다고 판단해 블로킹 질문으로 올리지 않았으나, 설계 승인 시 이 기본안 자체에
   이견이 없는지 확인이 필요하다.
 - **채팅 인용 공지 스트림(3-2절, 확인 항목 22)** — 이벤트 형식(`event: citations`)·전송
-  시점·중복 제거·빈 목록 처리는 backend 제안이며 ``이다. frontend가 이 형식으로
+  시점·중복 제거·빈 목록 처리는 backend 제안이다. frontend가 이 형식으로
   파싱 가능한지는 다음 조율 차례에 확인이 필요하다(이번 호출 범위 밖 — frontend 조율은
   이번 지시서에서 요청받지 않았다).
 - **관리자 공지 목록(13-1절, 확인 항목 23)** — `GET /api/admin/notices`는 기존 스키마
   ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]])로 구현
   가능하다(스키마 변경 불필요, database 재조율 없이 진행). 쿼리 파라미터·응답 필드·
-  `total_count` 포함 여부는 backend 제안이며 ``이다.
+  `total_count` 포함 여부는 backend 제안이다.
 - **나이대 구간 계산(3절, 확인 항목 28)** — 구간 정의(19세 미만/19~24/25~29/30~34/35~39/
   40세 이상)와 원값 미전송은 확정([[anyang-ai-models-data-transfer]]). `birth_year` null
-  등 경계·예외 처리는 backend 제안이며 (미확정)이다.
+  등 경계·예외 처리는 backend 제안이다.
 - **로그인 실패·가입 시도 제한(1-6절, 확인 항목 29)** — 비밀번호 최소 8자, 15분/5회
   임계값과 DB 기록 방식([[anyang-database-schema#auth_attempts]])은 확정. 응답 코드
   (`TOO_MANY_ATTEMPTS`, 429)·메시지·IP 추출 헤더·Auth.js `CredentialsSignin` 커스텀
-  코드 반영 방식은 backend 제안이며 (미확정)이다.
+  코드 반영 방식은 backend 제안이다.
 - **다중 기기 알림 실패 수(7절, [[anyang-database-schema#notify_logs]], 확인 항목 30)** —
   한 대라도 성공하면 success, 실패 기기 수 기록은 확정. 최종 실패 집계 기준(만료 구독
-  제외 등)은 backend 제안이며 (미확정)이다.
+  제외 등)은 backend 제안이다.
 - **비문·앵커 훼손 복구(확인 항목 26)** — 해결(2026-09-28, user): 940행 비문과 409·500·
   541행 위키링크 앵커를 복구했다(의미 변경 없음). [[anyang-backend-api-mihwakjeong-removal-corruption]] 참고.
+- **프로필 기반 Jev 매칭(6-1절, 확인 항목 33)** — 판정 로직·캐시 조회 순서·2-1·7절 분기
+  변경·관리자 API는 backend 제안이며 (미확정)이다. **TypeSafe JS SDK/HTTP API의 정확한 호출
+  형태는 확인 필요**(이번 세션에 WebFetch 없음, 6-1절 참고) — 구현 착수 전 웹 접근 가능한
+  세션이 https://docs.typesafe.ai/sdk/javascript.md 또는 api.md를 확인해야 한다. **TypeSafe
+  처리 국가·처리방침 반영·재동의 필요 여부도 확인 불가**(6-1절 참고, 같은 이유) —
+  [[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행에 이미 미확인으로 남아있다.
 
 ## Links
 

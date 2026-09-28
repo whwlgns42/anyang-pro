@@ -47,9 +47,9 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(active, 승인 2026-09-27): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차
-- [[anyang-backend-api]] — 안양 비서 API 계약(active, 재승인 2026-09-28): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기(실제 셀렉터), Web Push, 관리자 API(공지 목록 포함), 배포, UNO Q runbook
-- [[anyang-frontend-screens]] — 안양 비서 화면 설계(active, 재승인 2026-09-28): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
+- [[anyang-database-schema]] — 안양 비서 DB 설계(draft, Jev 매칭 app_settings·notice_profile_matches 재승인 대기): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차
+- [[anyang-backend-api]] — 안양 비서 API 계약(draft, Jev 프로필 매칭·관리자 설정 API 재승인 대기): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기(실제 셀렉터), Web Push, 관리자 API(공지 목록 포함), 배포, UNO Q runbook
+- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft, 관리자 Jev 토글 재승인 대기): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
 
