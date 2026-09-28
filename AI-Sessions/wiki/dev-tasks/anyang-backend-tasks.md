@@ -17,8 +17,9 @@ database의 마이그레이션이 먼저 적용돼야 한다.
 
 의존: [[anyang-database-schema]]의 테이블(users/accounts/credentials/profiles/notices/
 notice_chunks/conversations/messages/user_preferences/push_subscriptions/notify_settings/
-consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hidden_at)이
-먼저 마이그레이션돼 있어야 아래 작업을 시작할 수 있다. 서비스 범위는
+consents/collect_runs/notify_logs/api_usage_logs/auth_attempts, users.suspended_at,
+notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션돼 있어야 아래
+작업을 시작할 수 있다. 서비스 범위는
 [[anyang-service-scope]](수집 대상 게시판 1개, 프로필 4항목, 알림 자유 시각+on/off, 기억·
 대화 히스토리 화면, 인증 부가 테이블 미사용, 가입 시 동의, 관리자 페이지 `ADMIN_EMAILS`
 기반 기능 4종)로 확정됐다.
@@ -39,6 +40,11 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
    ([[anyang-backend-api#테스트 방법]] 1번).
 1-4. **사용자 탈퇴** — `DELETE /api/account`(1-3절, consents 보관 순서). 1번 의존. 테스트:
    탈퇴 후 `consents` 보관·`user_id` null 확인.
+1-5. **로그인 실패·가입 시도 제한** — `auth_attempts` 기반 판정(1-6절, 확인 항목 29):
+   비밀번호 최소 8자 검증, 로그인 실패·가입 시도 IP/이메일 집계, 429 `TOO_MANY_ATTEMPTS`
+   응답, `authorize()` 커스텀 에러 코드 반영. database의 `auth_attempts` 테이블·정리 잡
+   ([[anyang-database-schema#auth_attempts]]) 마이그레이션 의존. 1번 의존. 테스트:
+   8자 미만 가입 400, 15분/5회 초과 시 로그인·가입 차단, `auth_attempts` 기록 확인.
 2. **프로필 CRUD** — `GET/PUT /api/profile`(4항목: birth_year/gender/occupation_type/
    enrollment_status). 테스트: 인증·본인 확인.
 2-1. **알림 설정** — `GET/PUT /api/notify-settings`. PUT은 생성 시 `enabled_at=now()` 채움,
@@ -59,10 +65,14 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
    문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
    기존에는 Gemini 임베딩에만 적용). **인용 공지 스트림(신규, 확인 항목 22, backend 설계
    3-2절)** — RAG 검색 결과(notice_id 중복 제거)를 `event: citations` SSE 이벤트로 DeepSeek
-   청크 전에 먼저 전송, 빈 목록도 `data: []`로 전송. 3번 의존.
+   청크 전에 먼저 전송, 빈 목록도 `data: []`로 전송. **나이대 구간 계산(신규, 확인 항목 28,
+   backend 설계 3절)** — `birth_year`를 청년정책 구간 문자열로 변환해 프롬프트에 넣고
+   원값은 전송하지 않는다(null이면 조건 생략). 3번 의존.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
-   `notify_logs` pending 선점·정체 재시도 포함). 3·8번 의존. 중복 발송 방지 방식은
-   database·backend 조율 완료(backend 설계 7절).
+   `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
+   backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
+   `result='success'`, `failed_device_count`에 실패 기기 수 기록(만료 구독 삭제분 제외).
+   3·8번 의존. 중복 발송 방지 방식은 database·backend 조율 완료(backend 설계 7절).
 8. **Web Push** — `POST/DELETE /api/push/subscribe`, `web-push` 연동.
 9. **스케줄러 공유 시크릿 미들웨어** — `/api/jobs/*` 공통 인증. 4·5·7번이 의존.
 10. **환경변수·배포 설정** — `output: 'standalone'`, Vercel 프로젝트 설정(icn1), 9절 환경변수
@@ -105,7 +115,7 @@ consents/collect_runs/notify_logs/api_usage_logs, users.suspended_at, notices.hi
 
 ### 순서 제안
 
-3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
+3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 11은 나머지가 끝난 뒤
 여유 있을 때. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
 적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨).

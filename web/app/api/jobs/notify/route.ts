@@ -59,13 +59,17 @@ async function tryReserve(userId: string, noticeId: string): Promise<boolean> {
   return (reclaimed.rowCount ?? 0) > 0;
 }
 
-async function sendToAllDevices(userId: string, noticeId: string): Promise<void> {
+type SendResult = { successCount: number; failedCount: number; lastError?: unknown };
+
+// anyang-backend-api 7절(확인 항목 30) — 다중 기기 발송 판정: 한 대라도 성공하면 전체
+// success, failed_device_count에 성공하지 못한 기기 수를 기록한다(만료 구독 삭제분 제외).
+async function sendToAllDevices(userId: string, noticeId: string): Promise<SendResult> {
   const { rows: devices } = await pool.query<{ endpoint: string; p256dh: string; auth: string }>(
     `select endpoint, p256dh, auth from push_subscriptions where user_id = $1`,
     [userId],
   );
   if (devices.length === 0) {
-    throw new Error("no push devices registered");
+    return { successCount: 0, failedCount: 0 };
   }
   const { rows: noticeRows } = await pool.query<{ title: string }>(`select title from notices where id = $1`, [
     noticeId,
@@ -73,24 +77,24 @@ async function sendToAllDevices(userId: string, noticeId: string): Promise<void>
   const payload = JSON.stringify({ title: noticeRows[0]?.title ?? "새 공지", notice_id: noticeId });
 
   // 기기 1대 실패로 나머지 기기 전송 시도가 막히지 않게 모든 기기를 끝까지 시도한다. 410/404
-  // (Gone/Not Found)는 표준 Web Push 처리로 구독을 지우고 "실패"로 세지 않는다 — 그 외 오류는
-  // 기존과 동일하게 이 (사용자, 공지) 쌍을 실패로 표시한다(전체 성공해야 성공, 기존 판정 유지).
+  // (Gone/Not Found)는 표준 Web Push 처리로 구독을 지우고 성공·실패 어느 쪽으로도 세지 않는다.
+  let successCount = 0;
+  let failedCount = 0;
   let lastError: unknown;
-  let goneCount = 0;
   for (const device of devices) {
     try {
       await sendPushNotification(device, payload);
+      successCount++;
     } catch (err) {
       if (isGoneSubscriptionError(err)) {
         await pool.query(`delete from push_subscriptions where endpoint = $1`, [device.endpoint]);
-        goneCount++;
         continue;
       }
+      failedCount++;
       lastError = err;
     }
   }
-  if (lastError) throw lastError;
-  if (goneCount === devices.length) throw new Error("all push subscriptions were gone");
+  return { successCount, failedCount, lastError };
 }
 
 export async function POST(request: Request) {
@@ -139,18 +143,19 @@ export async function POST(request: Request) {
       const reserved = await tryReserve(userId, noticeId);
       if (!reserved) continue;
 
-      try {
-        await sendToAllDevices(userId, noticeId);
+      const { successCount, failedCount, lastError } = await sendToAllDevices(userId, noticeId);
+      if (successCount > 0) {
         await pool.query(
-          `update notify_logs set result = 'success', sent_at = now() where user_id = $1 and notice_id = $2`,
-          [userId, noticeId],
+          `update notify_logs set result = 'success', sent_at = now(), failed_device_count = $3
+           where user_id = $1 and notice_id = $2`,
+          [userId, noticeId, failedCount],
         );
         sentCount++;
-      } catch (err) {
+      } else {
         await pool.query(
-          `update notify_logs set result = 'failed', sent_at = now(), error_summary = $3
+          `update notify_logs set result = 'failed', sent_at = now(), error_summary = $3, failed_device_count = $4
            where user_id = $1 and notice_id = $2`,
-          [userId, noticeId, err instanceof Error ? err.message.slice(0, 500) : "unknown"],
+          [userId, noticeId, lastError instanceof Error ? lastError.message.slice(0, 500) : "unknown", failedCount],
         );
       }
     }

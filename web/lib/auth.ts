@@ -2,8 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { pool } from "./db";
-import { verifyPassword } from "./password";
 import { pgAdapter } from "./auth-adapter";
+import { authorizeCredentials } from "./authorize-credentials";
 
 // anyang-backend-api 1절: Auth.js v5, Google + Credentials, JWT 세션(DB 세션 테이블 미사용).
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -20,26 +20,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "email", type: "email" },
         password: { label: "password", type: "password" },
       },
-      async authorize(credentials) {
+      // anyang-backend-api 1-6절 — 로그인 실패 제한 판정 로직은 lib/authorize-credentials.ts에
+      // 분리해 Auth.js 부트스트랩 없이 테스트한다.
+      async authorize(credentials, request) {
         const email =
           typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
         const password = typeof credentials?.password === "string" ? credentials.password : "";
-        if (!email || !password) return null;
-
-        const { rows } = await pool.query<{ id: string; email: string; password_hash: string }>(
-          `select u.id, u.email, c.password_hash
-             from users u
-             join credentials c on c.user_id = u.id
-            where u.email = $1`,
-          [email],
-        );
-        const row = rows[0];
-        if (!row) return null;
-
-        const ok = await verifyPassword(row.password_hash, password);
-        if (!ok) return null;
-
-        return { id: row.id, email: row.email };
+        return authorizeCredentials(email, password, request);
       },
     }),
   ],

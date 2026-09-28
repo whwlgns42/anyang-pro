@@ -3,6 +3,9 @@ import { pool } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { CONSENT_TYPES, POLICY_VERSION } from "@/lib/consent";
 import { isAdminEmail } from "@/lib/admin-emails";
+import { extractIp, isBlocked, recordAttempt } from "@/lib/auth-attempts";
+
+const MIN_PASSWORD_LENGTH = 8; // anyang-backend-api 1-6절(확인 항목 29) — 값 확정, 검증 위치는 제안
 
 type RegisterBody = {
   email?: unknown;
@@ -18,6 +21,19 @@ export async function POST(request: NextRequest) {
 
   if (!email || !password) {
     return NextResponse.json({ error: "INVALID_REQUEST" }, { status: 400 });
+  }
+
+  // anyang-backend-api 1-6절 — 가입 시도 판정(IP, 15분/5회)은 동의 검사보다 먼저 확인한다.
+  // 차단이면 429로 거부하고 행을 추가로 기록하지 않는다. 차단이 아니면 이후 결과와 무관하게
+  // 매 요청 1행을 기록한다.
+  const ip = extractIp(request);
+  if (await isBlocked("signup_attempt", "ip", ip)) {
+    return NextResponse.json({ error: "TOO_MANY_ATTEMPTS" }, { status: 429 });
+  }
+  await recordAttempt("signup_attempt", "ip", ip);
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: "PASSWORD_TOO_SHORT" }, { status: 400 });
   }
 
   if (isAdminEmail(email)) {

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { pool } from "@/lib/db";
 import { requireUser } from "@/lib/require-auth";
 import { maskPii } from "@/lib/mask-pii";
+import { ageBandLabel } from "@/lib/age-band";
 import { embedText } from "@/lib/embeddings";
 import { streamDeepSeekChat, summarizePreference, type ChatMessage } from "@/lib/deepseek";
 
@@ -192,9 +193,18 @@ export async function POST(request: NextRequest) {
     [authResult.userId],
   );
   const profile = profileRows[0] ?? null;
+  // anyang-backend-api 3절(확인 항목 28) — 출생연도 원값 대신 나이대 구간 문자열만 프롬프트에
+  // 넣는다. birth_year가 null이면 나이대 조건 자체를 생략한다(제안).
+  const ageBand = profile ? ageBandLabel(profile.birth_year) : null;
   const conditionText = profile
-    ? `출생연도: ${profile.birth_year ?? "미상"}, 성별: ${profile.gender ?? "미상"}, ` +
-      `직군: ${profile.occupation_type ?? "미상"}, 재학재직: ${profile.enrollment_status ?? "미상"}`
+    ? [
+        ageBand ? `나이대: ${ageBand}` : null,
+        `성별: ${profile.gender ?? "미상"}`,
+        `직군: ${profile.occupation_type ?? "미상"}`,
+        `재학재직: ${profile.enrollment_status ?? "미상"}`,
+      ]
+        .filter(Boolean)
+        .join(", ")
     : "사용자 조건 정보 없음";
   const noticesText = notices.length
     ? notices.map((n, i) => `[${i + 1}] ${n.title}\n${n.chunk_text}`).join("\n\n")

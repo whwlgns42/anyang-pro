@@ -112,7 +112,7 @@ describe("POST /api/jobs/notify", () => {
     expect(sendPushMock).toHaveBeenCalledWith({ endpoint: "e", p256dh: "p", auth: "a" }, expect.any(String));
 
     const successCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("result = 'success'"));
-    expect(successCall?.[1]).toEqual(["u1", "notice-1"]);
+    expect(successCall?.[1]).toEqual(["u1", "notice-1", 0]);
   });
 
   it("does not send when similarity is below the threshold", async () => {
@@ -220,6 +220,88 @@ describe("POST /api/jobs/notify", () => {
 
     const failedCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("result = 'failed'"));
     expect(failedCall).toBeDefined();
+  });
+
+  // anyang-backend-api 7절(확인 항목 30) — 다중 기기: 한 대라도 성공하면 success,
+  // failed_device_count에 실패한 기기 수를 기록한다.
+  it("marks success with failed_device_count when one of two devices fails (non-gone) and the other succeeds", async () => {
+    queryMock.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text.includes("from notify_settings ns") && text.includes("join users")) {
+        return { rows: [{ user_id: "u1" }] };
+      }
+      if (text.includes("select enabled_at from notify_settings")) {
+        return { rows: [{ enabled_at: new Date("2026-01-01") }] };
+      }
+      if (text.includes("select embedding from user_preferences")) {
+        return { rows: [{ embedding: JSON.stringify([1, 0]) }] };
+      }
+      if (text.includes("from notice_chunks nc")) {
+        return { rows: [{ id: "notice-1", similarity: 0.9 }] };
+      }
+      if (text.includes("insert into notify_logs")) return { rows: [], rowCount: 1 };
+      if (text.includes("select endpoint, p256dh, auth from push_subscriptions")) {
+        return {
+          rows: [
+            { endpoint: "ok-endpoint", p256dh: "p", auth: "a" },
+            { endpoint: "fail-endpoint", p256dh: "p", auth: "a" },
+          ],
+        };
+      }
+      if (text.includes("select title from notices")) return { rows: [{ title: "새 공지" }] };
+      if (text.includes("result = 'success'")) {
+        void params;
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    sendPushMock.mockImplementation(async (device: { endpoint: string }) => {
+      if (device.endpoint === "fail-endpoint") throw new Error("network error");
+    });
+
+    const res = await POST(makeRequest("secret"));
+    const json = (await res.json()) as { sent_count: number };
+    expect(json.sent_count).toBe(1);
+
+    const successCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("result = 'success'"));
+    expect(successCall?.[1]).toEqual(["u1", "notice-1", 1]);
+  });
+
+  it("marks failed with failed_device_count = 기기 수 when every device fails (non-gone)", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("from notify_settings ns") && text.includes("join users")) {
+        return { rows: [{ user_id: "u1" }] };
+      }
+      if (text.includes("select enabled_at from notify_settings")) {
+        return { rows: [{ enabled_at: new Date("2026-01-01") }] };
+      }
+      if (text.includes("select embedding from user_preferences")) {
+        return { rows: [{ embedding: JSON.stringify([1, 0]) }] };
+      }
+      if (text.includes("from notice_chunks nc")) {
+        return { rows: [{ id: "notice-1", similarity: 0.9 }] };
+      }
+      if (text.includes("insert into notify_logs")) return { rows: [], rowCount: 1 };
+      if (text.includes("select endpoint, p256dh, auth from push_subscriptions")) {
+        return {
+          rows: [
+            { endpoint: "e1", p256dh: "p", auth: "a" },
+            { endpoint: "e2", p256dh: "p", auth: "a" },
+          ],
+        };
+      }
+      if (text.includes("select title from notices")) return { rows: [{ title: "새 공지" }] };
+      return { rows: [] };
+    });
+    sendPushMock.mockRejectedValue(new Error("network error"));
+
+    const res = await POST(makeRequest("secret"));
+    const json = (await res.json()) as { sent_count: number };
+    expect(json.sent_count).toBe(0);
+
+    const failedCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("result = 'failed'"));
+    expect(failedCall?.[1]).toEqual(["u1", "notice-1", "network error", 2]);
   });
 
   it("skips sending when notify_logs is already reserved and not stale (no duplicate send)", async () => {

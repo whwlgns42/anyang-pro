@@ -211,6 +211,8 @@ frontend가 403 응답의 원인(정지/재동의 필요/관리자 아님)을 �
   단순하다). 이 문서 전체에서 관리자 API의 "권한 없음"은 항상 403 + `ADMIN_ONLY`다.
 - 401(비로그인)은 코드 문자열 없이 기존대로 빈 body 또는 최소 body를 반환한다(제안 —
   로그인 여부는 프런트가 세션 유무로 이미 알 수 있어 별도 코드가 필요 없다, YAGNI).
+- 로그인·가입 시도 제한(신규, 확인 항목 29)은 403이 아니라 429 응답이라 이 표에 넣지
+  않는다 — 코드 `TOO_MANY_ATTEMPTS`는 1-6절 참고.
 
 ### 1-5. 이메일 계정 연결 정책 (신규, 제안, 미확정)
 
@@ -237,6 +239,49 @@ Google로 재가입할 수 있다. 이 한계는 이메일 인증을 만들지 �
 감수한 것과 같은 종류이며, 새 인프라(이메일 인증·소유권 확인 절차)를 추가하지 않는다(YAGNI).
 자동 연결 여부 자체를 사용자가 다르게 정하고 싶다면 별도 확인이 필요하다 — 이 문서는 "off
 유지"를 기본 제안으로 채택했다.
+
+### 1-6. 로그인 실패·가입 시도 제한 (신규, 확인 항목 29)
+
+비밀번호 최소 길이와 로그인·가입 시도 횟수 제한 값은 확정됐다(user, 2026-09-28) — 비밀번호
+최소 8자, 로그인 실패는 같은 이메일 또는 같은 IP 기준 15분에 5회 초과 시 일시 차단, 회원가입
+시도는 같은 IP 기준 15분에 5회 초과 시 일시 차단. 판정은 외부 서비스 없이 DB 기록
+([[anyang-database-schema#auth_attempts]])으로 한다(확정). 아래 응답 코드·메시지·IP
+추출 방법·Auth.js 흐름 반영 방식은 backend 제안이며 (미확정)이다.
+
+- **비밀번호 최소 길이**: `POST /api/auth/register`가 `password`를 해시하기 전에 길이
+  8자 이상을 검증한다(값은 확정, 검증 위치는 제안). 8자 미만이면 400(에러 코드
+  `PASSWORD_TOO_SHORT`, 제안, 미확정 — 1-4절 표에는 403 코드만 있어 별도 관리).
+- **IP 추출 방법(제안, 미확정)**: Vercel 배포 환경에서는 요청 헤더 `x-forwarded-for`의
+  첫 번째 값을 클라이언트 IP로 쓴다(Vercel Functions 표준 방식). 헤더가 없는 로컬 개발
+  환경에서는 `127.0.0.1` 등으로 대체한다(제안). UNO Q 전환 시 리버스 프록시 설정에 따라
+  같은 헤더를 유지하거나 다른 헤더로 교체가 필요할 수 있다 — 12절 runbook에는 아직
+  반영하지 않았고 전환 시점에 재확인한다.
+- **로그인 실패 판정(제안, 미확정)**: Auth.js Credentials provider의 `authorize()` 콜백
+  안에서 비밀번호 검증 **전에** [[anyang-database-schema#auth_attempts]]의 판정 쿼리로
+  이번 요청의 이메일·IP 각각의 최근 15분 실패 횟수를 확인한다. 둘 중 하나라도 5회를
+  초과했으면 실제 비밀번호 대조 없이 즉시 로그인 실패로 처리한다(계정 존재 여부와 무관하게
+  같은 응답 — 계정 열거 방지, 제안). `authorize()`가 `null`을 반환하면 Auth.js 표준
+  흐름상 클라이언트는 일반 실패 메시지만 받으므로, 차단 여부를 구분해 보여주려면 Auth.js
+  v5의 `CredentialsSignin` 서브클래스에 커스텀 코드를 실어 던지는 방식(제안, 미확정 —
+  정확한 구현은 Auth.js v5 문서 재확인 필요)으로 `signIn()` 결과의 `error` 값에
+  `TOO_MANY_ATTEMPTS`(제안, 미확정 코드명)를 담아 frontend가 분기하게 한다. 실패가
+  확정되면(차단 여부와 무관하게 매 실패마다) `identifier_type='email'`·`identifier_type='ip'`
+  각 1행을 `auth_attempts`에 기록한다(database 제안 방식 그대로,
+  [[anyang-database-schema#auth_attempts]] "기록 방식" 절).
+- **가입 시도 판정(제안, 미확정)**: `POST /api/auth/register`가 1절 동의 검사보다 먼저
+  IP 기준 최근 15분 시도 횟수를 확인한다. 5회를 초과했으면 429(에러 코드
+  `TOO_MANY_ATTEMPTS`, 제안, 미확정 — 로그인과 같은 코드명 재사용, YAGNI)로 거부하고
+  `auth_attempts` 행을 추가로 기록하지 않는다(이미 초과 상태라 불필요, 제안). 차단 상태가
+  아니면 성공·실패(동의 누락 400, 이메일 중복 409 등)와 무관하게 요청마다
+  `identifier_type='ip'` 1행을 기록한다(database 제안, [[anyang-database-schema#auth_attempts]]
+  "기록 방식" 절 그대로).
+- **응답 코드(제안, 미확정)**: 로그인 차단·가입 차단 모두 429(Too Many Requests)로
+  통일한다 — 1-4절의 403 목록은 인가 실패용이라 성격이 다른 이 경우는 별도 상태 코드를
+  쓴다. body는 1-4절과 같은 형식 `{ error: "TOO_MANY_ATTEMPTS" }`(제안, 미확정).
+- **frontend 계약(신규, 확정)**: 회원가입 폼은 비밀번호가 8자 미만이면 안내 문구를
+  보여준다(최소 길이 값은 확정, 문구·UI는 frontend 소관). 로그인·가입 모두 429 +
+  `{ error: "TOO_MANY_ATTEMPTS" }` 응답을 받으면 "잠시 후 다시 시도해 주세요" 계열
+  메시지를 보여준다(에러 코드 문자열은 이 절이 정하는 계약, 문구 자체는 frontend 소관).
 
 ### 2. 프로필 CRUD
 
@@ -370,6 +415,16 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
      파라미터로 사용자별 동시성을 관리할 수 있으나, 식별정보 전송 금지 원칙에 따라 실제
      `user_id`/`email`이 아닌 **서버가 발급한 무작위 내부 ID**만 이 파라미터에 넣는다(제안,
      미확정 — 예: `crypto.randomUUID()`를 세션마다 생성해 재사용).
+   - **나이대 구간 계산(확정, 확인 항목 28)**: 프롬프트의 "나이대" 조건은
+     [[anyang-ai-models-data-transfer#Details]]가 정한 청년정책 구간(19세 미만 / 19~24 /
+     25~29 / 30~34 / 35~39 / 40세 이상) 문자열만 전달한다 — `profiles.birth_year` 원값은
+     DeepSeek에 보내지 않는다. 만 나이는 `Asia/Seoul 기준 현재 연도 − birth_year`로
+     계산한다(확정). **경계·예외 처리(제안, 미확정)**: `birth_year`가 null이면(2절 프로필
+     4항목 모두 null 허용) 나이대 조건 자체를 프롬프트에서 생략한다(제안 — 모르는 값을
+     임의 구간으로 채우지 않는다). 계산된 나이가 구간 경계값과 같을 때(만 19세·40세 등)는
+     위 구간 표기의 하한 포함 규칙을 그대로 따른다(예: 19는 "19~24" 구간, 40은 "40세 이상"
+     구간). 이 계산은 산술 비교로 결정적으로 풀리므로 Jev 도입 대상이 아니다(dev-common
+     제외 조건).
 4. **응답 스트리밍**(제안, 미확정 — 3-2절 인용 계약 반영): 클라이언트로 보내는 스트림 맨
    앞에 3-2절의 인용 이벤트 1개를 먼저 보낸 뒤, 이어서 DeepSeek SSE 청크를 그대로(tee)
    전달한다. 완료 후 `messages`에 저장(role=assistant, 인용 목록 자체는 저장하지 않는다 —
@@ -405,8 +460,7 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
 | GET | `/api/conversations` | 로그인 사용자의 대화 목록(제목, 마지막 갱신 시각) |
 | GET | `/api/conversations/:id/messages` | 특정 대화의 과거 메시지 목록 |
 
-- `messages`/`conversations` 테이블은 [[anyang-database-schema#conversations / messages
- ]]에 있다(컬럼: `conversations.id/user_id/title/created_at/updated_at`,
+- `messages`/`conversations` 테이블은 [[anyang-database-schema#conversations / messages]]에 있다(컬럼: `conversations.id/user_id/title/created_at/updated_at`,
   `messages.id/conversation_id/role/content/created_at`). 목록은
   `(user_id, updated_at desc)` 인덱스로 최근 순 조회(database 문서 인덱스 제안).
 - **`conversations.title` 자동 생성(제안, 미확정)**: 대화의 첫 사용자 메시지를 앞에서부터
@@ -496,8 +550,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   4. `content_hash`(제목+본문 해시, 미확정)로 기존 공지와 비교해 신규/변경분만 저장.
   5. 신규/변경 공지는 임베딩 파이프라인 큐에 등록(4번 참고).
 - User-Agent에 연락 가능한 식별 문자열을 남긴다(제안, 미확정 — 예: 서비스명 + 문의 이메일).
-- **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices
- ]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
+- **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
   애플리케이션 책임으로 끝나고, 숨김 해제 시 재임베딩 비용이 없다(YAGNI, 물리 삭제는 되돌리기
   비용만 크고 이득이 없다). `/api/notices/recommended`, `/api/notices/:id`, 채팅 RAG 검색
   (3절), notify-job 매칭(7절) 등 `notices`/`notice_chunks`를 조회하는 모든 지점에서
@@ -537,15 +590,22 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   그대로 쓴다(`notify_time + 5분`이 자정을 넘는 경우를 OR로 분기 처리한 SQL, database가
   이미 작성해뒀다 — 값을 복제하면 한쪽만 고쳐질 위험이 있어 링크로 대체).
   - **중복 발송 방지 — `notify_logs` pending 2단계 채택(제안, database 조율 완료)**:
-    database가 확정한 `notify_logs` 구조([[anyang-database-schema#notify_logs
-   ]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
+    database가 확정한 `notify_logs` 구조([[anyang-database-schema#notify_logs]] — `reserved_at`/`sent_at`/`result`(`pending`/`success`/`failed`))를 그대로
     쓴다. 흐름: 매칭된 (사용자, 공지) 쌍마다
     1. `INSERT INTO notify_logs (user_id, notice_id, result) VALUES ($1, $2, 'pending')
        ON CONFLICT (user_id, notice_id) DO NOTHING`으로 먼저 선점한다.
-    2. 실제로 삽입된 경우(영향 받은 행 수 1)에만 Web Push를 전송한다. 삽입 안 됐으면(이미
-       선점된 조합) 3번의 "정체된 pending 재시도" 판단으로 넘어간다.
-    3. 전송 결과에 따라 `UPDATE notify_logs SET result = 'success' | 'failed', sent_at =
-       now(), error_summary = ... WHERE user_id = $1 AND notice_id = $2`로 갱신한다.
+    2. 실제로 삽입된 경우(영향 받은 행 수 1)에만 Web Push를 전송한다. 그 사용자의
+       `push_subscriptions` 전체(기기 여러 대 등록 가능)에 각각 전송을 시도한다(제안,
+       [[anyang-database-schema#notify_logs]] "다중 기기 발송 판정" 절, 확인 항목 30).
+       삽입 안 됐으면(이미 선점된 조합) 3번의 "정체된 pending 재시도" 판단으로 넘어간다.
+    3. **결과 판정과 `failed_device_count` 기록(확정, 확인 항목 30)**: 등록된 기기 중
+       한 대라도 전송에 성공하면 `result='success'`, 모두 실패하면 `result='failed'`로
+       기록한다(값은 확정). `UPDATE notify_logs SET result = 'success' | 'failed', sent_at
+       = now(), error_summary = ..., failed_device_count = <성공하지 못한 기기 수>
+       WHERE user_id = $1 AND notice_id = $2`로 갱신한다(제안, 미확정 — 정확한 컬럼 갱신
+       구문). 만료된 구독(410/404, 위 8절 삭제 방침)은 전송 전/후 삭제하고
+       `failed_device_count`에 포함하지 않는다(제안, database 문서와 동일한 방침 채택 —
+       더 이상 유효하지 않은 기기라 "이번에 실패한 기기"로 보지 않는다).
     - **정체된 `pending` 재시도(제안, 미확정 — 프로젝트 문서 확인 항목 17 후속)**: 함수가
       전송 도중 중단되면 `result='pending'`인 채로 영영 남아 그 사용자는 해당 공지 알림을
       영구히 못 받는다. 이를 막기 위해 2번에서 삽입이 안 된(이미 있던) 조합을 만나면 기존
@@ -596,6 +656,10 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 - VAPID subject는 `mailto:` 또는 `https://` + `APP_ORIGIN`(확정 원칙 — 값 자체는 도메인
   확정 시점에 정해짐, [[anyang-deployment-portability]] 원칙 5).
 - 라이브러리는 표준 `web-push`(npm, Node 표준 Web Push 구현) 사용 제안.
+- **Payload 스키마(확정, 확인 항목 31)**: 알림 전송 시 Web Push payload는
+  `{ title, notice_id }` 고정 형식이다. `title`은 새로 매칭된 공지 제목, `notice_id`는
+  `notices.id`(식별정보 미포함). 서비스워커([[anyang-frontend-screens]] 소관)가 알림 클릭
+  시 이 `notice_id`로 `/notices/[id]`(공지 상세)로 이동한다.
 
 ### 9. 환경변수 목록
 
@@ -608,6 +672,7 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 | `GEMINI_API_KEY` | Gemini 임베딩 API |
 | `SCHEDULER_SHARED_SECRET` | pg_net/cron → 앱 API 호출 인증 |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 클라이언트(서비스워커/`PushManager.subscribe`)가 구독 생성에 쓰는 공개키. `VAPID_PUBLIC_KEY`와 같은 값이며 `NEXT_PUBLIC_` 접두사로 브라우저에 노출된다(확정, 확인 항목 31) |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
 
@@ -859,6 +924,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   `POST /api/auth/consent`로 재동의하면 그 뒤 정상 호출되는지 확인. 비밀번호 재설정
   엔드포인트는 만들지 않으므로 `POST /api/auth/forgot-password` 등 경로가 404/미존재인지
   확인(제외 확정 반영).
+- **로그인·가입 시도 제한(1-6절, 확인 항목 29)**: 8자 미만 비밀번호로 가입 시도 시 400
+  확인. 같은 이메일(또는 같은 IP)로 15분 안에 5회 로그인 실패 시 6번째 시도가 비밀번호가
+  맞아도 차단(`TOO_MANY_ATTEMPTS`)되는지 확인. 같은 IP로 15분 안에 6번째 가입 요청 시
+  429 확인. 차단 판정에 쓰인 `auth_attempts` 행이 database 제안 구조대로 쌓이는지 확인.
 - **탈퇴**: `DELETE /api/account` 호출 후 `users` 행이 삭제되고, 해당 사용자의 `consents`
   행은 삭제되지 않은 채 `user_id`가 null·`withdrawn_at`이 채워졌는지 확인. `DELETE
   /api/admin/users/:id`도 같은 결과인지 확인. 재동의가 필요한 옛 `policy_version`
@@ -874,7 +943,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   새 대화 생성 시 `title`이 첫 메시지 앞부분으로 채워지는지 확인.
 - **채팅**: DeepSeek API를 목(mock)으로 대체한 통합 테스트로 스트리밍 응답 조립 확인.
   전송 payload를 캡처해 `email`/`name`/`user_id` 문자열이 포함되지 않는지 검증(정규식 또는
-  키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증. 전화번호·이메일·주민등록번호 형태를
+  키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증. `birth_year`로 계산한 나이대
+  구간 문자열이 프롬프트에 들어가고 원값(연도 숫자)은 들어가지 않는지 확인(확인 항목 28,
+  구간 경계값 픽스처 포함). 전화번호·이메일·주민등록번호 형태를
   포함한 사용자 메시지로 DeepSeek·Gemini 호출을 각각 목으로 캡처해, 두 전송 payload 모두
   가림 처리 후 문자열이 전달되는지 확인(정규식 가림 자동 검증 — 한 곳만 확인하지 않는다).
   선호 추출 결과 문장에 전화번호 등이 포함된 픽스처로 Gemini 임베딩 호출을 캡처해 가림
@@ -922,6 +993,10 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   정상 반영되는지 확인. `reserved_at`을 10분 이전으로 조작한 `pending` 테스트 행을 만든 뒤
   재선점(`UPDATE ... WHERE reserved_at < now() - interval '10 minutes'`)이 성공하고 전송이
   재시도되는지 확인. `success`/`failed` 행은 이 재선점 대상이 아닌지도 확인.
+- **다중 기기 알림 발송(확인 항목 30)**: 한 사용자에 `push_subscriptions` 2개 이상 픽스처로
+  하나만 성공하도록 목 전송을 구성해 `result='success'`이면서 `failed_device_count`가
+  실패한 기기 수와 같은지 확인. 모두 실패하면 `result='failed'` 확인. 410/404 응답으로
+  삭제된 만료 구독은 `failed_device_count`에 포함되지 않는지 확인.
 - **수동 수집 실행**: `POST /api/admin/collect-runs` 호출 시 `collect_runs`에
   `trigger_type='manual'`, `triggered_by=<관리자 id>` 행이 생기고 응답이 300초 안에
   오는지(목 서버로 짧게) 확인.
@@ -937,7 +1012,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   대체 안내(1-1절). 관련 엔드포인트·이메일 발송 인프라 없음.
 - 알림 잡 중복 발송 방지 — 해결(2026-09-27, database 확정 + backend 채택): `notify_logs`의
   `unique(user_id, notice_id)` + `pending`→`success`/`failed` 2단계 흐름(7절). 정체된
-  `pending` 재시도 임계값(제안 10분)은 backend 제안값이며이다.
+  `pending` 재시도 임계값(제안 10분)은 backend 제안값이다.
 - 공지 자격요건을 `notices`의 구조화 컬럼으로 둘지 — 1차 출시에서 만들지 않는다(확정,
   [[anyang-service-scope]], user, 2026-09-27). 게시판 구조 확인 후에도 이번 스콥에서는
   재검토하지 않는다.
@@ -968,6 +1043,18 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   ([[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]])로 구현
   가능하다(스키마 변경 불필요, database 재조율 없이 진행). 쿼리 파라미터·응답 필드·
   `total_count` 포함 여부는 backend 제안이며 ``이다.
+- **나이대 구간 계산(3절, 확인 항목 28)** — 구간 정의(19세 미만/19~24/25~29/30~34/35~39/
+  40세 이상)와 원값 미전송은 확정([[anyang-ai-models-data-transfer]]). `birth_year` null
+  등 경계·예외 처리는 backend 제안이며 (미확정)이다.
+- **로그인 실패·가입 시도 제한(1-6절, 확인 항목 29)** — 비밀번호 최소 8자, 15분/5회
+  임계값과 DB 기록 방식([[anyang-database-schema#auth_attempts]])은 확정. 응답 코드
+  (`TOO_MANY_ATTEMPTS`, 429)·메시지·IP 추출 헤더·Auth.js `CredentialsSignin` 커스텀
+  코드 반영 방식은 backend 제안이며 (미확정)이다.
+- **다중 기기 알림 실패 수(7절, [[anyang-database-schema#notify_logs]], 확인 항목 30)** —
+  한 대라도 성공하면 success, 실패 기기 수 기록은 확정. 최종 실패 집계 기준(만료 구독
+  제외 등)은 backend 제안이며 (미확정)이다.
+- **비문·앵커 훼손 복구(확인 항목 26)** — 해결(2026-09-28, user): 940행 비문과 409·500·
+  541행 위키링크 앵커를 복구했다(의미 변경 없음). [[anyang-backend-api-mihwakjeong-removal-corruption]] 참고.
 
 ## Links
 
@@ -983,3 +1070,5 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - [[anyang-frontend-screens]]
 - [[anyang-frontend-tasks]]
 - [[anyang-preferences-put-missing-mask-pii]]
+- [[anyang-backend-api-mihwakjeong-removal-corruption]]
+- [[anyang-jobs-collect-missing-maxduration]]

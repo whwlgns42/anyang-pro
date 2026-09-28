@@ -93,6 +93,40 @@ describe("POST /api/chat", () => {
     expect(combined).not.toMatch(/a@b\.com/);
   });
 
+  it("sends age band instead of raw birth_year to DeepSeek (item 28)", async () => {
+    mockAuthenticatedQueries((text) => {
+      if (text.includes("select birth_year")) {
+        return [{ birth_year: 1900, gender: "male", occupation_type: "it", enrollment_status: "employed" }];
+      }
+      return undefined;
+    });
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockResolvedValue(new Response(makeSseStream(["data: [DONE]\n\n"])));
+
+    const res = await POST(makeRequest({ message: "안녕" }));
+    expect(res.status).toBe(200);
+
+    const [chatMessages] = streamDeepSeekChatMock.mock.calls[0] as [{ content: string }[]];
+    const combined = chatMessages.map((m) => m.content).join("\n");
+    expect(combined).toContain("40세 이상");
+    expect(combined).not.toMatch(/1900/);
+  });
+
+  it("omits age band condition when birth_year is null (item 28)", async () => {
+    mockAuthenticatedQueries((text) => {
+      if (text.includes("select birth_year")) {
+        return [{ birth_year: null, gender: null, occupation_type: null, enrollment_status: null }];
+      }
+      return undefined;
+    });
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockResolvedValue(new Response(makeSseStream(["data: [DONE]\n\n"])));
+
+    const res = await POST(makeRequest({ message: "안녕" }));
+    const [chatMessages] = streamDeepSeekChatMock.mock.calls[0] as [{ content: string }[]];
+    expect(chatMessages[0].content).not.toContain("나이대");
+  });
+
   it("returns 502 when embedding fails", async () => {
     mockAuthenticatedQueries();
     embedTextMock.mockRejectedValue(new Error("EMBEDDING_NOT_CONNECTED"));
