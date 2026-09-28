@@ -27,6 +27,21 @@ case "$cmd" in
           "insert into schema_migrations(version) values ('$version');" >/dev/null
       fi
     done
+    rls_off=$(psql "$DATABASE_URL" -tAc \
+      "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;")
+    if [ -n "$rls_off" ]; then
+      echo "RLS off on public tables: $rls_off" >&2
+      exit 1
+    fi
+    anon_role=$(psql "$DATABASE_URL" -tAc "select 1 from pg_roles where rolname = 'anon'")
+    if [ "$anon_role" = "1" ]; then
+      anon_access=$(psql "$DATABASE_URL" -tAc \
+        "select table_name from information_schema.tables t where table_schema = 'public' and has_table_privilege('anon', format('%I.%I', table_schema, table_name), 'SELECT');")
+      if [ -n "$anon_access" ]; then
+        echo "anon has table privileges on: $anon_access" >&2
+        exit 1
+      fi
+    fi
     ;;
   down)
     n="${2:-1}"
