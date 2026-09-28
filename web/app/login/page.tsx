@@ -205,8 +205,7 @@ export default function LoginPage() {
                   onChange={(e) => setOverseasTransfer(e.target.checked)}
                 />
                 <label htmlFor="consent-overseas">
-                  대화·선호 정보를 DeepSeek(국외)·Gemini(국외, 임베딩)로 전송하는 것에
-                  동의합니다.
+                  대화 내용을 AI가 처리하는 것에 동의합니다.
                 </label>
               </div>
               <p className="hint-text">

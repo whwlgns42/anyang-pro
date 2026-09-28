@@ -68,3 +68,6 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-09-28 17:22 | save | overview 문서의 중국 관련 표현을 "대화 내용을 AI가 처리"로 바꿈(사용자 요청): 서비스-소개 md·html 각 1곳, 프로젝트-정의서 1곳. 안양비서-* 다이어그램 파일에는 해당 표현 없음 | [[서비스-소개]] `AI-Sessions/wiki/overview/프로젝트-정의서.html`
 2026-09-28 17:24 | save | anyang-service-scope 개인정보 동의 행에서 "(중국 서버 처리)" 국가명만 삭제(user 지시, 국외 이전 고지 사실은 유지). ai-models-data-transfer·프로젝트 문서 확인 항목 41·frontend-screens(설계 잠금)·문구 테스트의 중국 표현은 유지 | [[anyang-service-scope]]
 2026-09-28 17:25 | save | 사실 서술의 "중국"을 "국외"로 정리(user 지시): 프로젝트 문서 확인 항목 41의 4곳, anyang-ai-models-data-transfer Context 1곳. 화면 금지어 목록(41 답변·frontend-screens·문구 테스트)은 규칙 의미가 바뀌어 유지, frontend-screens 사실 서술 3곳은 설계 잠금으로 미수정 | [[anyang-youth-policy-assistant]] [[anyang-ai-models-data-transfer]]
+2026-09-28 17:40 | save | 아두이노 UnoQ 보드 포트·접속 방법을 live_server_info에서 정리해 raw에 추가(user 지시, 비밀번호·토큰·API 키는 가림) | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`
+2026-09-28 17:45 | save | overview의 프로젝트 정의서·서비스 소개·다이어그램 3개를 탭 뷰어로 묶어 UnoQ 보드 7539 포트에 배포(user 지시): /home/arduino/anyang-docs, anyang-docs.service(python http.server). raw 포트 문서에는 7539가 없음(raw 불변이라 미수정) | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`
+2026-09-28 17:55 | save | raw 아두이노 포트 문서에 7539 문서 뷰어 정보 추가(user 지시로 raw 수정): 포트·접속 주소·서비스·디렉터리·재배포 방법 | `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`

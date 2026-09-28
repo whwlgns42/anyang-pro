@@ -57,6 +57,9 @@ owner: pm
 - 2026-09-28: 사용자 재승인(database-schema, 35 반영본), 승인된 설계 재기록. database 구현: 0019_lock_public_api up/down 작성, migrate.sh up 끝에 점검 2개(실패 시 테이블 이름 출력·exit 1), 설계 문서 (미확정) 2곳 제거. **적용 전 점검에서 멈춤** — 테이블 소유자는 `postgres`(단일)로 확인했지만 로컬 `web/.env.local`에 `DATABASE_URL`이 없어 앱 접속 롤을 확정하지 못함. 운영 적용·검증·코드 커밋·code-review 미진행(0019 파일과 migrate.sh는 작업 트리에 미커밋). 확인 항목 37.
 - 2026-09-28: 37 해결(user, 접속 롤 = postgres Direct connection). database가 0019를 운영 DB에 단일 트랜잭션으로 적용·검증(점검 2개 0행, anon 42501, `_probe` rollback), npm test 170개·build 통과, 커밋 1b22f09. code-review 구현 수정 1건(up/down 파일에 begin/commit) → e6330a8, 재검수 통과. 35 해결. 남은 일: 메인 세션의 `get_advisors` 실행, 36(개발용 프로젝트에서 down→up) 보류.
 - 2026-09-28: 메인 세션이 사용자 요청으로 Vercel 배포 시작. 프로젝트 `anyang-youth-policy-assistant` 생성(icn1), framework Other→nextjs 수정 후 미리보기 배포 정상(`/` 307, `/login` 200). 첫 배포가 운영에 배정돼 운영 주소는 404 버전 — `--prod` 재배포 필요. 환경변수 6개 등록(AUTH_SECRET·SCHEDULER_SHARED_SECRET·VAPID 3개·APP_ORIGIN, 값 미보관). 접속 정보는 사용자 요청으로 로컬 전용 `AI-Sessions/private/anyang-credentials.md`(git 제외)에 기록. 실패 사례 [[anyang-vercel-first-deploy-pitfalls]].
+- 2026-09-28: 사용자 새 요청(/consent 국외 이전 고지·DeepSeek 문구 제거). 기존 결정(15·18, service-scope·ai-models-data-transfer)과 충돌, 법적 근거·범위 모순이 있어 분배 전 멈춤. 확인 항목 41.
+- 2026-09-28: 41 답(user, 메인 세션 전달) 기록, 결정 문서 2건 갱신. frontend-screens·frontend-tasks를 승인된 설계에서 빼고 frontend 설계 draft(7절 동의 legend "AI 활용 동의 (필수)"·라벨, 9절 처리방침 문구, 테스트에 문자열 부재 확인, 제안값은 frontend-screens 확인 항목 2). 재승인 대기, 구현은 재승인 뒤. 법적 요건(41-b)은 답 없음. 설계 문서 커밋 ddb7192(프로젝트 문서·service-scope·log는 메인 세션 미커밋 변경과 섞여 있어 미커밋).
+- 2026-09-28: 41 재승인(user, 법적 위험 감수) 기록, 승인된 설계 8차. frontend 구현 9f65aeb(동의 legend·라벨, 처리방침 "AI 처리" 절, 금지 문자열 테스트 2건, 설계 2종 active). npm test 172개 통과, **npm run build는 dev 서버(3100) 충돌 우려로 미실행인데 커밋됨**(log flag). code-review: 치명 없음, 문구·필드·검증·API 불변 확인. 경미 3건은 확인 항목 42.
 
 ### 설계 문서
 
@@ -132,7 +135,24 @@ owner: pm
 
 38. **사용자 입력 필요(2026-09-28, Vercel 배포)**: 운영 환경변수 남은 7개 — `DATABASE_URL`(Transaction pooler 6543, 메인 세션이 넣을 수 있음·사용자 답 대기), `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`DEEPSEEK_API_KEY`·`GEMINI_API_KEY`·`ADMIN_EMAILS`(사용자가 직접 입력). Google OAuth 리디렉션 URI `https://anyang-youth-policy-assistant.vercel.app/api/auth/callback/google` 등록 필요. 입력 뒤 `vercel deploy --prod`.
 39. **사용자 결정 필요(2026-09-28, Vercel 배포)**: 프로젝트에 Vercel Authentication(ssoProtection `all_except_custom_domains`)이 켜져 있어 `*.vercel.app` 운영 주소도 Vercel 로그인 사용자만 열 수 있다. 일반 사용자와 pg_cron 수집·알림 트리거가 막힌다. 운영만 해제(미리보기는 보호 유지)할지 결정.
+    - 정정(2026-09-28, 메인 세션 실측): 로그인 없이 `curl`로 확인한 결과 운영 도메인 `anyang-youth-policy-assistant.vercel.app`은 SSO로 넘어가지 않고 앱이 직접 응답(현재는 첫 배포라 404), 미리보기·배포별 주소만 `vercel.com/sso-api`로 302. 즉 운영은 이미 공개 상태라 해제할 것 없음. `--prod` 배포 후 로그인 없이 200인지 다시 확인한다.
 40. **후속(2026-09-28, 38 이후)**: 예약 작업(collect/notify 트리거) 등록 시 `SCHEDULER_SHARED_SECRET`을 새로 만들어 Vercel과 Supabase Vault에 동시에 넣는다(2026-09-28 생성값은 보관하지 않음).
+41. **사용자 결정 필요(2026-09-28, 새 요청 — /consent에서 국외 이전 고지·DeepSeek 문구 제거)**: pm이 분배 전에 멈춤. 설계·코드 변경 없음, "승인된 설계" 기록도 그대로 둠. 확인할 것:
+    - (a) **기존 사용자 결정과 충돌**: 15번(user, "수집·이용"과 "국외 이전" 분리 동의)과 [[anyang-service-scope]] "개인정보 동의" 행(DeepSeek·Gemini 국외 이전 고지), [[anyang-ai-models-data-transfer]] "동의 화면의 국외 이전 고지에 Gemini 전송 포함"을 뒤집는 결정인지. 뒤집는다면 결정 문서 2건을 고친다(pm 소유).
+    - (b) **법적 근거**: 실제 전송(채팅 → DeepSeek 국외 서버, 임베딩 → Gemini 국외)은 그대로다. 개인정보 보호법 제28조의8은 국외 이전 시 별도 동의 또는 (계약 이행에 필요한 처리위탁·보관이면) 처리방침 공개·고지 같은 요건을 둔다. 어느 요건으로 갈지는 법적 판단이라 pm·에이전트가 정할 수 없다. 동의 화면에서 빼도 되는 근거(예: 처리방침 공개로 대체)를 사용자가 확인해야 한다.
+    - (c) **범위 모순**: 요청은 "폼 필드·검증·API 호출은 바꾸지 않는다"인데, 국외 이전 고지는 필수 체크박스 `overseas_transfer`의 라벨 자체다(`web/app/consent/consent-form.tsx`, 백엔드 `CONSENT_TYPES` 필수 2종). 선택지: ① 체크박스·API는 두고 라벨만 DeepSeek·국가명 없는 문구로 바꾼다(대체 문구 필요), ② 국외 이전 체크박스를 없앤다(폼·검증·API·DB 동의 기록 변경 → database·backend·frontend 설계 변경), ③ 그대로 둔다.
+    - (d) **처리방침 페이지**: `/privacy-policy`와 [[anyang-frontend-screens]] 처리방침 절에도 DeepSeek·국외 이전 고지가 있다. 요청 범위(동의 화면만)에 포함하는지. 법적 근거를 (b)의 처리방침 공개로 잡으면 처리방침에서는 빼면 안 된다.
+    - (e) **재동의**: 18번(처리방침 개정 시 재동의 강제)과 `POLICY_VERSION`. 문구를 바꾸면 버전을 올려 기존 사용자에게 재동의를 받는지, 요청대로 기존 동의 기록을 유지하고 신규 가입자에게만 적용하는지(버전 유지).
+    - 답을 받으면 해당 설계 문서를 "승인된 설계"에서 빼고 설계(필요한 에이전트만, database → backend → frontend) → 사용자 재승인 → 구현 → code-review 순으로 진행한다. 설계와 구현을 한 호출에 묶는 것은 승인 게이트(Kickoff 3) 때문에 하지 않는다.
+    - 답(2026-09-28, user, 메인 세션 전달): (a) 뒤집는다 — 화면 표현만 단순화. (c) ① 체크박스 `overseas_transfer`·API 필수 검증 유지, 라벨·설명에서 국가명(중국·국외·미국)·서비스명(DeepSeek·Gemini)·상세 고지 제거, "AI가 대화 내용을 처리합니다" 수준 문구. (d) `/privacy-policy`도 같은 방식. (e) 기존 동의 기록 유지, 신규 가입자에게만 새 화면(재동의 없음 → `POLICY_VERSION` 유지로 해석, 18번의 예외). 실제 전송(DeepSeek·Gemini 모두 국외)은 변하지 않음을 사용자가 인지.
+    - **(b) 법적 근거는 답이 없다**: 동의 화면과 처리방침 모두에서 빼면 국외 이전 사실이 사용자에게 어디에도 고지되지 않는다. 또 `overseas_transfer` 동의 기록이 "국외 이전 동의"로 남지만 사용자는 그 사실을 안내받지 않고 체크하게 된다. 재승인 때 이 위험을 감수하는지(또는 법률 검토 후 진행하는지) 사용자 확인 필요.
+    - 41-b 해결(2026-09-28, user, 메인 세션 전달): 법적 위험을 감수하고 진행한다. 설계 2종 재승인, 구현 진행.
+    - 41 구현·검수 완료(2026-09-28): 9f65aeb, code-review 통과(치명 없음). build 확인만 남음(42-a).
+42. **후속(2026-09-28, 41 검수)**:
+    - (a) **메인 세션 확인 필요**: 9f65aeb가 `npm run build` 없이 커밋됨. dev 서버(3100) 중지 후 build 실행, 결과를 log.md flag 해결 줄로 남긴다.
+    - (b) 사용자 결정 필요(경미, 설계 잠금 대상): [[anyang-frontend-screens]] 339~340행 수집·이용 라벨의 "(제안,↵미확정)"이 줄바꿈으로 나뉘어 훅이 표시 삭제를 허용하지 않아 남음(값은 기존 그대로 확정). 35행 "3차 개정(확인 항목 41, draft)" 서술도 active와 어긋남. 고치려면 문서를 승인된 설계에서 잠시 빼고 자구만 정리 후 재승인. 권장: 다음 설계 변경 때 함께 정리.
+    - (c) 경미, 보류 가능: `web/test/consent-privacy-wording.test.ts`가 주석까지 검사해 나중에 주석에 서비스명을 적으면 깨진다. 현재 동작은 정상.
+    - pm 판단: 사용자 전달문은 "설계 변경 없음"이지만 [[anyang-frontend-screens]] 7·9절과 [[anyang-frontend-tasks]]에 해당 문구가 확정값으로 적혀 있어 설계 변경이다(그대로 코드만 고치면 설계-코드 모순). 두 문서를 승인된 설계에서 빼고 frontend 설계 draft → 재승인 → 구현. database·backend 문서는 필드명 `overseas_transfer`와 "국외 이전" 동의 유형 의미만 담고 있어 이번 범위에서 고치지 않는다.
 
 ## 승인된 설계
 
@@ -142,11 +162,15 @@ owner: pm
 
 2026-09-28(6차): 사용자 재승인으로 `anyang-database-schema`를 다시 기록한다(35 반영본, 커밋 1e59171). 점검 SQL 문구와 `migrate.sh up` 실패 출력 형식은 문서에 적힌 값 그대로 이번 승인으로 확정. 확인 항목 36은 보류 유지.
 
+2026-09-28(7차): `anyang-frontend-screens`와 `anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 41(동의 화면·처리방침의 국외 이전·서비스명 문구를 "AI 처리" 표현으로 단순화, 새 요청). 두 문서 7·9절과 작업 문서에 해당 문구가 확정값으로 적혀 있다. 재승인 뒤 다시 기록한다.
+
+2026-09-28(8차): 사용자 재승인(메인 세션 전달)으로 `anyang-frontend-screens`·`anyang-frontend-tasks`를 다시 기록한다(draft 커밋 ddb7192). frontend-screens 확인 항목 2의 제안 문구(legend·라벨·가림 안내 유지·처리방침 문구) 전부 확정. 사용자가 41-b 법적 위험을 감수하고 진행.
+
+- [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-database-schema]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
 
 ## Jev 도입 제안
 
@@ -180,3 +204,4 @@ owner: pm
 - [[anyang-preferences-put-missing-mask-pii]]
 - [[anyang-backend-api-mihwakjeong-removal-corruption]]
 - [[anyang-jobs-collect-missing-maxduration]]
+- [[서비스-소개]]

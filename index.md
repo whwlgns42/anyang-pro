@@ -68,6 +68,7 @@
 - [[anyang-stack-database]] — 안양 비서: Next.js App Router PWA + PostgreSQL/pgvector
 - [[anyang-ai-models-data-transfer]] — 안양 비서: DeepSeek 대화, Gemini 무료 임베딩, 외부 AI에 식별정보 전송 금지, 채팅 메시지 임베딩은 정규식 가림 후 허용
 - [[anyang-login-method]] — 안양 비서: Google 로그인 + 이메일·비밀번호 가입
+- [[anyang-google-oauth-setup]] — 안양 비서: Google OAuth 2.0 클라이언트 설정(프로젝트명 anyang-youth-policy, 로컬·Vercel 리디렉션 URI, 환경변수 추가)
 - [[anyang-service-scope]] — 안양 비서: 수집 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의, 관리자 페이지(ADMIN_EMAILS)
 - [[anyang-deployment-portability]] — 안양 비서: Vercel Hobby icn1 + Supabase 서울, UNO Q 양방향 이전 원칙, Docker 미사용
 
