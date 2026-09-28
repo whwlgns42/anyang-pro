@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: database
 ---
 
@@ -753,7 +753,7 @@ authenticated 롤에 애초에 권한이 없다.
     and has_table_privilege('anon', format('%I.%I', table_schema, table_name), 'SELECT');
   ```
 - `web/db/migrate.sh up`의 마지막 단계로 위 점검 2개를 실행한다(제안, 구현 단계에서 정확한
-  출력 형식은 `(미확정)`). 결과가 있으면 테이블 이름을 출력하고 `exit 1`로 끝낸다 — up이
+  출력 형식은 ``). 결과가 있으면 테이블 이름을 출력하고 `exit 1`로 끝낸다 — up이
   "성공"으로 끝났는데 공개 접근이 남는 상황을 막는다.
 - MCP(`apply_migration`)로 적용한 뒤에도 같은 점검 SQL 2개와 `get_advisors`(security 타입,
   RLS 관련 경고 0건 확인)를 실행한다.
@@ -945,7 +945,7 @@ authenticated 롤에 애초에 권한이 없다.
   기본 권한 회수)을 두고 적용 후 점검 SQL로 누락을 잡는다. 대상은 운영용 프로젝트(확인
   항목 34 해결과 연동). [[anyang-youth-policy-assistant#확인이 필요한 항목]] 35. `0019_lock_public_api`
   마이그레이션과 "공개 API 차단" 절로 반영(위 참고). 점검 SQL의 정확한 문구, `migrate.sh`
-  출력 형식은 제안값으로 `(미확정)` — 구현 단계에서 확정.
+  출력 형식은 제안값으로 `` — 구현 단계에서 확정.
 
 ## Links
 
