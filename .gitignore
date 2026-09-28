@@ -24,3 +24,4 @@ AI-Sessions/private/
 node_modules/
 !.env.example
 .next/
+.env*

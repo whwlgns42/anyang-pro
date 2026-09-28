@@ -34,3 +34,4 @@ Google 소셜 로그인과 자체 회원가입(이메일·비밀번호)을 둘 �
 - [[anyang-backend-api]]
 - [[anyang-frontend-screens]]
 - [[anyang-service-scope]]
+- [[anyang-google-oauth-setup]]

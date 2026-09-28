@@ -3,6 +3,7 @@ type: decision
 date: 2026-09-28
 status: active
 owner: pm
+decided_by: user
 ---
 
 # 안양 비서: Google OAuth 설정
@@ -22,16 +23,18 @@ Google OAuth 2.0을 통한 소셜 로그인 구현 완료. Auth.js v5에 Google 
 - **클라이언트 ID**: 환경변수 `GOOGLE_CLIENT_ID`에 저장
 - **클라이언트 보안 비밀**: 환경변수 `GOOGLE_CLIENT_SECRET`에 저장
 
-### 승인된 JavaScript 원본 (2개)
+### 승인된 JavaScript 원본 (3개)
 ```
 http://localhost:3100
 https://anyang-youth-policy-assistant-qjbcrfrj.vercel.app
+https://web-jtg3svh76-whwlgns42-1220s-projects.vercel.app
 ```
 
-### 승인된 리디렉션 URI (2개)
+### 승인된 리디렉션 URI (3개)
 ```
 http://localhost:3100/api/auth/callback/google
 https://anyang-youth-policy-assistant-qjbcrfrj.vercel.app/api/auth/callback/google
+https://web-jtg3svh76-whwlgns42-1220s-projects.vercel.app/api/auth/callback/google
 ```
 
 ### 환경변수 설정
@@ -59,12 +62,22 @@ https://anyang-youth-policy-assistant-qjbcrfrj.vercel.app/api/auth/callback/goog
 - OAuthAccountNotLinked 오류 처리: 같은 이메일로 이미 비밀번호 가입된 경우 안내
 - 로그인 성공 시 `/post-login`으로 리다이렉트
 
-## Vercel 배포 후 조치
+## Vercel 배포 설정 (2026-09-28 완료)
 
-Vercel 환경변수에 다음 3개 추가 필요:
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `AUTH_SECRET`
+**배포된 프로젝트:**
+- **URL**: https://web-jtg3svh76-whwlgns42-1220s-projects.vercel.app
+- **Alias**: https://web-beta-smoky-16.vercel.app
+- **프로젝트 ID**: prj_plVcLE93J2TGssFdPpLZnlM3Tdzz
+
+**환경변수 (Production):**
+- ✅ `GOOGLE_CLIENT_ID` = 563672437433-aeo9ikqmj3c9efnkfsejedq7sdcf69v.app
+- ✅ `GOOGLE_CLIENT_SECRET` = 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
+- ✅ `AUTH_SECRET` = VMybPwvTgKZIEW9taBYykqqkuvN7xTJEF2KAhfn0V2U=
+- ✅ `AUTH_URL` = https://web-jtg3svh76-whwlgns42-1220s-projects.vercel.app
+
+**GitHub 연동:**
+- 상태: 진행 중 (계정 권한 문제 해결 필요)
+- 계획: whwlgns42 계정으로 anyang-pro 저장소 연결 후 Root Directory를 `./web`으로 설정
 
 ## Links
 
