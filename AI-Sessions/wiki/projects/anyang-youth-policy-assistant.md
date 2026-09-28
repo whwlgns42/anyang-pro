@@ -55,10 +55,11 @@ owner: pm
 - 2026-09-28: 사용자 요청으로 database가 Supabase MCP로 `web/db/migrations/` up 파일 19개(0000_extensions ~ 0018_notify_logs_failed_device_count)를 순서대로 원격 DB에 적용 — 전부 성공, 건너뜀·실패 없음(적용 전 빈 프로젝트). migrate.sh와 같은 추적을 위해 각 적용에 `public.schema_migrations` 기록을 함께 넣음(19개 version). public 테이블 17개(schema_migrations 포함). `web/db/jobs/`(pg_cron 트리거·정리 잡)와 down 파일은 적용 안 함. 저장소 파일 변경 없음. 확인 항목 34·35.
 - 2026-09-28: 사용자 결정 34(운영용)·35(공개 API 차단, 확장성). [[anyang-database-schema]]를 승인된 설계에서 빼고 database 설계 draft — "공개 API 차단" 절, 0019_lock_public_api 계획(up/down), 점검 SQL 2개·migrate.sh exit 1·MCP 적용 후 점검+get_advisors, 운영 기준 테스트 방법. 첫 호출은 pm이 "승인된 설계" 절 설명 문장에 위키링크를 남겨 설계 잠금 훅에 막혔고, 백틱 표기로 고친 뒤 재호출. 재승인 대기, 0019 구현·적용은 재승인 뒤. 새 확인 항목 36.
 - 2026-09-28: 사용자 재승인(database-schema, 35 반영본), 승인된 설계 재기록. database 구현: 0019_lock_public_api up/down 작성, migrate.sh up 끝에 점검 2개(실패 시 테이블 이름 출력·exit 1), 설계 문서 (미확정) 2곳 제거. **적용 전 점검에서 멈춤** — 테이블 소유자는 `postgres`(단일)로 확인했지만 로컬 `web/.env.local`에 `DATABASE_URL`이 없어 앱 접속 롤을 확정하지 못함. 운영 적용·검증·코드 커밋·code-review 미진행(0019 파일과 migrate.sh는 작업 트리에 미커밋). 확인 항목 37.
+- 2026-09-28: 37 해결(user, 접속 롤 = postgres Direct connection). database가 0019를 운영 DB에 단일 트랜잭션으로 적용·검증(점검 2개 0행, anon 42501, `_probe` rollback), npm test 170개·build 통과, 커밋 1b22f09. code-review 구현 수정 1건(up/down 파일에 begin/commit) → e6330a8, 재검수 통과. 35 해결. 남은 일: 메인 세션의 `get_advisors` 실행, 36(개발용 프로젝트에서 down→up) 보류.
 
 ### 설계 문서
 
-재승인 대기(2026-09-28, 35 반영, draft): anyang-database-schema. 나머지 4종은 승인 유지.
+5종 모두 승인됨(anyang-database-schema는 2026-09-28 35 반영본 재승인, 0019 구현·운영 적용 완료).
 
 - [[anyang-database-schema]] — database. 스키마, HNSW 인덱스, pg_cron+pg_net 잡, 재임베딩 절차
 - [[anyang-backend-api]] — backend. API 계약, 인증, 채팅 RAG, 임베딩, 수집기, Web Push, 환경변수, 배포, UNO Q 전환 runbook
@@ -123,8 +124,10 @@ owner: pm
     - 35 해결(2026-09-28, user): 확장성(테이블 추가·수정, 기능 확장 뒤에도 유지)이 요구사항. 방향 — 새 마이그레이션 `0019_lock_public_api`(up/down): public 테이블 전체 RLS 켜기·정책 없음, anon·authenticated 롤이 있을 때만(DO 블록) 현재 테이블·시퀀스·함수 권한 회수, `alter default privileges for role postgres in schema public revoke ...`로 미래 객체 권한 선회수. 적용 후 점검 SQL 2개(RLS 꺼진 테이블 0행, anon 권한 테이블 0행)를 `migrate.sh up` 끝에서 실행해 실패 시 exit 1, MCP 적용 뒤에도 같은 점검 + `get_advisors`. 설계 문서에 "공개 API 차단" 절(새 테이블 마이그레이션은 같은 파일에서 RLS 켜기, 클라이언트 직접 접근은 설계 변경). 운영 기준 검증: 단일 트랜잭션, 적용 전 테이블 소유자=접속 롤 점검(불확실하면 멈춤), `_probe`는 begin~rollback 안에서만, 운영에서 down→up 반복 테스트 안 함(36). 대시보드 Data API 토글은 배포 체크리스트의 선택 사항. 그래서 [[anyang-database-schema]]를 "승인된 설계"에서 뺐다(사유: 35 반영). database 설계 draft 후 사용자 재승인, 구현은 재승인 뒤.
     - 설계 draft 완료(2026-09-28, database): [[anyang-database-schema]] "공개 API 차단" 절·0019 계획·테스트 방법. database 제안값(미확정): 점검 SQL 2개의 정확한 문구, `migrate.sh up` 실패 출력 형식 — 재승인으로 확정할지, 구현 단계에서 정할지 사용자 결정 필요.
     - 재승인(2026-09-28, user): "설계 끝나면 바로 승인하고 운영에 적용해줘". 위 제안값 2건은 문서에 적힌 값 그대로 확정. 구현·운영 적용 진행.
+    - 35 해결(2026-09-28): 0019_lock_public_api 운영 적용 완료(단일 트랜잭션, schema_migrations 기록). 점검 SQL 2개 0행, anon으로 public.users 조회 시 permission denied, `_probe`(rollback) anon 권한 없음. 코드 커밋 1b22f09, code-review 지적(파일에 begin/commit 없음) 수정 e6330a8, 재검수 통과. `get_advisors`는 메인 세션 대상(미실행).
 36. **보류(2026-09-28, 35 후속)**: `0019_lock_public_api` down→up 반복 적용 테스트는 운영 DB에서 하지 않는다(되돌리는 동안 공개 키 접근이 다시 열림). 개발용 Supabase 프로젝트가 생기면 그곳에서 실행한다. 그때까지 down 파일은 문법 검토만.
 37. **사용자 확인 필요(2026-09-28, 0019 적용 전 점검에서 database 제기)**: 운영 앱의 `DATABASE_URL`(Vercel 환경변수 등) 접속 롤이 public 테이블 소유자 `postgres`와 같은지. 로컬 `web/.env.local`에는 `DATABASE_URL`이 없어(키: `AUTH_SECRET`, `AUTH_URL`뿐) 확인할 수 없었다. Supabase pooler 연결 문자열이면 사용자명이 `postgres.<ref>` 형식이고 롤은 `postgres`다(비밀번호는 알려주지 않아도 된다 — 사용자명 부분만 확인). 다른 롤(예: 별도 앱 전용 롤)이면 정책 없는 RLS가 앱 쿼리를 막아 운영 장애가 되므로 설계 재검토. 확인되면 database 구현 재호출로 단일 트랜잭션 적용 → 점검·검증 → 커밋 → code-review. 아직 앱을 운영에 배포하지 않아 `DATABASE_URL`을 정하지 않은 상태라면 그 사실도 알려 주면 된다(그때는 "소유자 롤 `postgres`로 접속"을 배포 조건으로 두고 적용할지 결정).
+    - 37 해결(2026-09-28, user): 접속 롤 = postgres(Direct connection), 사용자 확인. 테이블 소유자와 같다. 접속 문자열·비밀번호·project ref는 어디에도 남기지 않는다. database 구현 재호출로 0019 운영 적용 진행.
 
 ## 승인된 설계
 
