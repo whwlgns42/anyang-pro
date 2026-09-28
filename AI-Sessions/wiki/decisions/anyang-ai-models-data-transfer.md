@@ -28,7 +28,7 @@ decided_by: user
 
 - "대화할수록 맞춤형"은 사용자별 기억 누적 방식이며 모델 재학습이 아니다(사용자 확인, 2026-09-27). 구체적인 저장·매칭 방식은 [[anyang-backend-api]]에서 정한다.
 - 임베딩 모델명·출력 차원, 무료 티어 한도는 공식 문서로 확인해 [[anyang-backend-api]]와 [[anyang-database-schema]]에 반영했다(2026-09-27).
-- 동의 화면의 국외 이전 고지에 "Gemini로 대화 내용 전송"을 포함한다([[anyang-service-scope]]).
+- ~~동의 화면의 국외 이전 고지에 "Gemini로 대화 내용 전송"을 포함한다~~ → 변경(user, 2026-09-28): 동의 화면·처리방침에는 국가명·서비스명 없이 "AI가 대화 내용을 처리" 수준으로만 표시한다. 실제 전송 범위(위 표)는 그대로다. 법적 고지 요건 확인은 [[anyang-youth-policy-assistant]] 확인 항목 41([[anyang-service-scope]]).
 
 ## Links
 

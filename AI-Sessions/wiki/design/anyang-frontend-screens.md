@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -32,6 +32,15 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 화면에 비밀번호 길이 힌트·차단 메시지 표시 방식을 추가했다(1-1절, 문구·배치는 frontend
 제안대로 확정됐다).
 
+**2026-09-28 3차 개정(확인 항목 41, draft)**: 사용자 결정으로 동의 화면(7절)·처리방침(9절)의
+서술에서 국가명(중국·국외·미국 등)·서비스명(DeepSeek·Gemini)·상세 고지(무료 티어, 임베딩,
+RAG 등)를 뺀다. 체크박스 코드 식별자 `overseas_transfer`, 필수 검증, API 호출 형식은
+그대로 둔다. 새 문구는 frontend 제안(미확정) — 재승인으로 확정. 기존 동의 기록은 유지하고
+재동의를 요구하지 않으므로 `POLICY_VERSION`은 올리지 않는다(18번 재동의 강제 원칙의 예외,
+신규 가입자에게만 새 문구가 보인다). 법적 근거(국외 이전 사실이 동의·처리방침 어디에도
+남지 않는 위험)는 사용자가 별도로 인지했다([[anyang-youth-policy-assistant]] 확인 항목
+41 (b)) — 이 설계 문서는 그 위험 판단을 다루지 않는다.
+
 ## Context
 
 - 확정: Next.js(App Router) 풀스택 PWA [[anyang-stack-database]], 로그인 Google+이메일/비밀번호
@@ -44,8 +53,10 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   - 추천 공지 목록/상세, 알림 설정·기억·히스토리 엔드포인트가 backend 문서에 반영됐다(엔드포인트
     형태는 여전히 제안·미확정이지만 화면 채택 자체는 확정, [[anyang-service-scope]], user,
     2026-09-27).
-  - 가입 동의는 "수집·이용"(`collection_use`)과 "국외 이전"(`overseas_transfer`) 체크박스
-    2개로 분리해 각각 받는 것으로 **확정**됐다([[anyang-service-scope]], user, 2026-09-27).
+  - 가입 동의는 체크박스 2개(코드 식별자 `collection_use`·`overseas_transfer`)로 분리해 각각
+    받는 것으로 **확정**됐다([[anyang-service-scope]], user, 2026-09-27). 두 번째 체크박스의
+    화면 표시 라벨·설명은 2026-09-28 확인 항목 41(user)로 국가명·서비스명 없는 단순 문구로
+    바뀐다(7절 참고) — 코드 식별자·필수 검증·API 형식은 바뀌지 않는다.
     이메일 가입 시 `POST /api/auth/register`의
     `consents: { collection_use: true, overseas_transfer: true }`, Google 로그인 시 신규
     사용자에 한해 별도 `POST /api/auth/consent`(같은 `consents` body)로 처리한다(backend 1절).
@@ -322,16 +333,22 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   (backend 1절 예외, 재동의하지 않으려는 사용자에게 탈퇴 외 선택지가 막히지 않게 하기 위함).
 - 동의 항목은 체크박스 **2개로 분리해 각각 필수**로 받는 것으로 **확정**됐다
   ([[anyang-service-scope]], user, 2026-09-27, backend
-  [[anyang-backend-api#1. 인증 (Auth.js v5)]]):
-  1. "수집·이용" 동의(`collection_use`) — 수집 항목(생년·성별·직군·재학/재직 여부)과 수집
-     목적 고지.
-  2. "국외 이전" 동의(`overseas_transfer`) — DeepSeek(중국 서버에서 대화 처리)·Gemini(임베딩,
-     무료 티어) 국외 이전 고지, Gemini로 대화 내용을 전송한다는 사실(채팅 RAG 검색을 위한
-     사용자 메시지 임베딩, 전송 전 전화번호·이메일·주민등록번호 형태는 정규식으로 가린 뒤
-     전송)도 포함([[anyang-ai-models-data-transfer]], user, 2026-09-27 — 공지 본문·선호
-     문장만 보내던 원안을 넓힘).
+  [[anyang-backend-api#1. 인증 (Auth.js v5)]]). 화면 표시 문구는 2026-09-28 개정(확인 항목
+  41, user)으로 단순화됐다 — 코드 식별자·필수 검증·제출 body는 바뀌지 않는다:
+  1. 코드 식별자 `collection_use` — 수집 항목(생년·성별·직군·재학/재직 여부)과 수집 목적
+     고지. **legend(제안, 미확정)**: "수집·이용 동의 (필수)" (기존 유지). **라벨(제안,
+     미확정)**: "생년·성별·직군·재학/재직 여부를 서비스 제공 목적으로 수집·이용하는 것에
+     동의합니다." (기존 유지, 국가명·서비스명이 없어 변경 불필요).
+  2. 코드 식별자 `overseas_transfer` — **legend(제안, 미확정)**: "AI 활용 동의 (필수)".
+     **라벨(제안, 미확정)**: "대화 내용을 AI가 처리하는 것에 동의합니다." 국가명("중국",
+     "국외", "미국" 등)·서비스명("DeepSeek", "Gemini")·상세 고지(무료 티어, 임베딩, RAG 등)는
+     쓰지 않는다(user, 2026-09-28). 전송 전 전화번호·이메일·주민등록번호 형태를 가린다는
+     안내는 서비스명·국가명 없이도 뜻이 통하므로 **남긴다(제안, 미확정)** — 예:
+     "대화 내용 중 전화번호·이메일·주민등록번호 형태는 전송 전 가려집니다."
   두 체크박스 모두 체크해야 제출 가능(하나만 체크 시 제출 불가, 제안 — 버튼 비활성 또는
   인라인 오류, 제안). 처리방침 페이지(`/privacy-policy`, 9절) 링크를 함께 둔다.
+  실제 전송 대상(DeepSeek 중국 서버, Gemini 국외)은 바뀌지 않는다 — 화면 표현만 단순화한다
+  (user, 2026-09-28, [[anyang-youth-policy-assistant]] 확인 항목 41).
 - 제출 body(확정 형식, backend 1절): `{ consents: { collection_use: true,
   overseas_transfer: true } }`. 이메일 가입은 `POST /api/auth/register`의 `consents` 필드로
   함께 전송, Google 로그인·재동의는 `POST /api/auth/consent`(같은 `consents` body) 호출 →
@@ -365,21 +382,24 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 ### 9. 개인정보 처리방침 페이지 (`/privacy-policy`)
 
-- 정적 콘텐츠 페이지(제안) — 수집 항목·목적, DeepSeek·Gemini 국외 이전 고지, 보관·
-  삭제 정책 등 실제 문구는 법률 검토 후 확정(이 설계 범위 밖). 로그인 여부와 무관하게
-  접근 가능(제안).
+- 정적 콘텐츠 페이지(제안) — 수집 항목·목적, AI 처리 고지, 보관·삭제 정책 등 실제 문구는
+  법률 검토 후 확정(이 설계 범위 밖). 로그인 여부와 무관하게 접근 가능(제안).
+- 2026-09-28 개정(확인 항목 41, user): 국가명(중국·국외·미국 등)·서비스명(DeepSeek·Gemini)·
+  상세 고지(무료 티어, 임베딩, RAG 등)를 아래 고지 항목에서 뺀다. 실제 전송(DeepSeek 중국
+  서버, Gemini 국외)은 바뀌지 않으며 화면 표현만 단순화한다.
 - 2절 동의 화면에서 이 페이지로 링크한다.
 - **고지 항목에 반영해야 할 것(제안, 문구는 법률 검토 후 확정)**:
   - 탈퇴 시 동의 기록은 즉시 삭제되지 않고 증빙용으로 1년간 보관된 뒤 삭제된다(보관 기간
     **확정**, [[anyang-service-scope]], user, 2026-09-27,
     [[anyang-database-schema#consents — 가입 시 개인정보 필수 동의 기록]] 참고).
-  - 수집 실행 이력·외부 API 사용량 기록은 90일 보존 후 삭제된다(**확정**,
-    [[anyang-service-scope]], user, 2026-09-27). 알림 발송 로그는 중복 발송 방지 목적으로
-    삭제 대상에서 제외된다.
-  - DeepSeek(중국 서버 처리)·Gemini(임베딩, 무료 티어) 국외 이전 고지에 Gemini로 대화 내용을
-    전송한다는 사실(채팅 RAG 검색을 위한 사용자 메시지 임베딩, 전송 전 전화번호·이메일·
-    주민등록번호 형태는 정규식으로 가린 뒤 전송)을 포함한다([[anyang-ai-models-data-transfer]],
-    user, 2026-09-27 — 7절과 동일 고지).
+  - 외부 AI API 사용량 기록(수집 실행 이력 포함)은 90일 보존 후 삭제된다(보관 기간
+    **확정**, [[anyang-service-scope]], user, 2026-09-27 — 서비스명은 2026-09-28 개정으로
+    뺀다). 알림 발송 로그는 중복 발송 방지 목적으로 삭제 대상에서 제외된다.
+  - **AI 처리 고지(제안, 미확정, 2026-09-28 개정)**: "대화 내용은 AI가 처리하며, 관련 공지
+    검색을 위해 대화 내용 일부가 AI 처리 과정에서 활용될 수 있습니다. 전송 전
+    전화번호·이메일·주민등록번호 형태는 가려집니다." 국가명·서비스명·무료 티어·임베딩·RAG
+    같은 상세는 쓰지 않는다(user, 2026-09-28). 실제 전송 대상(DeepSeek 중국 서버, Gemini
+    국외)은 바뀌지 않는다([[anyang-ai-models-data-transfer]]).
 
 ### 10. 관리자 공통 레이아웃 (`/admin`)
 
@@ -509,11 +529,15 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
   이메일 중복 가입 시 409 오류 메시지 노출 확인. 잘못된 비밀번호 로그인 시 오류 메시지 확인.
   이미 이메일·비밀번호로 가입된 이메일로 Google 로그인 시도 시 `OAuthAccountNotLinked`
   오류를 비밀번호 오류와 다른 안내 문구로 표시하는지 확인.
-- **개인정보 동의**: 체크박스 2개(수집·이용, 국외 이전) 중 1개만 체크한 상태로 제출 시도 시
+- **개인정보 동의**: 체크박스 2개(수집·이용, AI 활용) 중 1개만 체크한 상태로 제출 시도 시
   진행되지 않는지 확인(제출 버튼 비활성 또는 오류). 둘 다 체크 후 이메일 가입은
   `POST /api/auth/register`에 `consents: { collection_use: true, overseas_transfer: true }`가
   담기는지, Google 신규 가입은 `POST /api/auth/consent`(같은 `consents` body) 호출 후
   `/onboarding`으로 이동하는지 확인. 처리방침 페이지 링크 이동 확인.
+- **동의·처리방침 문구 단순화(확인 항목 41)**: `/consent`, `/privacy-policy` 화면의 렌더링된
+  텍스트에 "DeepSeek", "Gemini", "중국", "국외", "미국" 문자열이 없는지 확인(코드 식별자
+  `overseas_transfer`, API body 필드명은 문자열 검사 대상에서 제외 — 화면에 노출되는 텍스트만
+  본다).
 - **재동의 강제**: 인증 필요 API 응답을 403 + `{ error: "CONSENT_REQUIRED" }`로 목(mock)
   처리했을 때 공통 인증 가드가 `/consent`로 리다이렉트하는지, 두 체크박스를 다시 체크해
   제출하면 `POST /api/auth/consent`가 재호출되고 원래 흐름으로 복귀하는지, 이 화면에 탈퇴
@@ -587,6 +611,9 @@ Next.js(App Router) PWA, 모바일 우선. 로그인/가입 → 온보딩(프로
 
 1. `occupation_type` 온보딩 입력 컴포넌트(select vs 라디오 그룹) — 2절에 제안만
    적었다. 설계 승인으로 확정된다.
+2. (확인 항목 41) 7절 `overseas_transfer` 체크박스의 legend·라벨 문구, 9절 AI 처리 고지
+   문구, 전화번호·이메일·주민등록번호 가림 안내를 남길지 여부 — 모두 frontend 제안(미확정).
+   설계 재승인으로 확정된다.
 
 (2026-09-27 해결: 프로필 코드값 셋(`gender`, `occupation_type`, `enrollment_status`)은
 [[anyang-service-scope]] "프로필 선택지" 행(user, 2026-09-27)에서 확정됐다 — 2절 참고.)

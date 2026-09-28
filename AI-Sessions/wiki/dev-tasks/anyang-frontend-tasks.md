@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -52,13 +52,17 @@ draft 반영에 의존한다.
    가입 429 `TOO_MANY_ATTEMPTS` 응답 시 차단 안내 메시지 표시. 세부는
    [[anyang-frontend-screens#1-1. 비밀번호 길이·시도 제한 안내 (신규, 확인 항목 29)]]. 2번
    이후 착수.
-3. **개인정보 동의 화면** (`/consent`) — 가입 시 필수 동의, 체크박스 2개(수집·이용,
-   국외 이전) 모두 필수 — 국외 이전 고지에는 Gemini로 대화 내용을 전송한다는 사실(전송 전
-   전화번호·이메일·주민등록번호 형태를 가림)도 포함한다. `POST /api/auth/register`/
-   `POST /api/auth/consent`의 `consents` body 연동. 재동의 강제(공통 가드가 403 +
-   `CONSENT_REQUIRED`를 감지해 이 화면으로 리다이렉트, 1번 작업과 연계) 포함. 이 화면에는
-   탈퇴 경로(3-1번) 링크도 함께 둔다. 세부 문구는 법률 검토 확정 후 교체(구조 변경 아님,
-   제안).
+3. **개인정보 동의 화면** (`/consent`) — 가입 시 필수 동의, 체크박스 2개(코드 식별자
+   `collection_use`·`overseas_transfer`) 모두 필수. 두 번째 체크박스 라벨·legend는
+   2026-09-28 개정(확인 항목 41)으로 국가명·서비스명 없는 단순 문구("AI 활용 동의" 계열)로
+   바뀐다 — 코드 식별자·필수 검증·API body는 바뀌지 않는다. 전화번호·이메일·주민등록번호
+   가림 안내는 남기는 방향으로 제안(미확정). 세부는
+   [[anyang-frontend-screens#7. 개인정보 동의 화면 (`/consent`)]] 참고.
+   `POST /api/auth/register`/`POST /api/auth/consent`의 `consents` body 연동. 재동의
+   강제(공통 가드가 403 + `CONSENT_REQUIRED`를 감지해 이 화면으로 리다이렉트, 1번 작업과
+   연계) 포함 — 단 이번 문구 개정 자체는 재동의를 유발하지 않는다(`POLICY_VERSION` 유지).
+   이 화면에는 탈퇴 경로(3-1번) 링크도 함께 둔다. 세부 문구는 법률 검토 확정 후 교체(구조
+   변경 아님, 제안).
 3-1. **계정 탈퇴 화면** (`/settings/account`) — 확인 다이얼로그(네이티브 `window.confirm` 또는
    모달, 제안), `DELETE /api/account` 연동(재동의 필요·정지 상태에서도 호출 가능, backend
    1절·1-2절 예외), 1년 보관 안내 문구 표시.
@@ -83,9 +87,11 @@ draft 반영에 의존한다.
    `PUT /api/preferences/:id`, `DELETE /api/preferences/:id` 연동.
 10. **대화 히스토리 목록 화면** (`/conversations`) — `GET /api/conversations`,
     `GET /api/conversations/:id/messages` 연동.
-11. **개인정보 처리방침 페이지** (`/privacy-policy`) — 정적 페이지. Gemini로 대화 내용을
-    전송한다는 국외 이전 고지, 동의 기록 1년 보관 고지 포함. 법률 검토된 문구 확정 후
-    콘텐츠만 채운다(구조는 이번에 만든다).
+11. **개인정보 처리방침 페이지** (`/privacy-policy`) — 정적 페이지. AI 처리 고지(국가명·
+    서비스명 없이 "대화 내용은 AI가 처리" 수준, 2026-09-28 개정·확인 항목 41), 외부 AI API
+    사용량 90일 보관 고지(서비스명 제외), 동의 기록 1년 보관 고지 포함. 세부는
+    [[anyang-frontend-screens#9. 개인정보 처리방침 페이지 (`/privacy-policy`)]] 참고. 법률
+    검토된 문구 확정 후 콘텐츠만 채운다(구조는 이번에 만든다).
 12. **관리자 공통 레이아웃·가드** (`/admin`) — 관리자 API 응답 코드(401/403 `ADMIN_ONLY`)
     기준 접근 판정([[anyang-frontend-screens#공통 레이아웃 (모바일 우선)]]의 "관리자
     가드" 절 — 판정은 `ADMIN_EMAILS` + 이번 세션의 로그인이 Google인 경우만 통과, 계정이
