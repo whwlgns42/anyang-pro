@@ -63,10 +63,11 @@ owner: pm
 - 2026-09-28: Vercel 프로젝트 변경 — 메인 세션이 만든 `anyang-youth-policy-assistant`가 세션 밖에서 삭제되고 `web` 프로젝트(로컬 `web/.vercel` 연결)가 생겨 이후 `web`을 사용(user 지시 "vercel에도 배포해줘"). 운영 환경변수 9개 정리(구글 값은 Google 토큰 엔드포인트로 유효 확인, localhost `AUTH_URL` 제거, 비밀값 새로 생성), `vercel deploy --prod` → https://web-beta-smoky-16.vercel.app 로그인 없이 `/login` 200, `/api/auth/providers` 200(google·credentials). 런타임 DB 접속은 미검증(같은 주소로 로컬 접속만 확인).
 - 2026-09-29: 사용자가 운영에서 구글 로그인 성공 — 운영 DB에 users 1·accounts 1(google)·consents 2·profiles 1 기록 확인(개수만 조회), 운영 오류 로그 없음. `DEEPSEEK_API_KEY`(모델 목록·최소 호출 확인)·`GEMINI_API_KEY`(`gemini-embedding-001` 호출 200) Vercel `web` 운영·`web/.env.local` 등록 후 운영 재배포(Ready, `/login` 200). 운영 환경변수 11개. 코드의 `deepseek-chat`은 API가 `deepseek-flash`로 응답하는 별칭 — 확인 항목 41.
 - 2026-09-29: 사용자 새 요청(채팅이 이름을 기억 못 함). 원인 3개와 사용자 결정 2건을 확인 항목 43에 기록, [[anyang-ai-models-data-transfer]] 갱신, 설계 5종을 승인된 설계에서 뺌(9차). 설계 draft 완료(database 스키마 변경 없음, backend 기억 주입·매 답변 추출, frontend 안내·처리방침 문구). 재승인 대기, 구현은 재승인 뒤.
+- 2026-09-29: 43 재승인(user: Gemini 전송 허용, 부분 답변 저장 포함, 제안값 전부 확정). 결정 문서 갱신, 승인된 설계 10차. backend가 43-b 단락 추가 후 구현 236d410(npm test 193개·build 통과). frontend 문구 구현은 테스트 174개 통과, dev 서버(3100) 때문에 build·커밋 대기(44). code-review 치명 없음. push 대기(45).
 
 ### 설계 문서
 
-5종 모두 확인 항목 43 설계 수정으로 재승인 대기(2026-09-29).
+5종 모두 확인 항목 43 반영본으로 재승인(2026-09-29, user, "승인된 설계" 10차).
 
 - [[anyang-database-schema]] — database. 스키마, HNSW 인덱스, pg_cron+pg_net 잡, 재임베딩 절차
 - [[anyang-backend-api]] — backend. API 계약, 인증, 채팅 RAG, 임베딩, 수집기, Web Push, 환경변수, 배포, UNO Q 전환 runbook
@@ -176,6 +177,15 @@ owner: pm
       - (a) 이름이 담긴 기억 문장이 임베딩 때 Gemini로 간다. 결정 원문은 "DeepSeek 전송 허용"뿐이라 Gemini 포함 여부 확인 필요.
       - (b) 스트림 예외 시 부분 답변 저장을 43 범위에 넣을지. 넣으면 사용자가 취소한 답변도 저장된다.
       - (c) 위 제안값을 재승인으로 확정할지.
+    - 재승인(2026-09-29, user, AskUserQuestion, 메인 세션 전달):
+      - (a) 허용: 이름이 든 기억 문장도 Gemini 임베딩으로 보낸다. 기준은 DeepSeek와 같고 연락처·주민번호는 계속 `maskPii`로 가린다. [[anyang-ai-models-data-transfer]] 예외 행에 반영.
+      - (b) 이번에 함께 고친다: 스트림 도중 오류·중단이 나도 받은 데까지 assistant 답변을 저장한다. 사용자가 직접 취소한 답변도 중간까지 저장되는 것을 수용. 설계 문서에 없어 backend가 구현 전에 [[anyang-backend-api]] 3-3-2절 근처에 한 단락 추가하고, 이번 승인 범위로 본다.
+      - (c) 설계 5종 승인: 위 제안값 전부 확정(최근 5 + 유사 5 최대 10개, 중복 임계 0.92, 문구 2건, 스키마 변경 없음). 승인일 2026-09-29, 승인자 user.
+      - 구현(2026-09-29): backend 236d410(기억 주입 최근 5+유사 5, 매 답변 `extractPreferences`, 0.92 중복 갱신, 추출 프롬프트, 부분 답변 저장, 단위 테스트; npm test 193개·build 통과). frontend 문구(memory 안내·처리방침)는 npm test 174개 통과, **build 미실행·미커밋** — 포트 3100 dev 서버(node PID 6148)가 떠 있어 `.next` 충돌 우려로 멈춤(확인 항목 44). code-review: 치명·재위임 없음, 경미 2건(pm 결정 문서 미커밋 → 이번 문서 커밋에 포함, 236d410이 코드와 설계 문서 43-b 단락을 한 커밋에 담음 — 참고만).
+      - 상태: backend 완료. frontend build·커밋 뒤 43을 해결로 닫는다.
+      - `anyang-database-schema`는 draft 단계에서도 frontmatter `status: active`로 남아 있었다(database가 스키마 변경이 없어 그대로 둠). 이번 승인으로 active가 맞는 상태가 되어 따로 고치지 않는다. database는 스키마 변경이 없어 구현 단계에서 호출하지 않는다.
+44. **사용자 결정 필요(2026-09-29, 43 구현 중 frontend 제기)**: 포트 3100에 dev 서버(node PID 6148)가 떠 있어 frontend가 `npm run build`를 실행하지 않고 멈췄다. 미커밋 5개 파일(`web/app/(tabs)/settings/memory/memory-client.tsx`, `web/app/privacy-policy/page.tsx`, `web/test/consent-privacy-wording.test.ts`, frontend-screens·frontend-tasks 설계 문서). 선택지: (a) 사용자·메인 세션이 dev 서버를 멈춘 뒤 pm 재호출 → frontend build·커밋, (b) 메인 세션이 build를 직접 확인. 참고: backend는 같은 시각대에 build를 실행해 통과했다고 보고했다(dev 서버와 동시 실행 여부는 모름).
+45. **사용자 결정 필요(2026-09-29, backend·git-manager 보고)**: 원격 대비 로컬 커밋이 5개를 넘었다(236d410 시점 6개, 이번 문서 커밋으로 더 늘어남). push 여부 확인 필요. 승인 전 push 금지.
 
 ## 승인된 설계
 
@@ -190,6 +200,17 @@ owner: pm
 2026-09-28(8차): 사용자 재승인(메인 세션 전달)으로 `anyang-frontend-screens`·`anyang-frontend-tasks`를 다시 기록한다(draft 커밋 ddb7192). frontend-screens 확인 항목 2의 제안 문구(legend·라벨·가림 안내 유지·처리방침 문구) 전부 확정. 사용자가 41-b 법적 위험을 감수하고 진행.
 
 2026-09-29(9차): 설계 문서 5종을 모두 뺀다 — 사유: 확인 항목 43(채팅 기억 주입·매 답변 추출·이름 기억, 새 요청). 설계 수정 후 재승인 뒤 다시 기록한다.
+
+2026-09-29(10차): 확인 항목 43 사용자 재승인(설계 draft 커밋 893918a). 3종을 먼저 다시 기록한다. `anyang-backend-api`와 `anyang-backend-tasks`는 43-b(부분 답변 저장) 단락을 backend가 추가한 뒤 같은 승인으로 기록한다.
+
+- [[anyang-database-schema]] — 승인일 2026-09-29, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-09-29, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-09-29, 승인자 user
+
+2026-09-29(10차 이어서): backend가 43-b 부분 답변 저장을 backend-api 3-3-2절·테스트 방법과 backend-tasks 6번에 반영했다. 같은 승인(43 재승인)으로 두 문서를 기록한다.
+
+- [[anyang-backend-api]] — 승인일 2026-09-29, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-09-29, 승인자 user
 
 ## Jev 도입 제안
 
