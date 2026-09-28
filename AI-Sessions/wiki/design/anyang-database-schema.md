@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: database
 ---
 
@@ -57,11 +57,6 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
   기록한다(확정, user, 2026-09-28). 이를 담을 새 테이블(`auth_attempts`)과 `notify_logs`
   컬럼 추가는 이 문서의 다른 값과 마찬가지로 제안이었으나 확정됐으며, 새 마이그레이션(0017·0018)
   계획을 아래에 둔다.
-- **2026-09-28 개정(확인 항목 33, [[anyang-youth-policy-assistant#확인이 필요한 항목]])**:
-  프로필 기반 Jev 매칭 + 관리자 토글 기능을 위해 `app_settings`(관리자 토글값), 
-  `notice_profile_matches`(공지×조건 조합 판정 캐시) 두 테이블을 새로 제안한다(마이그레이션
-  0019·0020). 이 두 테이블의 구조·`condition_key` 형식·캐시 무효화 지점은 이번 라운드 신규
-  제안이라 (미확정)이다 — 위 auth_attempts와 달리 아직 설계 승인 전이다.
 
 ## Details
 
@@ -528,65 +523,6 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 - 각 API 호출 지점(DeepSeek 채팅, Gemini 임베딩)에서 성공/실패와 무관하게 1행씩 남긴다
   (backend 구현 단계에서 호출 래퍼에 공통으로 넣는 방식 제안).
 
-#### app_settings — 관리자 토글용 키·값 테이블 (신규, 확인 항목 33)
-
-[[anyang-youth-policy-assistant#확인이 필요한 항목]] 33 — 프로필 기반 Jev 매칭 기능을 관리자
-화면 토글로 켜고 끄는 것은 확정이다(user, 2026-09-28). 이 토글값을 담을 이 테이블 구조와
-값 형식은 이 문서의 다른 신규 값과 마찬가지로 (미확정) 제안이다.
-
-| 컬럼 | 타입 | 설명 |
-|---|---|---|
-| key | text, PK | 설정 키. 예: `profile_matching_jev` |
-| value | jsonb, not null | 설정값. 불리언 토글이면 `true`/`false`를 JSON 값으로 저장(제안 — 컬럼 하나로 여러 타입의 향후 설정을 같은 구조로 담기 위해 jsonb를 쓴다, 과설계 방지 관점에서는 `boolean` 컬럼도 대안이나 설정 종류가 늘어날 가능성을 감안한 제안) |
-| updated_at | timestamptz, not null, default now() | 마지막 변경 시각 |
-| updated_by | uuid, FK → users.id, on delete set null | 마지막으로 값을 바꾼 관리자. 계정이 삭제돼도 이력은 남기되 연결만 끊는다(제안, `consents.user_id`와 같은 방식) |
-
-- 초기 행(제안): 마이그레이션 up에서 `('profile_matching_jev', 'false'::jsonb, now(), null)` 1행을
-  시드한다 — 기본값이 꺼짐(OFF)이라는 사용자 결정([[anyang-youth-policy-assistant#확인이 필요한
-  항목]] 33)을 스키마 차원에서 보장한다.
-- 조회·갱신은 `GET/PATCH /api/admin/settings`(backend 소관, [[anyang-backend-api]] 조율 예정)를
-  통해서만 이뤄진다. 행이 1개뿐이라 별도 캐시나 인덱스는 두지 않는다(제안, YAGNI).
-- 이 테이블의 값은 admin 판단이므로 이 문서가 이미 확정 취급하는 "관리자 기능" 원칙
-  ([[anyang-service-scope]], user, 2026-09-27)의 연장선이지만, 테이블 구조 자체는 이번 라운드
-  신규 제안이라 (미확정)이다.
-
-#### notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목 33)
-
-Jev(Noul) 판정은 "조건 조합" 단위로 결과가 같으므로(같은 나이대·성별·직군·재학/재직 조합의
-사용자는 같은 공지에 대해 같은 판정을 받는다), 판정 결과를 공지×조건 조합 단위로 캐시해
-같은 조합의 사용자가 여러 명이어도 Jev 호출을 1번만 하게 한다. 아래 구조는 (미확정) 제안이다.
-
-| 컬럼 | 타입 | 설명 |
-|---|---|---|
-| notice_id | uuid, FK → notices.id, on delete cascade | 판정 대상 공지 |
-| condition_key | text | 조건 조합을 나타내는 문자열. 아래 "condition_key 형식" 참고 |
-| probability | real, not null | Jev(Noul)가 반환한 확률(0~1). 임계값 비교는 backend가 [[anyang-backend-api]]에서 정한다(제안 임계값 0.5, 위 27번 설계안 참고) |
-| judged_at | timestamptz, not null, default now() | 판정 시각. 캐시 신선도 판단에 쓴다(아래 "캐시 무효화" 참고) |
-
-- PK: `(notice_id, condition_key)` — 같은 공지·같은 조건 조합에는 판정이 하나만 존재한다(제안).
-- **condition_key 형식 (제안, 미확정)**: 나이대·성별·직군·재학/재직 4개 값을 고정 순서로
-  이어붙인 문자열. 예: `age:19-24|gender:female|enrollment:employed|occupation:office`.
-  각 부분의 실제 코드값은 [[anyang-service-scope#Details]](프로필 선택지)와
-  [[anyang-ai-models-data-transfer]](나이대 구간 6단계: 19세 미만/19~24/25~29/30~34/35~39/
-  40세 이상)를 그대로 쓴다 — 식별정보가 아니라 구간·코드값 조합이므로 원값(생년월일 등)이
-  들어가지 않는다(위 27번 설계안의 개인정보 원칙과 일치). 항목이 null(미입력)인 경우 값 자리에
-  `none`을 넣어 구분한다(제안, 예: `occupation:none`). 정확한 구분자·순서·null 표기는 backend가
-  `lib/profile-match.ts`([[anyang-backend-api]] 참고) 구현 시 최종 확정한다.
-- **캐시 무효화 (제안, 미확정)**: 공지 내용이 바뀌면(재임베딩 경로 — collector가 기존
-  `notice_chunks`를 지우고 다시 채우는 지점, 위 `notice_chunks`/공지 재수집 절 참고) 그 공지의
-  판정도 무효화해야 한다. 재임베딩과 같은 지점(collector가 `notice_id`로 `notice_chunks`를
-  지우는 코드)에서 `delete from notice_profile_matches where notice_id = $1`을 함께 실행하는
-  방식을 기본안으로 제안한다 — 별도 트리거·버전 컬럼 없이 같은 이벤트에 묶어 과설계를 피한다.
-  공지가 신규 수집(최초 삽입)일 때는 무효화할 캐시가 없으므로 해당 없음. 최종 구현 지점과
-  방식은 backend가 collector 코드([[anyang-backend-api#5. 공지 수집기 (Collector)]]) 조율 후
-  확정한다.
-- **보존·정리 (제안, 미확정)**: 이 캐시는 `notices`가 `on delete cascade`로 연결돼 있어 공지가
-  삭제되면 함께 삭제된다. 공지가 살아있는 한 캐시도 유지한다 — 별도 만료 기간을 두지 않는다
-  (제안, YAGNI: 재계산 비용을 아끼는 것이 캐시의 목적이므로 시간 기반 만료를 추가로 둘 이유가
-  없다. 필요해지면 `judged_at` 기준 정리 잡을 추가하되 이는 새 요구사항이다).
-- 인덱스: PK(`notice_id`, `condition_key`)로 조회(판정 여부 확인)와 삭제(무효화) 모두 충분하다
-  (제안, 추가 인덱스 불필요 — 과설계 방지).
-
 #### 연령대·직군 집계 쿼리 예시 (제안) — 관리자 화면 "사용자 관리·통계"용
 
 개인 식별 없이 집계만 하므로 `profiles`를 그룹핑해서 조회한다.
@@ -775,29 +711,6 @@ select cron.schedule(
   절)은 데이터 삭제이므로 별도로 되돌릴 수 없는 작업이며 그 잡 등록 자체에 대한 사용자 승인이
   구현 단계 지시서에 적혀 있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시" 절에도 반영).
 
-### 마이그레이션 계획 (0019·0020, 확인 항목 33)
-
-[[anyang-youth-policy-assistant#확인이 필요한 항목]] 33 — 프로필 기반 Jev 매칭 + 관리자 토글
-사용자 결정(2026-09-28)을 위한 마이그레이션 2건을 0018 다음 번호로 계획한다(제안, 파일은
-구현 단계에서 생성 — 이번 설계 단계에서는 만들지 않는다).
-
-- **0019_app_settings** — `app_settings` 테이블 생성 + 초기 행 시드(위 `app_settings` 절 참고).
-  - up: `create table app_settings (key text primary key, value jsonb not null, updated_at timestamptz not null default now(), updated_by uuid references users(id) on delete set null); insert into app_settings (key, value) values ('profile_matching_jev', 'false'::jsonb);`
-  - down: `drop table app_settings;`
-  - 롤백: 신규 테이블 생성(시드 행 포함)이므로 `DROP TABLE`로 완전히 되돌릴 수 있다. 되돌릴 수
-    없는 마이그레이션이 아니다.
-- **0020_notice_profile_matches** — `notice_profile_matches` 테이블 생성(위 절 참고).
-  - up: `create table notice_profile_matches (notice_id uuid not null references notices(id) on delete cascade, condition_key text not null, probability real not null, judged_at timestamptz not null default now(), primary key (notice_id, condition_key));`
-  - down: `drop table notice_profile_matches;`
-  - 롤백: 신규 테이블 생성이므로 `DROP TABLE`로 완전히 되돌릴 수 있다. 판정 캐시일 뿐 원본
-    데이터가 아니므로(삭제돼도 다시 판정하면 재생성 가능) 되돌릴 수 없는 마이그레이션이 아니다.
-- 두 마이그레이션 모두 테이블 신설이라 "되돌릴 수 없는 마이그레이션"(테이블·컬럼 삭제, 데이터
-  삭제, 타입 축소)에 해당하지 않는다 — 구현 단계에서 특별한 사용자 승인 없이도 실행할 수 있다
-  (dev-common.md 규칙 4단계, "구현 단계 지시서에 승인 내용 확인" 절차는 여전히 따른다). 단,
-  이 기능 자체(프로필 매칭 Jev 판정, 토글)는 위 27번 설계안 승인이 먼저 필요하며, `app_settings`/
-  `notice_profile_matches`의 구체 구조(컬럼 형식, `condition_key` 형식, 캐시 무효화 지점)는
-  이 문서 값과 마찬가지로 설계 승인으로 확정된다.
-
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
@@ -818,10 +731,6 @@ select cron.schedule(
   없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
   마이그레이션)와 `notify_logs.failed_device_count` 컬럼(0018 마이그레이션)은 위
   "마이그레이션 계획" 절에 적힌 대로 되돌릴 수 없는 마이그레이션이 아니다.
-- `app_settings`(0019)·`notice_profile_matches`(0020) 마이그레이션도 신규 테이블 생성뿐이라
-  되돌릴 수 없는 마이그레이션이 아니다(위 "마이그레이션 계획 (0019·0020, 확인 항목 33)" 절
-  참고). `notice_profile_matches` 캐시를 공지 재임베딩 시점에 `DELETE`하는 것은 캐시 재생성이
-  가능한 데이터라 되돌릴 수 없는 삭제로 취급하지 않는다(원본 데이터 손실이 아님).
 
 ## 테스트 방법 (제안)
 
@@ -869,16 +778,6 @@ select cron.schedule(
   이상을 등록한 뒤, 그중 하나만 성공하도록 만들고 `notify_logs.result`가 `success`로,
   `failed_device_count`가 실패한 기기 수(예: 1)로 기록되는지 확인한다. 모두 실패하면
   `result='failed'`이고 `failed_device_count`가 시도한 기기 수 전체와 같은지 확인한다.
-- `app_settings` 토글 확인(0019, 확인 항목 33): 마이그레이션 적용 직후
-  `select value from app_settings where key = 'profile_matching_jev'`가 `false`인지(기본
-  OFF) 확인한다. `PATCH` 후 `value`·`updated_at`·`updated_by`가 갱신되는지도 확인한다(backend
-  API 준비 후).
-- `notice_profile_matches` 캐시 확인(0020, 확인 항목 33): 같은 `(notice_id, condition_key)`로
-  두 번 삽입을 시도해 PK 위반으로 두 번째가 막히는지(또는 `ON CONFLICT` 갱신 방식이면 그
-  동작을 확인) 검증한다. 테스트 공지를 재임베딩(공지 수정 → `notice_chunks` 재작성)한 뒤,
-  같은 `notice_id`의 `notice_profile_matches` 행이 삭제(무효화)되는지 확인한다(backend
-  collector 연동 후). `notices` 삭제 시 `notice_profile_matches` 행이 cascade로 함께
-  삭제되는지도 확인한다.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -935,13 +834,6 @@ select cron.schedule(
 - 알림 다중 기기 성공/실패 판정 — 해결(2026-09-28, user): 기기 중 한 대라도 성공하면
   `success`, 실패 기기 수를 함께 기록. [[anyang-youth-policy-assistant#확인이 필요한 항목]]
   30. `notify_logs.failed_device_count` 컬럼으로 반영(위 `notify_logs` 절 참고).
-- 프로필 기반 Jev 매칭 + 관리자 토글 — 해결(2026-09-28, user): Jev(Noul)로 조건 조합 × 공지
-  대상 여부를 판정하고 관리자 토글(기본 OFF)로 켜고 끈다. 적용 대상은 선호(기억)가 없는
-  사용자만. [[anyang-youth-policy-assistant#확인이 필요한 항목]] 33. 담을 `app_settings`·
-  `notice_profile_matches` 테이블 구조와 `condition_key` 형식, 캐시 무효화 지점은 이 문서의
-  다른 신규 값과 마찬가지로 (미확정)이다(위 `app_settings`/`notice_profile_matches` 절 참고).
-  TypeSafe 처리 국가·처리방침 반영 여부는 여전히 미해결(backend 소관,
-  [[anyang-ai-models-data-transfer]] 참고).
 
 ## Links
 

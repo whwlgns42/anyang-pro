@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -567,130 +567,6 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 - 청크 분할 여부: 미확정([[anyang-database-schema#notice_chunks — 벡터 검색용]]
   참고). 공지 본문이 길면(임계값 미확정) 분할, 짧으면 통째로 1개 청크.
 
-### 6-1. 프로필 기반 Jev 매칭 (신규, 확인 항목 33)
-
-사용자 결정(2026-09-28, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 33): 선호(기억)가
-없는 사용자에게 한해, 관리자 토글(기본 OFF)이 켜졌을 때 TypeSafe Jev(Noul)로 "이 조건의
-사람이 이 공지의 대상인가"를 판정해 2-1절 추천 피드와 7절 알림 잡에 쓴다. 전송 범위는
-[[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행(조건 조합 + 공지 제목·본문,
-식별정보·출생연도 원값 금지)을 따른다. 스키마는
-[[anyang-database-schema#app_settings — 관리자 토글용 키·값 테이블 (신규, 확인 항목 33)]],
-[[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목 33)]]를
-링크한다(값을 옮겨 적지 않는다).
-
-**TypeSafe 호출 형태 — 확인 필요(이번 세션에는 WebFetch 도구가 없어 공식 문서
-https://docs.typesafe.ai 를 직접 열람하지 못했다)**: `.claude/skills/typesafe-ai`(실제 경로
-`.agents/skills/typesafe-ai/SKILL.md`) 스킬 문서 자체도 "라이브 문서가 원본이니 작업 중
-읽어라"고 안내할 뿐 API 호출 형태를 문서에 담고 있지 않다. 이 저장소 안에서 실제로 확인
-가능한 유일한 사실은 `scripts/jev.py`(vault 지식관리용, Python SDK)가 쓰는 호출
-형태뿐이다(출처: 이 저장소 `scripts/jev.py`, 읽기만 함) —
-
-```python
-from typesafe_sdk import TypeSafeClient, TypeSafeError
-with TypeSafeClient(api_key=key, timeout=30) as client:
-    result = client.system_one(state=state, questions=questions)
-    result.answers  # {"<id>": {"noul": 0.0~1.0}, ...} 형태(Noul 질문 기준)
-questions = {
-    "<id>": {"type": "noul", "instructions": "..."},   # Noul: 예/아니오 확률
-    # type: "score"면 "criteria"(단계 목록)도 필요
-}
-```
-
-이 호출 형태는 **Python SDK 확인 사실**이며, `lib/jev.ts`는 Node/TypeScript에서 호출해야
-하므로 그대로 옮겨 쓸 수 없다(미확정 — 확인 필요). JavaScript SDK의 정확한 패키지명·
-import·메서드명(`docs/sdk/javascript.md` 대상)이나 HTTP API 직접 호출 형태(`docs/api.md`
-대상)는 이번 세션에서 확인하지 못했다. **구현 착수 전 backend가 반드시**
-`https://docs.typesafe.ai/sdk/javascript.md`(JS SDK) 또는
-`https://docs.typesafe.ai/api.md`(HTTP API)를 웹 접근 가능한 세션에서 읽고 정확한 호출
-형태를 이 절에 반영해야 한다 — 그때까지 아래 `lib/jev.ts` 설계는 "Python SDK와 같은
-개념(상태 + 질문 목록 + Noul 질문 타입)일 것"이라는 **미확정 가정**이다.
-
-- **`lib/jev.ts`(서버 전용, 미확정 — 위 확인 필요 사항에 의존)**: 공지 여러 건을 한 요청에
-  묶어 호출한다(제안 — Python SDK 예시가 여러 질문을 한 번의 `system_one` 호출에 담아
-  병렬 판정하는 구조를 보여주므로(`scripts/jev.py`의 `per_doc` 패턴), JS SDK도 같은 개념일
-  것으로 가정, 확인 필요). 질문 문구(제안, 미확정): "이 조건(`conditions`: 나이대·성별·직군·
-  재학/재직)의 사람이 이 공지(`notice.title`, `notice.body` 앞부분 — 길이 미확정)의
-  신청·참여 대상에 해당하는가" — Noul 타입(예/아니오 확률). 질문 id는 공지 `notice_id`로
-  키를 잡아(제안) 응답을 다시 `notice_id`별로 매핑한다. `TYPESAFE_API_KEY`가 없거나 호출이
-  타임아웃(제안, 미확정 값 — 예: 5초)·오류를 반환하면 예외를 던지지 않고 "판정 불가"를
-  나타내는 값(제안, 미확정 — `null` 또는 빈 결과)을 반환해 호출부가 장애 시 OFF 동작으로
-  분기할 수 있게 한다(아래 "장애 시 동작" 참고). 호출 여부와 무관하게
-  `lib/api-usage-log.ts`(3절 기존 래퍼 재사용)로 사용량을 기록한다 — `provider='jev'`,
-  `operation='profile_match'`(제안, 미확정 값 — `api_usage_logs.provider`/`operation`은
-  text 컬럼이라 스키마 변경 없이 새 값을 추가할 수 있다, database 재조율 불필요). 오류
-  시에도 `status='error'`로 1행 기록한다(3절 기존 관례와 동일).
-- **`lib/app-settings.ts`(제안, 미확정)**: `getSetting(key)`/`setSetting(key, value,
-  updatedBy)` — [[anyang-database-schema#app_settings — 관리자 토글용 키·값 테이블 (신규,
-  확인 항목 33)]]을 요청마다 직접 조회·갱신한다(행 1개뿐이라 별도 캐시 없음, YAGNI —
-  database 문서와 동일 판단).
-- **`lib/profile-match.ts`(제안, 미확정)**:
-  1. 사용자 프로필(생년·성별·직군·재학재직)로 `condition_key` 문자열을 만든다 — 나이대는
-     기존 `lib/age-band.ts`의 `ageBandLabel()`을 그대로 재사용한다(YAGNI — 같은 나이대 계산
-     로직을 두 번 만들지 않는다). 형식·구분자·null 표기는
-     [[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인
-     항목 33)]]의 "condition_key 형식" 절 예시(`age:19-24|gender:female|...`)를 그대로 따른다.
-  2. 판정 대상 공지 목록(2-1절은 최근 N건, 7절은 `enabled_at` 이후 신규 공지) 각각에 대해
-     `notice_profile_matches`에서 `(notice_id, condition_key)` 캐시를 먼저 조회한다.
-  3. 캐시에 없는 (공지, 조건 조합) 쌍만 모아 `lib/jev.ts`로 한 번에 판정 요청한다(캐시 적중
-     분은 Jev를 호출하지 않는다 — 같은 조건 조합의 사용자가 여러 명이어도 공지당 조합 수만큼만
-     호출).
-  4. 새로 받은 판정 결과를 `notice_profile_matches`에 저장한다(insert, PK 충돌 시 갱신은
-     제안, 미확정 — 같은 판정이 동시에 두 번 계산되는 경쟁 상황이 드물다고 보고 `ON CONFLICT
-     DO NOTHING`으로 충분하다고 가정, YAGNI).
-  5. 캐시(기존 + 신규) 확률이 임계값(제안 0.5, [[anyang-youth-policy-assistant]] 27번
-     설계안이 제시한 값) 이상인 공지만 반환한다.
-- **2-1절 `/api/notices/recommended` 선호 0건 분기 갱신(제안, 미확정)**: 기존 "선호 0건 →
-  최신순" 분기를, 토글 ON이고 프로필 항목이 하나라도 있으면 다음으로 바꾼다 — 최근 공지
-  N건(제안, 미확정 — 예: 50)을 `lib/profile-match.ts`로 판정해 확률 내림차순으로 반환한다.
-  판정 결과가 0건이면(임계값 미만만 있거나 장애로 판정 자체가 안 됨) 기존 최신순 분기로
-  대체한다(제안 — 빈 목록보다 낫다는 기존 2-1절 판단을 그대로 유지). 토글 OFF이거나 프로필이
-  전부 비어 있으면 기존 최신순 분기를 그대로 쓴다(변경 없음).
-- **7절 `/api/jobs/notify` 선호 0건 분기 갱신(제안, 미확정)**: 기존 "선호 0건 → 매칭 없음"
-  분기를, 토글 ON이고 프로필 항목이 하나라도 있으면 다음으로 바꾼다 — `notify_settings.
-  enabled_at` 이후 수집된 신규 공지(7절 1번 조건과 동일 범위)를 `lib/profile-match.ts`로
-  판정해 임계값 이상만 발송 후보로 삼는다. 중복 발송 방지는 7절 기존 `notify_logs` pending
-  2단계 흐름을 그대로 재사용한다(YAGNI — 매칭 방식이 바뀌어도 발송 파이프라인은 동일).
-  토글 OFF이거나 프로필이 전부 비어 있으면 기존대로 매칭 없음(발송 안 함)을 유지한다.
-- **장애 시 OFF와 동일 동작(확정, user 2026-09-28)**: `TYPESAFE_API_KEY`가 없거나 호출이
-  타임아웃·오류를 반환하면, 그 요청/잡 실행에서는 토글이 꺼진 것과 같은 동작으로 처리한다 —
-  2-1절은 최신순 대체, 7절은 매칭 없음(발송 안 함)으로 떨어진다(제안 — 새 오류 분기를 따로
-  만들지 않고 기존 "선호 0건일 때의 대체 경로"에 합류시킨다, YAGNI). 오류는
-  `lib/api-usage-log.ts`에 `status='error'`로 기록되므로 13-4절 사용량 화면에서 장애
-  빈도를 관리자가 확인할 수 있다(별도 알림 채널은 만들지 않는다, YAGNI).
-- **관리자 API(제안, 미확정)**: `GET /api/admin/settings`, `PATCH /api/admin/settings`.
-  13-0절 `requireAdmin`을 그대로 재사용한다(새 인가 규칙 없음, YAGNI). `GET` 응답:
-  `{ profile_matching_jev: { value: boolean, updated_at, updated_by } }`(제안, 미확정 —
-  설정이 늘어나도 같은 키·값 구조를 재사용할 수 있게 `app_settings` 행 전체를 키 기준
-  객체로 감싼다). `PATCH` body: `{ profile_matching_jev: boolean }`(제안, 미확정) — 값이
-  `boolean`이 아니면 400(`{ error: "INVALID_REQUEST" }`, 13-1절 관례 재사용). 성공 시
-  `app_settings.updated_at`·`updated_by`(현재 관리자 `user_id`)를 함께 갱신한다.
-  관리자 API 사용량 화면(13-4절)에서 `provider='jev'` 행이 그대로 보이므로 이 기능을 위한
-  별도 화면 추가는 없다(YAGNI, `api_usage_logs.provider`는 text 컬럼이라 database 재조율
-  없이 새 값을 쓸 수 있다).
-- **환경변수**: `TYPESAFE_API_KEY`(서버 전용, 9절 표에 추가) — 클라이언트 코드에는 두지 않는다
-  (dev-common "Jev 도입 제안" 절, "Jev 호출은 backend를 거친다" 원칙).
-- **TypeSafe 처리 국가·처리방침 반영·재동의 필요 여부 — 확인 불가(이번 세션 한정)**: 이번
-  세션에는 WebFetch 도구가 없어 TypeSafe 공식 문서(개인정보처리방침·서비스 약관·데이터
-  처리 위치 안내 페이지)를 직접 열람하지 못했다. `.agents/skills/typesafe-ai/SKILL.md`도
-  법무·개인정보 관련 페이지를 링크하지 않는다(API·SDK·개념 문서 링크만 있음). 따라서
-  TypeSafe가 데이터를 처리하는 국가, 처리방침 페이지의 외부 처리자 목록에 TypeSafe를
-  추가해야 하는지, 재동의가 필요한지는 이번 설계에서 **확인하지 못했다** — 웹 접근이
-  가능한 세션(메인 세션 등)이 공식 문서로 확인해야 한다. 확인 전까지는 보내는 값이 비식별
-  조건 조합(나이대·성별·직군·재학재직)과 공지 제목·본문뿐이라는 사실
-  ([[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행)만 근거로 남긴다 —
-  이 사실만으로 재동의 필요 여부를 단정할 수 없다(추측 금지).
-- **테스트 방법(제안)**: 토글 OFF일 때 2-1·7절이 기존 동작(최신순/매칭 없음) 그대로인지
-  확인. 토글 ON + 선호 0건 + 프로필 있음일 때 Jev를 모킹해 확률 내림차순으로 추천 목록이
-  오는지, 임계값 미만 공지가 알림 후보에서 빠지는지 확인. 같은 (공지, 조건 조합) 요청을
-  두 번 하면 두 번째는 `notice_profile_matches` 캐시만 조회하고 Jev를 호출하지 않는지(모킹
-  호출 횟수 검증) 확인. `TYPESAFE_API_KEY` 미설정·모킹 타임아웃·모킹 오류 각각에서 OFF와
-  같은 동작(최신순/매칭 없음)으로 떨어지고 `api_usage_logs`에 `status='error'`가 남는지
-  확인. 관리자 아닌 계정 `PATCH /api/admin/settings` 403, `boolean`이 아닌 값 400 확인.
-  공지가 재수집(재임베딩)되면 그 공지의 `notice_profile_matches` 캐시가 무효화(삭제)되는지
-  — 5절 수집기의 재임베딩 지점에서 함께 처리한다(제안, database
-  [[anyang-database-schema#notice_profile_matches — 프로필 매칭 판정 캐시 (신규, 확인 항목
-  33)]]의 "캐시 무효화" 절과 동일 지점).
-
 ### 7. 스케줄러 — 수집 잡 / 알림 잡
 
 이전 가능성 원칙에 따라 잡 로직은 앱 API 엔드포인트에, 트리거는 pg_cron+pg_net(클라우드)
@@ -801,7 +677,6 @@ import·메서드명(`docs/sdk/javascript.md` 대상)이나 HTTP API 직접 호�
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 클라이언트(서비스워커/`PushManager.subscribe`)가 구독 생성에 쓰는 공개키. `VAPID_PUBLIC_KEY`와 같은 값이며 `NEXT_PUBLIC_` 접두사로 브라우저에 노출된다(확정, 확인 항목 31) |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
-| `TYPESAFE_API_KEY` | TypeSafe Jev 호출(6-1절 프로필 기반 매칭). 서버 전용, 클라이언트 코드에 두지 않는다(신규, 확인 항목 33) |
 
 ### 10. Vercel 배포 설정
 
@@ -915,12 +790,6 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   않으므로 과설계 방지).
 - 관리자 화면 API 응답에는 어떤 엔드포인트에서도 `messages.content`, `user_preferences.
   preference_text` 등 대화·기억 원문을 포함하지 않는다(확정 원칙, 이 문서 전체에 적용).
-
-#### 13-0-1. 관리자 — 프로필 매칭 설정 (신규, 확인 항목 33)
-
-`GET/PATCH /api/admin/settings`는 6-1절에 이미 정의했다(이 절에서는 중복 기재하지 않고
-링크만 둔다) — [[anyang-backend-api#6-1. 프로필 기반 Jev 매칭 (신규, 확인 항목 33)]]. 13-0절
-`requireAdmin` 공통 인가를 그대로 쓴다.
 
 #### 13-1. 공지 수집 관리
 
@@ -1188,12 +1057,6 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   제외 등)은 backend 제안이다.
 - **비문·앵커 훼손 복구(확인 항목 26)** — 해결(2026-09-28, user): 940행 비문과 409·500·
   541행 위키링크 앵커를 복구했다(의미 변경 없음). [[anyang-backend-api-mihwakjeong-removal-corruption]] 참고.
-- **프로필 기반 Jev 매칭(6-1절, 확인 항목 33)** — 판정 로직·캐시 조회 순서·2-1·7절 분기
-  변경·관리자 API는 backend 제안이며 (미확정)이다. **TypeSafe JS SDK/HTTP API의 정확한 호출
-  형태는 확인 필요**(이번 세션에 WebFetch 없음, 6-1절 참고) — 구현 착수 전 웹 접근 가능한
-  세션이 https://docs.typesafe.ai/sdk/javascript.md 또는 api.md를 확인해야 한다. **TypeSafe
-  처리 국가·처리방침 반영·재동의 필요 여부도 확인 불가**(6-1절 참고, 같은 이유) —
-  [[anyang-ai-models-data-transfer#Details]] "프로필 매칭 Jev" 행에 이미 미확인으로 남아있다.
 
 ## Links
 

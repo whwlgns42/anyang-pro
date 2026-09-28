@@ -50,6 +50,7 @@ owner: pm
 - 2026-09-28: 메인 세션 최종 검토(HEAD a8083ee) 반영. 구현 수정: database 65043e5(collect_runs.triggered_by on delete set null, 0016), backend d3a3a21(수집 잡 끝에서 임베딩 호출, 공지별 예외 처리·제목+본문 임베딩, chat 저장 after(), .env.example, vercel.json icn1, 410 구독 삭제, 공지 변경 시 재임베딩, 풀 max 3, 유선전화 가림), frontend 37c0d30(sw.js payload 정합). code-review 재위임 1회: backend 992e01e(maxDuration 300 — [[anyang-jobs-collect-missing-maxduration]]), frontend b5c575a(sw.js 실제 소스 테스트). 재검수 통과, npm test 132개·build 통과. Gemini 재시도·백오프와 선호 누적은 이미 설계대로라 수정 없음. 설계 변경 필요 28·29, 확인 30·31, 추천·알림 프로필 미사용은 27 보류.
 - 2026-09-28: 사용자 결정 26·28~31. 하네스 설계 잠금이 괄호 안 미확정 삭제 허용(bdacfa0, 메인 세션 변경). 설계(database → backend → frontend) 반영 후 재기록, 구현: database 62b2e62(0017 auth_attempts, 0018 failed_device_count, 정리 잡 미등록 파일), backend a953dbc(나이대 구간, 비밀번호 8자, 로그인·가입 시도 제한, 다기기 판정), frontend 859df5c(taste-skill 호출, 8자 안내·429 배너). backend-api 비문·앵커 복구, payload·환경변수 명시. code-review 통과(재위임 없음), npm test 170개·build 통과, lint WARN 0. 에이전트 제안값은 확인 항목 32로 승인 대기. 기존 승인값의 괄호 안 (미확정) 표기는 database·frontend가 "애매하면 남김"으로 대부분 남겨 둠.
 - 2026-09-28: 사용자가 확인 항목 32 승인(정리 잡 pg_cron 등록은 보류), 27 보류 해제 → 33 설계. 설계 5종을 승인된 설계에서 빼고 database(app_settings·notice_profile_matches, 0019·0020 계획) → backend(6-1절 Jev 매칭, 13-0-1절 관리자 설정 API, TYPESAFE_API_KEY) → frontend(10-1절 /admin/settings 토글, API 사용량 Jev) draft. 기존 확정값의 괄호 안 (미확정) 표기 정리(database 40·backend 45·frontend 88건). TypeSafe JS/HTTP 호출 형태·처리 국가·재동의 여부는 웹 확인 도구가 없어 확인 필요로 남음. 33 구현은 사용자 승인 뒤.
+- 2026-09-28: 사용자가 27·33 취소. 각 소유자가 33 내용 제거(database·backend·frontend 설계 문서, pm 결정 문서 행), 5종 status active, 승인된 설계 재기록.
 
 ### 설계 문서
 
@@ -93,6 +94,7 @@ owner: pm
 26. **사용자 결정 필요(2026-09-28, code-review 지적)**: 재승인 뒤 backend가 [[anyang-backend-api]]의 `(미확정)`을 기계적으로 지우면서 문장 1곳이 비문이 되고(940행 "제안값이며이다"), 원래 줄바꿈에 걸려 있던 위키링크 앵커 몇 곳(409·500·541행 등)에 공백만 남았다. 의미·계약 변경은 없다. 고치려면 승인된 설계 내용 수정이라 설계 잠금 대상이다. 선택지: (a) 그대로 둔다, (b) 문구·앵커만 고치는 수정을 허용(문서를 승인된 설계에서 잠시 빼고 수정 후 재승인). 권장 (b), 확인 항목의 "(미확정) 표기 잔존 → 훅을 좁게 수정" 결정과 함께 처리. [[anyang-backend-api-mihwakjeong-removal-corruption]]
 27. **보류(2026-09-28, user)**: 추천·알림이 프로필을 쓰지 않는다([[anyang-backend-api]] 7절 알림 매칭은 선호 벡터 유사도만). 그래서 채팅 전 사용자는 추천 피드가 최신순뿐이고 알림은 0건이다 — 원 요청("프로필·대화 이력에 맞는 것만")과 어긋난다(메인 세션 최종 검토 지적). 해결 제안: 프로필 조건 × 공지 해당 여부를 Jev Noul로 판정(설계 변경). 사용자 지시로 보류, 구현하지 않는다.
     - 보류 해제(2026-09-28, user): 설계 단계로 진행 — 확인 항목 33.
+    - **취소(2026-09-28, user)**: 33과 함께 하지 않는다. 선호 없는 사용자는 기존대로 추천 최신순·알림 없음.
 28. **설계 변경 필요(2026-09-28, 최종 검토 수정 중 backend 분류)**: 채팅 DeepSeek 프롬프트에 출생연도 원값이 간다. [[anyang-backend-api]] 3절 확정 원칙은 "나이대"인데 나이대 구간 정의가 설계·코드에 없다(관리자 통계의 10년 단위 예시는 "구간 폭 미확정"). 구간(예: 5년/10년) 결정 필요. 현재 원값 전송 유지.
 29. **설계 변경 필요(2026-09-28, 동일)**: 비밀번호 최소 길이, 로그인·가입 시도 횟수 제한 값이 설계에 없다. 값 결정 필요. 현재 미적용.
 30. **설계 확인(2026-09-28, 동일, 차단 아님)**: 한 사용자가 기기 여러 대를 등록했을 때 일부 기기만 푸시 성공하면 `notify_logs`를 success/failed 중 무엇으로 볼지 설계 7절에 없다. 현재 "모든 기기 성공해야 success" 유지(410/404 만료 구독은 삭제하고 실패로 세지 않음).
@@ -110,17 +112,23 @@ owner: pm
     - 32 해결(2026-09-28, user): 위 제안값 전부 확정. 단 `cleanup-auth-attempts` pg_cron **등록**은 보류(DB 연결 후 결정, 다른 정리 잡과 같음). x-forwarded-for: Vercel은 이 헤더를 자체 값으로 덮어써 위조할 수 없다(메인 세션 확인, https://vercel.com/docs/headers/request-headers). 보드 서버(UNO Q) 등으로 이전하면 프록시 구성에 따라 다시 검토한다.
 33. 27 후속 — 프로필 기반 Jev 매칭 설계(2026-09-28, user 결정): 프로필 조건 × 공지 대상 여부를 Jev(Noul)로 판정. 관리자 화면 토글로 켜고 끔(기본 OFF). 적용 대상은 선호(기억)가 없는 사용자만, 선호가 있는 사용자는 기존 벡터 유사도. 장애·키 없음이면 OFF와 같은 동작. 설계 draft 후 사용자 승인, 구현은 승인 뒤. 전송 범위는 [[anyang-ai-models-data-transfer]].
     - 설계 draft 완료(2026-09-28): [[anyang-database-schema]] app_settings·notice_profile_matches, [[anyang-backend-api]] 6-1·13-0-1절, [[anyang-frontend-screens]] 10-1절, tasks 두 문서. 재승인 대기.
-    - 확인 필요(구현 착수 전): TypeSafe JS SDK/HTTP API 호출 형태(https://docs.typesafe.ai — 이번 세션은 웹 확인 도구 없음, 저장소에서 확인된 것은 Python SDK `TypeSafeClient(...).system_one(state, questions)`뿐), TypeSafe 처리 국가·처리방침 외부 처리자 추가·재동의 필요 여부.
+    - **취소(2026-09-28, user)**: 하지 않는다. 처리방침 반영도 불필요. b39f76a로 설계 문서·결정 문서에 넣은 33 내용은 모두 제거했다(32 승인 반영·(미확정) 표기 정리는 유지). 재검토용 메모는 "Jev 도입 제안" 절에만 둔다.
 
 ## 승인된 설계
 
-2026-09-28(3차): 확인 항목 33(27 후속, 프로필 기반 Jev 매칭) 설계를 위해 anyang-database-schema·anyang-backend-api·anyang-backend-tasks·anyang-frontend-screens·anyang-frontend-tasks를 여기서 뺐다(사유: 새 요청). 직전 승인은 결정 26·28~31 반영본(2026-09-28, user, 커밋 0764e84 기준)이며 확인 항목 32 제안값도 확정됐다. 재승인 전까지 구현 기준은 그 승인본이고, 33으로 추가되는 draft 내용은 구현하지 않는다.
+2026-09-28(4차): 33 취소(user)로 33 내용을 제거하고 5종을 다시 기록한다. 남은 변경은 확인 항목 32 승인값 반영과 괄호 안 (미확정) 표기 정리뿐이다. 문서 안의 값은 모두 확정이며, 정리 잡 pg_cron 등록만 사용자 결정 대기다.
+
+- [[anyang-database-schema]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-09-28, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-09-28, 승인자 user
 
 ## Jev 도입 제안
 
 2026-09-27 backend 검토: 선호 벡터 기반 "공지-사용자 관련성" 매칭은 코사인 유사도 임계값(결정적 계산)이라 해당 없음.
 
-2026-09-28 (확인 항목 27·33, 사용자가 도입 결정, 설계 draft 재승인 대기):
+2026-09-28 (확인 항목 27·33) — **취소(2026-09-28, user)**. 아래는 재검토 때 참고할 기록이다. TypeSafe 참고(메인 세션 확인, 2026-09-28): 미국 호스팅, 입력으로 모델 학습 안 함, JS SDK `@typesafe-ai/sdk`, HTTP `POST https://api.typesafe.ai/v1/systemone`(Bearer), 모델 `jev-latest`.
 
 ```text
 - 위치: /api/notices/recommended·/api/jobs/notify의 선호 0건 분기 ([[anyang-backend-api]] 6-1절)
