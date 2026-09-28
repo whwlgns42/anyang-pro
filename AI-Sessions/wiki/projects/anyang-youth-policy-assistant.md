@@ -61,6 +61,7 @@ owner: pm
 - 2026-09-28: 41 답(user, 메인 세션 전달) 기록, 결정 문서 2건 갱신. frontend-screens·frontend-tasks를 승인된 설계에서 빼고 frontend 설계 draft(7절 동의 legend "AI 활용 동의 (필수)"·라벨, 9절 처리방침 문구, 테스트에 문자열 부재 확인, 제안값은 frontend-screens 확인 항목 2). 재승인 대기, 구현은 재승인 뒤. 법적 요건(41-b)은 답 없음. 설계 문서 커밋 ddb7192(프로젝트 문서·service-scope·log는 메인 세션 미커밋 변경과 섞여 있어 미커밋).
 - 2026-09-28: 41 재승인(user, 법적 위험 감수) 기록, 승인된 설계 8차. frontend 구현 9f65aeb(동의 legend·라벨, 처리방침 "AI 처리" 절, 금지 문자열 테스트 2건, 설계 2종 active). npm test 172개 통과, **npm run build는 dev 서버(3100) 충돌 우려로 미실행인데 커밋됨**(log flag). code-review: 치명 없음, 문구·필드·검증·API 불변 확인. 경미 3건은 확인 항목 42.
 - 2026-09-28: Vercel 프로젝트 변경 — 메인 세션이 만든 `anyang-youth-policy-assistant`가 세션 밖에서 삭제되고 `web` 프로젝트(로컬 `web/.vercel` 연결)가 생겨 이후 `web`을 사용(user 지시 "vercel에도 배포해줘"). 운영 환경변수 9개 정리(구글 값은 Google 토큰 엔드포인트로 유효 확인, localhost `AUTH_URL` 제거, 비밀값 새로 생성), `vercel deploy --prod` → https://web-beta-smoky-16.vercel.app 로그인 없이 `/login` 200, `/api/auth/providers` 200(google·credentials). 런타임 DB 접속은 미검증(같은 주소로 로컬 접속만 확인).
+- 2026-09-29: 사용자가 운영에서 구글 로그인 성공 — 운영 DB에 users 1·accounts 1(google)·consents 2·profiles 1 기록 확인(개수만 조회), 운영 오류 로그 없음. `DEEPSEEK_API_KEY`(모델 목록·최소 호출 확인)·`GEMINI_API_KEY`(`gemini-embedding-001` 호출 200) Vercel `web` 운영·`web/.env.local` 등록 후 운영 재배포(Ready, `/login` 200). 운영 환경변수 11개. 코드의 `deepseek-chat`은 API가 `deepseek-flash`로 응답하는 별칭 — 확인 항목 41.
 
 ### 설계 문서
 
@@ -136,6 +137,7 @@ owner: pm
 
 38. **사용자 입력 필요(2026-09-28, Vercel 배포)**: 운영 환경변수 남은 7개 — `DATABASE_URL`(Transaction pooler 6543, 메인 세션이 넣을 수 있음·사용자 답 대기), `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`DEEPSEEK_API_KEY`·`GEMINI_API_KEY`·`ADMIN_EMAILS`(사용자가 직접 입력). Google OAuth 리디렉션 URI `https://anyang-youth-policy-assistant.vercel.app/api/auth/callback/google` 등록 필요. 입력 뒤 `vercel deploy --prod`.
     - 갱신(2026-09-28): 프로젝트가 `web`으로 바뀜. 등록 완료 9개(DATABASE_URL·AUTH_SECRET·SCHEDULER_SHARED_SECRET·VAPID 3개·APP_ORIGIN=`https://web-beta-smoky-16.vercel.app`·GOOGLE 2개), 운영 배포 완료. 남은 것: `DEEPSEEK_API_KEY`·`GEMINI_API_KEY`·`ADMIN_EMAILS`(사용자 입력), 구글 콘솔 리디렉션 URI `https://web-beta-smoky-16.vercel.app/api/auth/callback/google` 등록(사용자). 없으면 채팅·임베딩·관리자 기능 불가.
+    - 갱신(2026-09-29): 구글 리디렉션 URI 등록·로그인 성공(user), DEEPSEEK·GEMINI 등록·재배포 완료. 남은 것: `ADMIN_EMAILS`(사용자 입력).
 39. **사용자 결정 필요(2026-09-28, Vercel 배포)**: 프로젝트에 Vercel Authentication(ssoProtection `all_except_custom_domains`)이 켜져 있어 `*.vercel.app` 운영 주소도 Vercel 로그인 사용자만 열 수 있다. 일반 사용자와 pg_cron 수집·알림 트리거가 막힌다. 운영만 해제(미리보기는 보호 유지)할지 결정.
     - 정정(2026-09-28, 메인 세션 실측): 로그인 없이 `curl`로 확인한 결과 운영 도메인 `anyang-youth-policy-assistant.vercel.app`은 SSO로 넘어가지 않고 앱이 직접 응답(현재는 첫 배포라 404), 미리보기·배포별 주소만 `vercel.com/sso-api`로 302. 즉 운영은 이미 공개 상태라 해제할 것 없음. `--prod` 배포 후 로그인 없이 200인지 다시 확인한다.
 40. **후속(2026-09-28, 38 이후)**: 예약 작업(collect/notify 트리거) 등록 시 `SCHEDULER_SHARED_SECRET`을 새로 만들어 Vercel과 Supabase Vault에 동시에 넣는다(2026-09-28 생성값은 보관하지 않음).
@@ -155,6 +157,8 @@ owner: pm
     - (b) 사용자 결정 필요(경미, 설계 잠금 대상): [[anyang-frontend-screens]] 339~340행 수집·이용 라벨의 "(제안,↵미확정)"이 줄바꿈으로 나뉘어 훅이 표시 삭제를 허용하지 않아 남음(값은 기존 그대로 확정). 35행 "3차 개정(확인 항목 41, draft)" 서술도 active와 어긋남. 고치려면 문서를 승인된 설계에서 잠시 빼고 자구만 정리 후 재승인. 권장: 다음 설계 변경 때 함께 정리.
     - (c) 경미, 보류 가능: `web/test/consent-privacy-wording.test.ts`가 주석까지 검사해 나중에 주석에 서비스명을 적으면 깨진다. 현재 동작은 정상.
     - pm 판단: 사용자 전달문은 "설계 변경 없음"이지만 [[anyang-frontend-screens]] 7·9절과 [[anyang-frontend-tasks]]에 해당 문구가 확정값으로 적혀 있어 설계 변경이다(그대로 코드만 고치면 설계-코드 모순). 두 문서를 승인된 설계에서 빼고 frontend 설계 draft → 재승인 → 구현. database·backend 문서는 필드명 `overseas_transfer`와 "국외 이전" 동의 유형 의미만 담고 있어 이번 범위에서 고치지 않는다.
+
+41. **확인 필요(2026-09-29, 메인 세션 제기, 차단 아님)**: `web/lib/deepseek.ts`의 모델명 `deepseek-chat`은 DeepSeek 제공 모델 목록(`deepseek-flash`, `deepseek-v4-pro`)에 없고 API가 `deepseek-flash`로 응답하는 별칭이다. 별칭이 없어지면 채팅이 멈춘다. 모델명을 `deepseek-flash`로 명시할지 사용자 결정 필요(설계 [[anyang-ai-models-data-transfer]]·[[anyang-backend-api]] 값 변경이라 설계 변경 절차).
 
 ## 승인된 설계
 
