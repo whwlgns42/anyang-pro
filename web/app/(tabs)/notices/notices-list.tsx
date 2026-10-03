@@ -6,7 +6,7 @@ import { apiFetch } from "../../_lib/api-fetch";
 import { formatKoreanDay } from "../../_lib/format";
 import { Button } from "../../_components/ui/controls";
 import { NoticeRow } from "../../_components/ui/notice-row";
-import { REFETCH_MIN_GAP_MS, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
+import { REFETCH_MIN_GAP_MS, appendPage, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
 
 type NoticeItem = {
   id: string;
@@ -61,7 +61,7 @@ export function NoticesList() {
         }
         const data = (await res.json()) as NoticeItem[];
         if (cancelled) return;
-        setItems((prev) => (page === 1 ? data : [...prev, ...data]));
+        setItems((prev) => (page === 1 ? data : appendPage(prev, data)));
         setHasMore(data.length > 0);
         if (page === 1) lastFetchedAt.current = Date.now();
       })

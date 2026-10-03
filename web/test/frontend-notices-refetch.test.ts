@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mergeFirstPage, shouldRefetch, subscribeRefetch } from "../app/_lib/notices-refetch";
+import { appendPage, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../app/_lib/notices-refetch";
 
 describe("shouldRefetch", () => {
   it("30s gap and in-flight", () => {
@@ -14,6 +14,13 @@ describe("mergeFirstPage", () => {
   it("puts new page first and drops duplicate ids", () => {
     const out = mergeFirstPage([{ id: "a" }, { id: "b" }, { id: "c" }], [{ id: "n" }, { id: "b" }]);
     expect(out.map((x) => x.id)).toEqual(["n", "b", "a", "c"]);
+  });
+});
+
+describe("appendPage", () => {
+  it("appends next page skipping ids already present", () => {
+    const out = appendPage([{ id: "a" }, { id: "b" }], [{ id: "b" }, { id: "c" }]);
+    expect(out.map((x) => x.id)).toEqual(["a", "b", "c"]);
   });
 });
 
