@@ -304,6 +304,18 @@ owner: pm
     - (a) **push 여부(사용자 결정 필요)**: 로컬이 원격보다 5개 이상 앞섬(52 커밋 포함). 45·51(c) 보류 유지인지.
       - **결정(2026-10-03, user, 메인 세션 전달)**: 지금 배포 — 52 청안 적용 + 53(b) 수정을 `git push origin master`로 올려 Vercel 자동 배포. 배포 후 검증(로그인, 한글 Enter 1회 전송, 390/768/1200)은 메인 세션·사용자.
       - push 완료(2026-10-03, git-manager): build 통과 후 `bbd8fa3..86350a7` 9커밋, 원격과 일치. Vercel 배포 상태·운영 화면 검증은 pm 쪽 도구가 없어 확인 못 함 — 메인 세션·사용자 확인 대기.
+      - 배포 방식 변경(2026-10-03, user, 메인 세션 전달): GitHub 자동 배포 대신 메인 세션이 `web/`에서 `vercel deploy --prod` 직접 실행. 기록 커밋 `5a985f3` push는 나중. pm 분배 작업 없음, 배포·운영 검증 결과 대기(이 줄은 결과 기록 때 함께 커밋).
+54. **사용자 결정 필요(2026-10-04, 새 요청 — Google 로그인 이름 자동 저장·온보딩 이름 입력 제거)**: pm이 분배 전에 멈춤. 설계 호출·설계 문서 변경 없음, "승인된 설계" 그대로.
+    - 요청 전제와 실제가 다르다(pm 확인):
+      - Google 이름은 이미 저장된다 — `web/lib/auth-adapter.ts`가 가입 시 `users.name`에 넣고 재로그인 때 `coalesce`로 갱신. 스키마에도 `users.name`(null 허용, "화면 표시용, 필수 아님(개인정보 최소화)")이 있다([[anyang-database-schema]]). 스키마·마이그레이션 변경 불필요.
+      - 온보딩에는 이름 입력이 없다 — `web/app/onboarding/onboarding-form.tsx`는 생년·성별·직군·재학재직 4항목뿐. 지울 필드 없음.
+    - 실제로 바뀌는 것은 "채팅에서 저장된 계정 이름을 바로 쓰기"뿐인데, 확정 결정과 충돌한다: [[anyang-ai-models-data-transfer]] "계정의 이름·이메일·계정 ID 필드는 계속 보내지 않는다"(user, 2026-09-29, 43). 대화에서 직접 말한 이름만 예외로 허용돼 있다.
+    - (a) **계정 이름(`users.name`)을 채팅 시스템 프롬프트로 DeepSeek에 보내도 되는지** — 허용하면 결정 문서 갱신(decided_by user). 허용 안 하면 이 요청은 할 일이 없다(지금처럼 대화에서 말한 이름만 기억).
+    - (b) 허용 시 처리 방식: ① 매 채팅 프롬프트에 `users.name`을 넣는다(backend만, 기억 테이블 무관) ② 첫 로그인 때 "사용자 이름은 ○○다" 기억 문장으로 저장(Gemini 임베딩 전송도 추가, 사용자가 기억 화면에서 지울 수 있음). 권장 ①(전송 범위가 작고 기억 정책 무관).
+    - (c) 이메일·비밀번호 가입자는 이름이 없다(`users.name` null). 그대로 둘지(대화에서 말하면 기억), 온보딩에 선택 입력란을 둘지. 권장: 그대로.
+    - (d) Google 이름이 실명 전체라 호칭으로 어색할 수 있다(예: 성 포함). 그대로 쓸지, 사용자가 "내 정보"에서 고칠 수 있게 할지(화면·API 추가 → frontend·backend 설계). 권장: 이번엔 그대로, 필요하면 대화에서 "○○라고 불러줘"로 바뀌는 기존 기억 우선.
+    - (e) 동의 화면·처리방침: 수집 항목은 생년·성별·직군·재학재직([[anyang-frontend-screens]] 7절 `collection_use`). 계정 이름은 이미 저장되지만 고지에 없고, AI 처리 대상이 되면 고지·재동의 필요 여부를 사용자가 정해야 한다(41-b처럼 법적 요건 확인 대상).
+    - 답을 받으면: (a) 허용 + ①이면 database 호출 없음. 결정 문서 갱신 → backend(시스템 프롬프트 주입, backend-api·tasks를 승인된 설계에서 뺌) → (e)에 따라 frontend(처리방침·동의 문구) 설계 → 재승인 → 구현.
     - (b) 채팅 입력에 한글 조합 중 Enter 처리(`isComposing`)가 없어 중복 전송 가능(frontend 발견, 기존 동작). 47(c) 버그 목록과 함께 처리할지.
       - **해결(2026-10-03, user 결정 "지금 수정", 메인 세션 전달)**: frontend `8d4de22` — `web/app/_lib/composer-key.ts` `shouldSubmitOnKey`(Enter·Shift 아님·`isComposing` 아님·`keyCode` 229 아님), `ui/chat.tsx` Composer 연결, 테스트 4건(npm test 244개·build 통과). 설계 변경 없음. code-review 치명·주요·경미 없음, 다른 Enter 전송 패턴 없음. 실제 한글 IME 수동 확인은 못 함(Chrome·Safari 사람 확인 권장).
       - 참고(경미, 설계 잠금 대상): [[anyang-frontend-screens]]는 채팅 키 처리 위치를 `chat-client.tsx`로 적지만 실제는 `ui/chat.tsx`의 Composer. 다음 frontend 설계 수정 때 정리.

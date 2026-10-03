@@ -92,3 +92,4 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-10-03 --:-- | save | 안양 비서 53(b) 해결: 채팅 한글 조합 중 Enter 중복 전송 수정 8d4de22(shouldSubmitOnKey, test 244·build 통과), code-review 문제 없음. 실제 IME 수동 확인 못 함. push 보류 | [[anyang-youth-policy-assistant]]
 2026-10-03 --:-- | save | 안양 비서 53(a) 결정(user, 메인 세션 전달): 지금 배포 — 52·53(b) 포함 로컬 커밋 push → Vercel 자동 배포. 배포 후 화면 검증은 메인 세션·사용자 | [[anyang-youth-policy-assistant]]
 2026-10-03 --:-- | save | 안양 비서 push 완료 bbd8fa3..86350a7(9커밋, build 통과), 원격 일치. Vercel 배포·운영 검증은 확인 못 함(메인 세션 확인 대기) | [[anyang-youth-policy-assistant]]
+2026-10-04 --:-- | save | 안양 비서 새 요청(Google 이름 자동 저장·온보딩 이름 제거): 이름은 이미 users.name에 저장되고 온보딩에 이름 입력 없음. 남는 변경(채팅에 계정 이름 사용)이 확정 결정(계정 이름 미전송)과 충돌해 분배 전 멈춤. 53(a) 배포 방식 변경(vercel CLI) 기록. 확인 항목 54 | [[anyang-youth-policy-assistant]] [[anyang-ai-models-data-transfer]]
