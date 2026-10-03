@@ -67,6 +67,7 @@
 - **동시 수정 금지**: 여러 에이전트가 같은 파일을 동시에 고치지 않는다. pm은 병렬로 호출할 때 각자 건드릴 파일이 겹치지 않게 나눈다.
 - **링크와 등록**: 양방향 링크, `index.md` 등록, 결정 교체(`status: superseded`) 규칙은 `.claude/rules/knowledge-ops.md`의 Link Rules를 따른다. 여기에 다시 적지 않는다.
 - **검증**: 문서 작업이 끝나면 `bash scripts/lint-wiki.sh`를 실행한다. `FAIL`은 고치고, `WARN`은 판단해 넘어간다. 링크 규칙과 판정 기준은 `.claude/rules/knowledge-ops.md`에 있다.
+- **overview 폴더는 요청 시에만 갱신**: `AI-Sessions/wiki/overview/`는 비개발자용 소개·아키텍처 요약 스냅샷이다. 기능 구현이나 다른 wiki 문서 수정과 함께 자동으로 고치지 않는다. 사용자가 "최신화해줘"처럼 명시적으로 요청했을 때만 그 시점의 코드·설계 문서 기준으로 갱신한다. 코드와 달라진 걸 발견해도 임의로 고치지 말고 pm에게 "overview 최신화 필요"로 보고한다.
 
 ## Document Format
 
