@@ -1,7 +1,7 @@
 ---
 name: backend
 description: 서버와 API를 담당하는 개발 에이전트. 백엔드 서버, 비즈니스 로직, 인증 흐름, 서버 사이드 기능의 설계와 구현에 사용한다. pm이 호출한다.
-model: sonnet
+model: claude-sonnet-5-5
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill, Agent(frontend, database, git-manager)
 ---
 

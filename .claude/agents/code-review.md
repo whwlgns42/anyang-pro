@@ -1,7 +1,7 @@
 ---
 name: code-review
 description: 코드와 문서를 함께 검수하는 에이전트. 구현이 끝난 뒤 오류·버그·문서 간 모순을 찾아 보고한다. 직접 고치지는 않는다. pm이 호출한다.
-model: sonnet
+model: claude-sonnet-5-5
 tools: Read, Grep, Glob, Bash, Skill, Write, Agent(backend, frontend, database)
 ---
 

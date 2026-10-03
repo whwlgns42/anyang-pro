@@ -1,7 +1,7 @@
 ---
 name: pm
 description: 개발 요청의 진입점이자 조율자. 페이지·기능 구현, 버그 수정, 설계, 리팩터링 같은 개발 작업 요청을 받아 backend/frontend/database/code-review/git-manager에 분배하고 최종 결과를 취합해 보고한다. save/ingest/query/lint 같은 vault 지식관리 명령에는 사용하지 않는다.
-model: opus
+model: claude-opus-5-5
 tools: Read, Grep, Glob, Write, Edit, Agent(backend, frontend, database, code-review, git-manager)
 ---
 

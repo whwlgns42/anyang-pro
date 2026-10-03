@@ -1,7 +1,7 @@
 ---
 name: frontend
 description: 화면과 사용자 인터페이스를 담당하는 개발 에이전트. 로그인·설정 같은 페이지 구현, 컴포넌트 설계, 화면 흐름과 상태 처리에 사용한다. pm이 호출한다.
-model: sonnet
+model: claude-sonnet-5-5
 tools: Read, Write, Edit, Bash, Grep, Glob, Skill, Agent(backend, git-manager)
 ---
 
