@@ -60,27 +60,30 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
 5. **공지 수집기(기존 구현, 2026-10-04부터 5-1~5-4가 확장)** — `/api/jobs/collect`(대상 게시판 URL 확정됨). robots.txt 404(제한 없음)와
    게시판 HTML 구조는 2026-09-28 메인 세션이 확인했고 커밋 766ea20에서 구현·테스트됨
    (backend 설계 5절, [[2026-09-28_anyang-first-build-paused]]). 구조가 바뀌면 파서를 갱신한다.
-5-1. **수집기 확장: 파서·모드·저장 규칙(신규, 확인 항목 55, 재승인 대기)** —
-   [[anyang-backend-api#5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 재승인 대기)]] 1~3번.
+5-1. **수집기 확장: 파서·모드·저장 규칙(신규, 확인 항목 55, 사용자 확정 반영)** —
+   [[anyang-backend-api#5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)]] 1~3번.
    **첫 단계(코드 전)**: `curl`로 목록 1페이지와 상세 3개를 받아 고정 공지 마크업(55-b)·첨부 셀렉터·본문 `<img>`
-   구조·응답 시간을 확정하고 픽스처에 반영한다. 판정 규칙을 정하지 못하면 `isPinned`는 `false` 고정으로 두고 보고한다.
-   `image_count` 정의(55-c)는 사용자 결정 전까지 본문 `<img>`만. 이어서 `parseListPage`(`isPinned`)·
+   구조(작은 이모지·아이콘 `<img>` 제외 규칙 포함)·응답 시간을 확정하고 픽스처에 반영한다. 판정 규칙을 정하지 못하면
+   `isPinned`는 `false` 고정으로 두고 보고한다. `image_count`=본문 `<img>` 수 + 이미지 확장자(jpg·jpeg·png·gif·webp 등,
+   대소문자 무시) 첨부 수(확정, 제외 규칙만 이 단계에서 확정). 이어서 `parseListPage`(`isPinned`)·
    `parseDetailPage`(`attachments`, `imageCount`), `runCollectJob(opts)`의 `quick`/`full`/`backfill`·`pageIndex`·
-   `skipExisting`, upsert에 3개 컬럼 추가, `source_url` 기준 비교(메타데이터만 갱신/전체 갱신/해시 충돌 건너뜀).
-   선행: database 0021 적용이 먼저(코드가 먼저 나가면 없는 컬럼을 쓰는 upsert가 실패). 5번 의존. 테스트:
+   `skipExisting`, upsert에 3개 컬럼 추가, `source_url` 기준 비교(메타데이터만 갱신/전체 갱신/삽입). 해시 충돌 건너뛰기·
+   `skippedDuplicateCount`는 제거한다(글 주소 기준 462건 전부 저장). USER_AGENT는 환경변수 `COLLECTOR_CONTACT`(미설정이면
+   연락처 없는 UA)로 만든다. 선행: database 0021 적용이 먼저(코드가 먼저 나가면 없는 컬럼을 쓰는 upsert가 실패,
+   `notices_content_hash_key` drop이 없으면 중복 해시 삽입이 실패). 5번 의존. 테스트:
    [[anyang-backend-api#테스트 방법]] "공지 전체 수집·즉시 갱신" 중 파서, 모드 분기, 저장 규칙.
 5-2. **수집 라우트·겹침 방지(신규, 확인 항목 55)** — 5-1절 4·6번. `/api/jobs/collect?mode=quick|full`(생략 시 `full`,
    잘못된 값 400 `INVALID_MODE`, 인증 먼저), 시작 시 트랜잭션 advisory lock + `running` 행 확인 + stale 정리(N 10분
-   `(미확정)`), 겹치면 200 `skipped`(임베딩 호출 안 함), 임베딩 연쇄 유지. `/api/admin/collect-runs` POST는 `full`로
+   확정, 실패 처리한 행은 `STALE_RUNNING`), 겹치면 200 `skipped`(임베딩 호출 안 함), 임베딩 연쇄 유지. `/api/admin/collect-runs` POST는 `full`로
    호출하고 겹치면 409. 9번(시크릿 미들웨어)·5-1 의존. 테스트: 라우트 분기, 인증 유지, 겹침 방지, stale 정리.
    기존 `web/test/jobs-collect.test.ts`는 mode 인자·skipped 케이스를 추가해 갱신한다.
 5-3. **백필 스크립트(신규, 확인 항목 55)** — `web/scripts/backfill.ts`(5-1절 7번). `--pages A-B`(기본 1-47),
-   `runCollectJob` backfill + `runEmbedJob` 루프. 실행 도구(`tsx`) 추가 여부는 사용자 확인. 5-1·5-2 의존.
+   `runCollectJob` backfill + `runEmbedJob` 루프. 실행은 `npx tsx`(devDependency 추가 안 함, 확정). 5-1·5-2 의존.
    테스트: 인자 파싱·루프 종료 단위 테스트. **실제 실행은 운영 DB에 쓰므로 사용자 승인 뒤**: `--pages 1-2` 시험 실행
    → 같은 명령 재실행(중복 없음 확인) → 전체 1-47 → `count(*)`·임베딩 청크·`collect_runs` 확인.
 5-4. **조회 API 확장(신규, 확인 항목 55)** — `GET /api/notices/recommended`에 `is_pinned`·`image_count` 추가, 선호가
-   없을 때의 "최근 공지" 정렬을 `is_pinned desc, published_at desc nulls last, id desc`로 변경(정렬 키는 `(미확정)`),
-   추천 경로는 순서 불변(55-d `(미확정)`). `GET /api/notices/:id`에 `attachments`·`image_count` 추가. 두 API 200
+   없을 때의 "최근 공지" 정렬을 `is_pinned desc, published_at desc nulls last, id desc`로 변경(확정),
+   추천 경로는 유사도 순서 유지·`is_pinned`는 별표 표시용(확정). `GET /api/notices/:id`에 `attachments`·`image_count` 추가. 두 API 200
    응답에 `Cache-Control: no-store`. 선행: database 0021. 테스트: 응답 필드, 정렬, 숨김 404, 헤더. 이 응답 계약이
    확정되면 frontend 설계가 의존한다([[anyang-backend-api#2-1. 추천 공지 피드·상세 (frontend 조율, 2026-09-27)]]).
 5-5. **수집 잡 트리거 등록(backend 작업 아님, 확인 항목 55)** — `collect-quick`·`collect-full` pg_cron·pg_net 확장

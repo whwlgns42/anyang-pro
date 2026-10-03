@@ -339,7 +339,7 @@ owner: pm
       - (i) 첨부 직접 링크(`downloadBbsFile.do`)가 세션 없이 열리는지 미확인. 계획은 원문 페이지 링크를 기본 경로로 둔다.
     - **설계 draft 완료(2026-10-04)**: database [[anyang-database-schema]](notices 컬럼 3개, 0021 up/down 계획 — 백필 후 down은 사용자 승인, 0019 RLS 새 컬럼 적용, collect-quick·collect-full 잡, `collect_runs` `status='running' and finished_at is null`로 진행 중 판정). backend [[anyang-backend-api]] 5-1·7·2-1·13-1절, [[anyang-backend-tasks]] 5-1~5-5(겹침 방지 `pg_try_advisory_xact_lock` — 트랜잭션 풀러라 세션 락 안 씀, mode 생략 시 full·잘못된 값 400 `INVALID_MODE`, 겹침 시 라우트 200 `skipped`·관리자 수동 실행 409). frontend [[anyang-frontend-screens]]·[[anyang-frontend-tasks]](N1~N3)·[[anyang-cheongan-design-adoption]](배지 문구 교체, 별표·칩·첨부 영역·조용한 재조회). frontend가 자구만 정리: 41-b 줄바꿈 "(미확정)", 35행 draft 서술, 채팅 키 처리 위치 `ui/chat.tsx`. 재승인 대기.
     - 설계에서 새로 나온 질문:
-      - (j) **`notices.content_hash`가 unique**라 제목·본문이 같은 서로 다른 글은 둘째가 저장되지 않는다(backend 발견). backend draft는 `source_url` 기준 비교로 바꾸고 해시 충돌은 건너뛰며 `skippedDuplicateCount`로 센다. 그래서 백필 뒤 건수가 462보다 적을 수 있다. 462건 전부 담아야 하면 스키마 변경(database) 필요. 사용자 결정.
+      - (j) **`notices.content_hash`가 unique**라 제목·본문이 같은 서로 다른 글은 둘째가 저장되지 않는다(backend 발견). backend draft는 `source_url` 기준 비교로 바꾸고 해시 충돌은 건너뛰며 `skippedDuplicateCount`로 센다. 그래서 백필 뒤 건수가 462보다 적을 수 있다. 462건 전부 담아야 하면 스키마 변경(database) 필요. 사용자 결정. → 결정됨(아래 "사용자 결정·승인"): unique 해제, `source_url`만, 건너뛰기 로직 제거.
       - (k) "최근 공지"(선호 없음) 정렬을 `collected_at desc` → `is_pinned desc, published_at desc nulls last, id desc`로 바꾸는 backend 제안(백필 뒤 수집 시각이 거의 같아짐).
       - (l) 비정상 종료로 남은 `running` 행의 stale 시간 N(제안 10분)과 그런 행을 `failed`로 정리할지.
       - (m) pg_net 호출 쪽이 먼저 끊었을 때 Vercel 함수가 끝까지 도는지 미확인. full(약 44초, 추정)로 최종 POST 확인 때 검증(55-e와 함께).
@@ -347,6 +347,9 @@ owner: pm
       - (o) 55-a: backend 제안 — 연락처를 환경변수(예: `COLLECTOR_CONTACT`)로 받고 값이 정해질 때까지 `TODO-문의이메일` 유지.
       - (p) `image_count`가 본문 `<img>`만이면 첨부로만 이미지가 있는 글에는 배지가 안 뜬다(55-c와 함께 결정). 포스터만 있는 글의 상세 안내 상자(`ImageNote`)는 결정 범위 밖이라 넣지 않았다 — 필요하면 별도 요청.
       - (q) frontend 테스트 환경이 node(DOM 없음)라 `renderToStaticMarkup`·순수 함수로만 검사. jsdom·testing-library를 쓰려면 의존성 추가 승인 필요.
+    - **사용자 결정·승인(2026-10-04, user, 메인 세션이 직접 받아 전달)**: (j) 글 주소 기준으로 전부 저장 — `content_hash` unique 해제(0021에 포함), 중복 판정은 `source_url`만, 해시는 수정 감지용, 462건 모두 저장. (k)·(d) 고정 공지는 "최근 공지"(선호 없음)에서만 위로(`is_pinned desc, published_at desc`), 추천 정렬은 유사도 순서 유지·별표만. (c)·(p) `image_count` = 본문 img + 이미지 확장자(jpg·jpeg·png·gif·webp 등) 첨부 합산, 작은 이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정함. 나머지 제안값 전부 확정: (l) stale N=10분·failed 정리, (n) `npx tsx`, (a)·(o) `COLLECTOR_CONTACT` 환경변수(실제 값은 사용자가 Vercel에 직접 입력, 임의 생성 금지), (q) `renderToStaticMarkup`, frontend 시각값·문구, 재조회 30초. 설계 6종은 위 값을 반영한 상태로 승인("제안대로 승인"). push는 승인 안 됨.
+    - 결정 반영(2026-10-04): database(0021에 `notices_content_hash_key` drop, down은 중복 해시 생기면 실패 → 승인 필요, stale 10분·failed 정리), backend(`source_url`만·건너뛰기 제거·count 462, 정렬, image_count 합산, `COLLECTOR_CONTACT` 미설정 시 연락처 없는 UA, `npx tsx`), frontend(정렬·시각값·문구 확정, 55-i만 미확인).
+    - (r) **사용자 확인 필요(차단 아님, 구현 진행)**: 배지 문구 "본문 이미지"와 `image_count` 정의(본문 img + 이미지 첨부)가 어긋난다 — 첨부 이미지만 있는 글에도 "본문 이미지" 칩이 뜬다. 문구를 유지할지("이미지" 등으로 바꿀지) 결정 필요. 결정 전까지 "본문 이미지" 유지.
     - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
 
 ## 승인된 설계
@@ -378,6 +381,15 @@ owner: pm
 2026-10-03(15차): 확인 항목 52 사용자 승인(메인 세션 전달, draft 커밋 0e06c78). 세 문서에 적힌 제안값 전부 확정(탭 순서는 청안 시안대로 대화·공지·알림·내 정보, 사이드바 240px, 테마색 `#F5F3ED`, 채팅 조건 줄 2개 필드, C10 삭제 승인 포함). 47(c)①은 범위 밖.
 
 2026-10-04(16차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-cheongan-design-adoption`·`anyang-frontend-screens`·`anyang-frontend-tasks` 6종을 뺀다 — 사유: 확인 항목 55(공지 전체 수집·즉시 갱신·공지 화면 시안 반영, 새 요청). 재승인 뒤 다시 기록한다. 현재 승인된 설계 문서 없음.
+
+2026-10-04(17차): 확인 항목 55 사용자 결정·승인(메인 세션 전달 — (j) `source_url`만·unique 해제, (k)·(d) 최근 공지만 고정 위로, (c)·(p) image_count 합산, 나머지 제안값 전부, "제안대로 승인")을 database → backend → frontend가 반영한 뒤 6종을 기록한다. 55-b(고정 공지 마크업)·이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정하는 것으로 승인됐다. 55-i(첨부 직접 링크)와 (r)(배지 문구)는 승인 범위 밖 미결이다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-cheongan-design-adoption]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 

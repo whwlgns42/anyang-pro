@@ -240,7 +240,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | source_url | text, unique, not null | 원문 URL |
 | title | text, not null | |
 | body | text, not null | 본문. 임베딩 입력으로 쓰인다 |
-| content_hash | text, unique, not null | 본문(또는 제목+본문) 해시. 같은 공지 재수집 시 중복 방지 |
+| content_hash | text, not null (unique 아님, 0021에서 해제) | 본문(또는 제목+본문) 해시. 수정 감지용이며 중복 판정에는 쓰지 않는다 |
 | published_at | timestamptz, null 허용 | 게시일. 게시판에 없으면 null |
 | collected_at | timestamptz, default now() | |
 | hidden_at | timestamptz, null 허용 | 관리자가 잘못 수집된 공지를 숨긴 시각. null이면 정상 노출(제안, [[glossary]]의 notice-hidden) |
@@ -255,11 +255,13 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   ([[anyang-service-scope]] "공지 화면 표시" 행). `attachments`의 원소 키는 `name`·`url` 두 개이며 jsonb 구조
   검증 제약(check)은 두지 않는다(제안, 값 형식 검증은 수집기 몫). 인덱스는 추가하지 않는다 — 세 컬럼 모두
   where 조건으로 쓰이지 않고 정렬 보조(`is_pinned desc`)는 462건 규모라 불필요하다(제안, 정렬 쿼리는 backend).
-- 인덱스: unique(content_hash) — 중복 방지의 핵심. unique(source_url)도 별도로 둔다(같은 글이
-  URL은 같은데 본문만 갱신되는 경우 구분 필요 여부는 미확정 — 수집 대상 게시판은
-  https://www.anyang.go.kr/youth/selectBbsNttList.do?bbsNo=1184&key=3543 로 확정됐으나
-  ([[anyang-service-scope]]), 그 게시판의 실제 갱신 패턴(같은 글 수정 여부)은 아직 관찰되지
-  않아 미확정으로 남는다).
+- **인덱스·중복 판정 (확정, 사용자 결정 2026-10-04, 확인 항목 55-j)**: 중복 판정은 `source_url`의 unique 제약
+  (`notices_source_url_key`)만 쓴다. `content_hash`의 unique 제약(`notices_content_hash_key`, 0005에서 컬럼 인라인
+  `unique`로 생성됨, 운영 DB에서 이름 확인)은 0021에서 푼다. 이유: 게시판 462건 중 본문이 같은 서로 다른 글이 있어
+  해시 unique가 insert를 막기 때문이며, 462건이 모두 들어와야 한다. 해시는 같은 `source_url`의 본문이 바뀌었는지
+  (수정 감지) 비교하는 값으로만 남긴다. `content_hash` 일반 인덱스는 두지 않는다 — 수정 감지는 `source_url`로 행을
+  찾은 뒤 그 행의 해시를 비교하므로 해시로 검색하지 않는다(제안, backend가 해시로 조회하는 쿼리를 쓰게 되면 알려
+  달라).
 - **숨김 처리와 추천·검색 제외 (제안)**: `hidden_at is not null`인 공지는 사용자 노출·추천·
   벡터 검색 결과에서 제외한다. 두 가지 구현 방식 중 하나를 backend가 고른다.
   1. 매 조회 쿼리(추천 목록, `notice_chunks` 벡터 유사도 검색의 조인 대상)에 `notices.hidden_at
@@ -711,11 +713,10 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   `status` 값 셋은 코드에서 `running/success/failed`로 쓰며 DB check 제약은 없다.
   - **비정상 종료로 `running` 행이 남는 경우**: 함수가 제한 시간(300초)에 끊기거나 프로세스가 죽으면
     `finished_at`이 영영 null이라 "진행 중"이 풀리지 않는다. 스키마 변경 없이 "`started_at`이 N분보다 오래된
-    `running` 행은 무시"로 처리할 수 있다(N은 함수 최대 실행 시간 300초보다 길게, 예: 10분 `(미확정)`). 이
-    경우 DB 변경은 없다. 판정 쿼리와 N의 값은 backend 설계 몫이다. 무시된 stale 행을 `failed`로 정리하는
-    update(예: 수집 시작 때 `update collect_runs set status='failed', finished_at=now(), error_summary='stale'
-    where status='running' and started_at < now() - interval 'N'`)는 관리자 화면 이력을 깨끗하게 하는
-    선택지이며 스키마 변경은 아니다 `(미확정)`.
+    `running` 행은 stale로 본다. **N=10분 (확정, 사용자 결정 2026-10-04, 확인 항목 55-l)**(함수 최대 실행 시간
+    300초보다 길다). stale 행은 `failed`로 정리(update)한다: 수집 시작 때 `update collect_runs set status='failed',
+    finished_at=now(), error_summary='stale' where status='running' and started_at < now() - interval '10 minutes'`
+    를 먼저 실행하고, 남은 `running` 행이 있으면 진행 중으로 본다. 스키마 변경은 없다. 정확한 쿼리 작성은 backend 몫이다.
   - **원자성 한계**: "진행 중 행이 없으면 insert"는 두 호출이 동시에 오면 둘 다 통과할 수 있다. 부분 unique
     index(`status='running'`인 행은 하나만)로 막을 수 있으나 stale 행이 남으면 이후 수집이 모두 막히므로 제안하지
     않는다. 10분 주기에 quick은 대개 수 초라 겹칠 확률이 낮고, 겹쳐도 `source_url` 유니크(`on conflict`)로 공지가
@@ -1164,7 +1165,7 @@ authenticated 롤에 애초에 권한이 없다.
 
 ### 마이그레이션 계획 (0021, 확인 항목 55)
 
-`notices`에 고정 공지·본문 이미지·첨부 컬럼 3개를 더한다(사용자 결정 2026-10-04). `web/db/migrations/`의 마지막
+`notices`에 고정 공지·본문 이미지·첨부 컬럼 3개를 더하고 `content_hash`의 unique 제약을 푼다(사용자 결정 2026-10-04). `web/db/migrations/`의 마지막
 파일은 `0020_user_preferences_previous_fact`이고 0021은 비어 있음을 확인했다(번호 겹침 없음). 파일은 구현 단계에서
 만든다 — 이번 설계 단계에서는 만들지 않았고 운영 DB에도 적용하지 않았다. 컬럼 의미는 위 `notices` 절에 있다.
 
@@ -1176,18 +1177,32 @@ authenticated 롤에 애초에 권한이 없다.
       add column is_pinned boolean not null default false,
       add column image_count int not null default 0,
       add column attachments jsonb not null default '[]'::jsonb;
+    -- 확인 항목 55-j: 중복 판정은 source_url만 쓴다. 제약 이름은 운영 DB에서 확인한 notices_content_hash_key
+    alter table notices drop constraint notices_content_hash_key;
     commit;
     ```
   - down:
     ```sql
     begin;
+    -- content_hash가 같은 행이 둘 이상 있으면 아래 add constraint가 실패한다(트랜잭션 전체 롤백)
+    alter table notices add constraint notices_content_hash_key unique (content_hash);
     alter table notices
       drop column attachments,
       drop column image_count,
       drop column is_pinned;
     commit;
     ```
-  - **롤백/되돌릴 수 있는가**: up은 컬럼 추가라 되돌릴 수 있는 마이그레이션이다. 상수 기본값이 있는 `not null` 추가는
+  - **content_hash unique 해제**: `drop constraint`는 제약과 함께 딸린 unique 인덱스도 지운다. 데이터는 지워지지
+    않는다. 이름 `notices_content_hash_key`는 `0005_notices.up.sql`의 인라인 `unique`에서 PostgreSQL이 붙인 기본
+    이름이며 운영 DB의 `pg_constraint`에서 확인했다(`UNIQUE (content_hash)`). 구현 단계에서 적용 직전에 한 번 더
+    확인한다. `if exists`는 쓰지 않는다 — 이름이 다르면 조용히 넘어가지 않고 실패해 알리도록 한다.
+  - **down 주의 (사용자 승인 필요)**: 462건 수집 뒤에는 같은 `content_hash`를 가진 서로 다른 글이 있어 down의
+    `add constraint unique`가 **실패한다.** down을 실행하려면 먼저 중복 해시 행을 지우거나 해시를 바꿔야 하는데 이는
+    데이터 삭제·변경이므로 구현 단계 지시서에 별도 사용자 승인이 있어야 한다. 중복 행이 없을 때(수집 전)만 승인 없이
+    down을 실행할 수 있다. 확인 쿼리: `select content_hash, count(*) from notices group by content_hash having
+    count(*) > 1;` (0행이어야 승인 없이 가능).
+  - **롤백/되돌릴 수 있는가**: up은 컬럼 추가와 제약 해제라 데이터를 지우지 않으므로 되돌릴 수 없는 마이그레이션이
+    아니다(단 위 down 주의). 컬럼 추가의 상수 기본값이 있는 `not null` 추가는
     PostgreSQL 11 이상에서 테이블을 다시 쓰지 않는다. down은 컬럼 drop이라 **수집된 첨부·고정·이미지 수 값이
     사라진다.** 다만 이 값은 원문 사이트에서 다시 수집할 수 있는 파생 값이고, 현재 notices는 0건이다. 적용 직후
     백필 전이라면 손실이 없다. 백필 후 down을 실행하면 데이터 삭제이므로 구현 단계 지시서에 별도 사용자 승인이
@@ -1198,7 +1213,11 @@ authenticated 롤에 애초에 권한이 없다.
     함)를 다시 돌린다.
   - **적용 순서**: DB(0021)를 먼저, backend 코드를 나중에 배포한다. 코드가 먼저 나가면 없는 컬럼을 쓰는 upsert가
     오류가 난다. 반대로 0021만 먼저 적용되면 현재 코드는 새 컬럼을 모른 채 기본값으로 정상 동작한다.
-  - 인덱스는 추가하지 않는다(위 `notices` 절).
+  - 인덱스는 추가하지 않는다(위 `notices` 절). `content_hash`는 일반 인덱스도 두지 않는다.
+  - **backend가 알아야 할 점**: (1) 중복 판정·upsert 충돌 대상은 `source_url`만이다 — `on conflict (source_url)`을
+    쓰고 `on conflict (content_hash)`는 제약이 없어져 오류가 난다. (2) `on conflict do nothing`이 해시 충돌 때문에
+    새 글을 조용히 버리던 동작이 사라진다. (3) 0021을 먼저 적용해야 462건이 들어온다. 코드(`source_url` 기준 충돌
+    처리)를 먼저 배포해도 제약이 남아 있으면 해시가 같은 글이 계속 거부된다.
 
 ### 되돌릴 수 없는 마이그레이션 표시
 
@@ -1232,9 +1251,10 @@ authenticated 롤에 애초에 권한이 없다.
   (모두 null이면 손실이 없어 해당 없다). up 적용은 별도 승인이 필요 없다.
 - `0021_notice_attachments_pinned`(위 "마이그레이션 계획 (0021)")의 up은 컬럼 추가라 되돌릴 수 없는 마이그레이션이
   아니다. down은 컬럼 drop이라 백필 후에는 수집된 값이 사라진다. 백필 전(현재 notices 0건) 또는 `is_pinned`가 모두
-  false·`image_count`가 모두 0·`attachments`가 모두 `[]`이면 손실이 없어 해당 없다. 그 외에 down을 실행하려면
-  구현 단계 지시서에 별도 사용자 승인이 있어야 하고, 없으면 실행하지 않고 멈춰서 보고한다. up 적용은 별도 승인이
-  필요 없다.
+  false·`image_count`가 모두 0·`attachments`가 모두 `[]`이면 손실이 없어 해당 없다. 또 down의 `content_hash` unique
+  복원은 같은 해시의 행이 둘 이상이면 실패한다(실행하려면 중복 행 삭제·변경이 필요한 데이터 변경). 그 외에 down을
+  실행하려면 구현 단계 지시서에 별도 사용자 승인이 있어야 하고, 없으면 실행하지 않고 멈춰서 보고한다. up 적용은 별도
+  승인이 필요 없다.
 - 수집 잡 두 개(`collect-quick`, `collect-full`)의 pg_cron·pg_net 확장 설치, 실제 URL·시크릿 입력, 잡 등록은
   운영 DB를 바꾸는 작업이다. 데이터 삭제는 아니지만 외부 호출을 시작하므로 구현 단계 지시서에 사용자 승인이
   별도로 적혀 있어야 실행한다(위 "pg_cron / pg_net 잡 정의").
@@ -1250,7 +1270,8 @@ authenticated 롤에 애초에 권한이 없다.
   간단히 되돌아가지만, 위 "되돌릴 수 없는 마이그레이션"에 해당하면 롤백 대신 사용자 승인 절차를
   따른다.
 - 제약 확인 쿼리 예시:
-  - unique 확인: `SELECT content_hash, count(*) FROM notices GROUP BY content_hash HAVING count(*) > 1;` (0행이어야 함)
+  - unique 확인: `SELECT source_url, count(*) FROM notices GROUP BY source_url HAVING count(*) > 1;` (0행이어야 함.
+    `content_hash`는 0021 이후 중복이 허용된다)
   - FK cascade 확인: 테스트 사용자 삭제 후 해당 user_id를 가진 profiles/accounts/credentials/
     conversations/push_subscriptions/notify_settings/user_preferences 행이 함께 삭제됐는지
     확인한다. `consents`는 반대로 확인한다 — `withdrawn_at`을 먼저 채운 뒤 `users` 행을
@@ -1307,8 +1328,13 @@ authenticated 롤에 애초에 권한이 없다.
     `attachments jsonb not null default '[]'`가 있는지 확인한다. 기존 행이 있으면 기본값으로 채워졌는지 확인한다.
   - 기본값: 새 컬럼을 지정하지 않고 insert한 행이 `false`/`0`/`[]`인지, `attachments`에 null을 넣으면 거부되는지
     확인한다. `[{"name":"a.pdf","url":"https://..."}]` 값이 저장되고 읽히는지도 확인한다.
+  - unique 해제 확인(55-j): `begin;` 안에서 `content_hash`가 같은 두 행(다른 `source_url`)을 insert하면 둘 다
+    성공하는지, `source_url`이 같은 행을 insert하면 `notices_source_url_key` 위반으로 실패하는지 확인한 뒤
+    `rollback;`. `select conname from pg_constraint where conrelid='public.notices'::regclass and contype='u';`가
+    `notices_source_url_key`만 반환하는지도 본다.
   - down: 컬럼 3개가 사라지고 다른 컬럼 값이 그대로인지, 적용 → 롤백 → 재적용이 에러 없이 반복되는지 확인한다.
-    운영에서는 반복 테스트를 하지 않는다(백필 후 값 손실 위험).
+    같은 해시 행이 있는 상태에서 down의 unique 복원이 실패(트랜잭션 롤백, 컬럼도 그대로)하는지도 개발 프로젝트나
+    `begin; … rollback;`에서 확인한다. 운영에서는 반복 테스트를 하지 않는다(백필 후 값 손실 위험).
   - 0019 점검: 운영 적용 뒤 "적용 후 점검" 절의 점검 SQL 2개가 0행인지, `set role anon; select is_pinned from
     public.notices;`가 권한 오류로 막히는지 확인한다(`reset role`로 복귀).
   - 앱 확인: `npm test`, `npm run build` 통과.
@@ -1407,9 +1433,11 @@ authenticated 롤에 애초에 권한이 없다.
   두 수집 잡의 cron 식, 링크만 저장, Realtime 없음은 확정이다. 반영 위치는 위 `notices` 절, "pg_cron / pg_net 잡 정의",
   "마이그레이션 계획 (0021)"이다.
 - 미확정(55-f) — `collect-quick` 10분 주기를 5분·30분이나 야간 완화로 바꿀지. 값만 바뀌는 문제라 스키마 영향은 없다.
-- 미확정(55) — 비정상 종료로 남은 `running` 행의 stale 판정 시간 N(예: 10분)과 정리 update 여부, 겹침 방지에
-  advisory lock을 쓸지, `collect_runs.mode` 컬럼이 필요한지. 앞의 둘은 backend 설계가, 마지막은 스키마 변경 여부가 걸려 있다
-  (위 `collect_runs` 절).
+- 확정(55-j, 55-l, 사용자 결정 2026-10-04): `notices.content_hash` unique 해제(0021, 중복 판정은 `source_url`만),
+  stale `running` 행 N=10분·`failed`로 정리 update(스키마 변경 없음). 반영 위치는 위 `notices` 절, `collect_runs` 절,
+  "마이그레이션 계획 (0021)"이다.
+- 미확정(55) — 겹침 방지에 advisory lock을 쓸지(backend 설계), `collect_runs.mode` 컬럼이 필요한지(스키마 변경 여부가
+  걸려 있다, 위 `collect_runs` 절).
 - 미확정 — 사용자당 기억 행 수 상한(위 "행 수 상한").
 - 확인 요청(이 문서 범위 밖, 보류 f-8) — 직전 문장이 DB에 남는다는 사실이 처리방침·기억 화면 안내 문구("삭제하면
   사라진다" 등)와 맞는지는 frontend 재개 때 확인한다.
