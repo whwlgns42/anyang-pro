@@ -350,7 +350,7 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
   대체해 반환한다 — 빈 목록보다 낫다는 판단(제안).
 - 응답 필드(목록, 2026-10-04 개정, 확인 항목 55): `{ id, title, excerpt, posted_at, is_pinned,
   image_count }`. `excerpt`는 본문 앞부분 발췌(길이). `is_pinned`는 boolean(고정 공지 별표),
-  `image_count`는 정수(본문 `<img>` 수 + 이미지 첨부 수 합계, 0이면 배지 없음. 배지 문구는 frontend 소관: [[anyang-frontend-screens]]). 컬럼은 [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]].
+  `image_count`는 정수(본문 `<img>` 수[스마일리·`div.p-photo` 안 제외, 5-1절] + 이미지 첨부 수 합계, 0이면 배지 없음. 배지 문구는 frontend 소관: [[anyang-frontend-screens]]). 컬럼은 [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]].
 - 응답 필드(상세, 2026-10-04 개정): `{ id, title, body, source_url, posted_at, attachments,
   image_count }`. `attachments`는 `[{ name: string, url: string }]`이고 첨부가 없으면 빈 배열 `[]`
   (null이 아니다). `url`은 안양시 `downloadBbsFile.do` 링크이며 파일은 복사하지 않는다. 첨부 직접 링크가
@@ -973,8 +973,9 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 **1. 파서 반환 타입 (구조 확정 / 고정 공지 판정 규칙은 구현 첫 단계 확인)**
 
 - `parseListPage(html)` → `ListItem[]`, `ListItem = { url, title, publishedAt, isPinned }`.
-  `isPinned: boolean`은 새로 추가한다. 고정 공지의 마크업은 확인하지 못했다 `(미확정, 55-b)`. 이 문서는 셀렉터를
-  추측해 쓰지 않는다. 구현 첫 단계에서 `curl`로 목록 1페이지를 받아 판정 규칙을 확정하고 그 HTML 발췌를 테스트
+  `isPinned: boolean`은 새로 추가한다. 고정 공지의 마크업은 실측하지 못했다 `(미확정, 55-b)`. 구현은 사이트 CSS의
+  `.p-table .p-notice` 규칙에 근거해 `tr.p-notice`로 판정한다(CSS 추정, 실제 고정 행 HTML 미실측. 2026-10-04 실측
+  1~2페이지에 고정 행이 없었다. 틀리면 `isPinned`가 항상 false일 뿐 수집에는 영향이 없다). 원래 계획은 구현 첫 단계에서 `curl`로 목록 1페이지를 받아 판정 규칙을 확정하고 그 HTML 발췌를 테스트
   픽스처로 쓴다. 규칙을 정하지 못하면 `isPinned`는 항상 `false`로 두고 pm에게 보고한다. 같은 `nttNo`가 한 응답 안에
   두 번 나오면(고정 공지가 일반 순서에도 있는 경우) `url` 기준으로 한 건만 남긴다(구현 첫 단계에서 실제 HTML로 확인).
 - `parseDetailPage(html)` → `DetailContent = { title, body, attachments, imageCount }`.
@@ -984,8 +985,15 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
     첨부 영역 셀렉터는 구현 첫 단계에서 실제 HTML로 다시 확인한다.
   - `imageCount: number`(확정, user, 55-c). 본문 `td.p-table__content` 안의 `<img>` 수 + 이미지 확장자
     (jpg·jpeg·png·gif·webp 등, 대소문자 무시) 첨부 수의 합이다. 첨부 판정은 `attachments`의 `name`(없으면 URL 경로)
-    확장자로 한다. 작은 이모지·아이콘 `<img>`를 셀지 제외할지는 구현 첫 단계에서 실제 HTML을 보고 정한다(이 부분만
-    구현 단계 확정 대상). 정의가 바뀌면 이 함수 한 곳만 고친다.
+    확장자로 한다. 정의가 바뀌면 이 함수 한 곳만 고친다.
+    - 본문 `<img>`에서 제외하는 것(구현됨, 46c7ba1, 사용자 승인 2026-10-04): CKEditor 스마일리 이미지
+      (`src`에 `/plugin/ckeditor/plugins/smiley/` 포함)와 `div.p-photo` 안의 `<img>`. 사이트가 이미지 첨부를 본문
+      끝에 `div.p-photo`로 다시 그려 같은 이미지가 본문 `<img>`와 첨부 목록에 이중으로 잡히기 때문에, 이미지 첨부는
+      첨부 쪽에서만 센다.
+    - 한계: 확장자가 이미지가 아닌 첨부가 `p-photo`로 그려지면 본문 `<img>`에서도 빠지고 첨부 쪽에서도 세지 않아 0으로
+      센다. 실측에서 그런 사례는 확인하지 못했다.
+    - 실측 셀렉터: 첨부 `ul.p-attach a.p-attach__link`(`href`에 `downloadBbsFile.do`), 본문 `td.p-table__content`,
+      제목 `span.p-table__subject_text`. 실측 픽스처는 `web/test/fixtures/detail-photo-two-attach.html`.
   - 상세 페이지에는 게시일이 없으므로 `publishedAt`은 계속 목록 값을 쓴다.
 
 **2. `runCollectJob` 시그니처와 모드 (확정)**
