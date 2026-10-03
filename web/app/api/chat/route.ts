@@ -43,7 +43,9 @@ export async function buildQueryVector(userId: string, messageEmbedding: number[
 // anyang-backend-api 3-3절 — 최근 N개 + 유사 K개(합계 최대 10, 최근 우선, 중복 제거)를
 // 채팅 시스템 프롬프트 주입과 3-3-1절 추출의 "기존 기억 목록"에 함께 쓴다. 최근 기억 조회가
 // 실패하면 기억 절 자체를 생략하고, 유사 기억 조회만 실패하면 최근 기억만으로 진행한다(폴백).
-async function fetchMemories(userId: string, messageEmbedding: number[]): Promise<string[]> {
+export type Memory = { id: string; preference_text: string };
+
+async function fetchMemories(userId: string, messageEmbedding: number[]): Promise<Memory[]> {
   let recent: { id: string; preference_text: string }[];
   try {
     const { rows } = await pool.query<{ id: string; preference_text: string }>(
@@ -69,40 +71,56 @@ async function fetchMemories(userId: string, messageEmbedding: number[]): Promis
   }
 
   const seenIds = new Set<string>();
-  const merged: string[] = [];
+  const merged: Memory[] = [];
   for (const row of [...recent, ...similar]) {
     if (seenIds.has(row.id)) continue;
     seenIds.add(row.id);
-    merged.push(row.preference_text);
+    merged.push({ id: row.id, preference_text: row.preference_text });
     if (merged.length >= MEMORY_MAX_TOTAL) break;
   }
   return merged;
 }
 
 // anyang-backend-api 3절 5번·3-3-1절 — consumeAndStore가 답변을 저장한 직후 매번 호출한다
-// (기존 6의 배수 게이트는 제거됨). knownFacts는 채팅 요청 시 이미 조회한 fetchMemories 결과를
+// (기존 6의 배수 게이트는 제거됨). memories는 채팅 요청 시 이미 조회한 fetchMemories 결과를
 // 재사용한다(추가 조회 없음). 저장은 database 설계의 중복 방지·갱신 쿼리(UPDATE 실패 시 INSERT)를 따른다.
 async function extractAndStorePreference(
   conversationId: string,
   userId: string,
   userMessage: string,
   assistantText: string,
-  knownFacts: string[],
+  memories: Memory[],
 ): Promise<void> {
   const conversationText = `사용자: ${maskPii(userMessage)}\n어시스턴트: ${maskPii(assistantText)}`;
 
-  let facts: string[];
+  let facts: Awaited<ReturnType<typeof extractPreferences>>;
   try {
-    facts = await extractPreferences(conversationText, knownFacts);
+    facts = await extractPreferences(
+      conversationText,
+      memories.map((m) => m.preference_text),
+    );
   } catch {
     return; // 선호 추출 실패는 채팅 자체를 실패시키지 않는다(부가 기능)
   }
 
-  for (const fact of facts) {
+  for (const { fact, replaces } of facts) {
     const maskedFact = maskPii(fact);
     try {
       const embedded = await embedText(maskedFact);
       const embeddingJson = JSON.stringify(embedded.embedding);
+      // 3-3-4절 — 모순이면 같은 행을 대체(바뀌기 전 문장은 previous_fact 1단계 보관). 순번→id는
+      // 앱이 만든 목록으로만 해석하고 user_id는 세션 값이다. 0행이면 아래 유사 갱신 → INSERT로 폴스루.
+      if (replaces !== null) {
+        const replaceResult = await pool.query(
+          `update user_preferences
+              set previous_fact = preference_text, preference_text = $3, embedding = $4,
+                  embedding_model = $5, source_conversation_id = $6, updated_at = now()
+            where id = $1 and user_id = $2
+            returning id`,
+          [memories[replaces - 1].id, userId, maskedFact, embeddingJson, embedded.model, conversationId],
+        );
+        if (replaceResult.rows.length > 0) continue;
+      }
       const updateResult = await pool.query<{ id: string }>(
         `update user_preferences
             set preference_text = $2, embedding = $3, embedding_model = $4,
@@ -132,7 +150,7 @@ export async function consumeAndStore(
   conversationId: string,
   userId: string,
   userMessage: string,
-  knownFacts: string[],
+  memories: Memory[],
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -171,7 +189,7 @@ export async function consumeAndStore(
       assistantText,
     ]);
     await pool.query(`update conversations set updated_at = now() where id = $1`, [conversationId]);
-    await extractAndStorePreference(conversationId, userId, userMessage, assistantText, knownFacts);
+    await extractAndStorePreference(conversationId, userId, userMessage, assistantText, memories);
   }
 }
 
@@ -283,7 +301,7 @@ export async function POST(request: NextRequest) {
   // anyang-backend-api 3-3절(확인 항목 43) — 기억이 1건 이상이면 "사용자 조건" 절과 "관련
   // 공지" 절 사이에 끼워 넣는다. 0건이면 헤더를 포함해 절 전체를 생략한다.
   const memoryBlock = memories.length
-    ? `\n\n기억하는 사용자 정보:\n${memories.map((m) => `- ${m}`).join("\n")}`
+    ? `\n\n기억하는 사용자 정보:\n${memories.map((m) => `- ${m.preference_text}`).join("\n")}`
     : "";
 
   const systemPrompt =

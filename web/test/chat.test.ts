@@ -336,7 +336,7 @@ describe("consumeAndStore", () => {
   it("extracts preferences on every call, regardless of message count (item 43, removes the 6-message gate)", async () => {
     const stream = makeSseStream(['data: {"choices":[{"delta":{"content":"안녕"}}]}\n\n', "data: [DONE]\n\n"]);
 
-    await consumeAndStore(stream, "conv-1", "u1", "질문", ["이미 아는 사실"]);
+    await consumeAndStore(stream, "conv-1", "u1", "질문", [{ id: "m1", preference_text: "이미 아는 사실" }]);
 
     expect(extractPreferencesMock).toHaveBeenCalledTimes(1);
     const [conversationText, knownFacts] = extractPreferencesMock.mock.calls[0] as [string, string[]];
@@ -346,7 +346,9 @@ describe("consumeAndStore", () => {
   });
 
   it("stores a name fact unmasked, but masks a phone number within the same fact", async () => {
-    extractPreferencesMock.mockResolvedValue(["사용자 이름은 홍길동, 연락처는 010-1234-5678"]);
+    extractPreferencesMock.mockResolvedValue([
+      { fact: "사용자 이름은 홍길동, 연락처는 010-1234-5678", replaces: null },
+    ]);
     embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
     queryMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
@@ -384,7 +386,7 @@ describe("consumeAndStore", () => {
   });
 
   it("updates the existing row instead of inserting when a near-duplicate fact is returned", async () => {
-    extractPreferencesMock.mockResolvedValue(["이미 아는 사실과 같은 내용"]);
+    extractPreferencesMock.mockResolvedValue([{ fact: "이미 아는 사실과 같은 내용", replaces: null }]);
     embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
     queryMock.mockImplementation(async (sql: string) => {
       const text = String(sql);
@@ -393,10 +395,70 @@ describe("consumeAndStore", () => {
     });
     const stream = makeSseStream(['data: {"choices":[{"delta":{"content":"응답"}}]}\n\n', "data: [DONE]\n\n"]);
 
-    await consumeAndStore(stream, "conv-1", "u1", "질문", ["이미 아는 사실과 같은 내용"]);
+    await consumeAndStore(stream, "conv-1", "u1", "질문", [
+      { id: "m1", preference_text: "이미 아는 사실과 같은 내용" },
+    ]);
 
     const insertPrefCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("insert into user_preferences"));
     expect(insertPrefCall).toBeUndefined(); // UPDATE가 행을 반환했으므로 INSERT하지 않는다
+  });
+
+  describe("contradiction replace (3-3-4)", () => {
+    const mems = [
+      { id: "m1", preference_text: "취업 준비 중" },
+      { id: "m2", preference_text: "축구를 좋아한다" },
+    ];
+    const run = (facts: unknown, handler?: (text: string) => { rows: unknown[] } | undefined) => {
+      extractPreferencesMock.mockResolvedValue(facts);
+      embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+      queryMock.mockImplementation(async (sql: string) => handler?.(String(sql)) ?? { rows: [] });
+      const stream = makeSseStream(['data: {"choices":[{"delta":{"content":"응답"}}]}\n\n', "data: [DONE]\n\n"]);
+      return consumeAndStore(stream, "conv-1", "u1", "질문", mems);
+    };
+    const prefSql = () =>
+      queryMock.mock.calls.map(([sql]) => String(sql)).filter((t) => t.includes("update user_preferences") || t.includes("insert into user_preferences"));
+    const replaceCall = () => queryMock.mock.calls.find(([sql]) => String(sql).includes("previous_fact"));
+
+    it("replaces the same row via one update with user_id and no insert", async () => {
+      await run([{ fact: "회사에 다닌다", replaces: 1 }], (t) => (t.includes("previous_fact") ? { rows: [{ id: "m1" }] } : undefined));
+
+      const call = replaceCall();
+      expect(call?.[1]).toEqual(["m1", "u1", "회사에 다닌다", JSON.stringify([0.1, 0.2]), "gemini-embedding-001", "conv-1"]);
+      expect(String(call?.[0])).toContain("where id = $1 and user_id = $2");
+      expect(prefSql()).toHaveLength(1); // 유사 갱신·INSERT 없음
+    });
+
+    it("falls through to similar-update then insert when the replace hits 0 rows", async () => {
+      await run([{ fact: "회사에 다닌다", replaces: 2 }]);
+
+      expect(replaceCall()?.[1]).toEqual(expect.arrayContaining(["m2", "u1"]));
+      expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("insert into user_preferences"))).toBe(true);
+    });
+
+    it("does not touch previous_fact when replaces is null (similar update / insert)", async () => {
+      await run([{ fact: "축구도 좋아한다", replaces: null }]);
+
+      expect(replaceCall()).toBeUndefined();
+      expect(prefSql().every((t) => !t.includes("previous_fact"))).toBe(true);
+    });
+
+    it("masks a phone number in the replacement sentence", async () => {
+      await run([{ fact: "연락처는 010-1234-5678", replaces: 1 }], (t) => (t.includes("previous_fact") ? { rows: [{ id: "m1" }] } : undefined));
+
+      expect(replaceCall()?.[1]?.[2]).toContain("[전화번호]");
+    });
+
+    it("skips only the failing sentence when the replace query throws", async () => {
+      await run(
+        [{ fact: "A", replaces: 1 }, { fact: "B", replaces: null }],
+        (t) => {
+          if (t.includes("previous_fact")) throw new Error("boom");
+          return undefined;
+        },
+      );
+
+      expect(queryMock.mock.calls.filter(([sql]) => String(sql).includes("insert into user_preferences"))).toHaveLength(1);
+    });
   });
 
   it("stores the partial assistant text collected before a mid-stream exception (item 43-b)", async () => {
