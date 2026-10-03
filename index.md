@@ -48,18 +48,18 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(draft — 56 보드 수집 이전으로 수집 pg_cron 잡 미등록 반영 재승인 대기; 55 공지 첨부·고정·이미지 수 컬럼, content_hash unique 해제(0021 운영 적용)): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
-- [[anyang-backend-api]] — 안양 비서 API 계약(draft — 56 보드 수집기·받기 API 포인터, 직접 수집 스위치 재승인 대기; 55 수집 모드·서버 분할 백필·공지 응답 필드, 실측 셀렉터·image_count 제외 규칙): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
-- [[anyang-board-collector]] — 안양 비서: UNO Q 보드 수집기·Vercel 받기 API 설계(draft — 확인 항목 56): 파서 공유(notice-parser.ts), systemd timer quick/full/backfill, 차단 페이지·0건 실패 처리, POST /api/ingest/notices(COLLECTOR_INGEST_SECRET), 직접 수집 스위치, 배포·롤백
-- [[anyang-board-collector-db]] — 안양 비서: UNO Q 보드 수집 보관함·전송 대기열 DB 설계(draft — 확인 항목 56 클라우드 IP 차단 대응): 보드 PostgreSQL USB 저장, collected_notices(원문 HTML·정리 값·sync_status), collector_runs, 로컬 소켓 접속, 배포·롤백
+- [[anyang-database-schema]] — 안양 비서 DB 설계(active — 56 보드 수집 이전으로 수집 pg_cron 잡 미등록; 55 공지 첨부·고정·이미지 수 컬럼, content_hash unique 해제(0021 운영 적용)): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
+- [[anyang-backend-api]] — 안양 비서 API 계약(active — 56 받기 API·직접 수집 스위치 구현, 미배포; 55 수집 모드·서버 분할 백필·공지 응답 필드, 실측 셀렉터·image_count 제외 규칙): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
+- [[anyang-board-collector]] — 안양 비서: UNO Q 보드 수집기·Vercel 받기 API 설계(active, 구현 완료·미배포 — 56(j) 설계 변경 결정 대기): 파서 공유(notice-parser.ts), systemd timer quick/full/backfill, 차단 페이지·0건 실패 처리, POST /api/ingest/notices(COLLECTOR_INGEST_SECRET), 직접 수집 스위치, 배포·롤백
+- [[anyang-board-collector-db]] — 안양 비서: UNO Q 보드 수집 보관함·전송 대기열 DB 설계(active, 코드 완료·보드 미설치 — 56 B안 별도 클러스터 17 collector 포트 5433): 보드 PostgreSQL USB 저장, collected_notices(원문 HTML·정리 값·sync_status), collector_runs, 로컬 소켓 접속, 배포·롤백
 - [[anyang-cheongan-design-adoption]] — 안양 비서: 팀원 디자인 소스 cheongan(Tailwind v4 + 토큰) 웹 적용 설계(active — 52·55 구현 완료, 본문 이미지 배지 포함): 토큰·globals.css 이행, 공통 컴포넌트, 화면 매핑표
 - [[anyang-user-name-memory]] — 안양 비서: 사용자 이름 저장·메모리 설계(**미승인** — 확인 항목 54 사용자 결정 전, 계정 이름 DeepSeek 전송이 ai-models-data-transfer 결정과 충돌. draft 복귀·삭제 결정 대기)
-- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft — 56 관리자 수동 수집 410 안내·이력 문구 재승인 대기; 55 공지 별표·"이미지" 칩·첨부 목록·탭 복귀 재조회 구현 완료): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
+- [[anyang-frontend-screens]] — 안양 비서 화면 설계(active — 56 관리자 수동 수집 410 안내·이력 문구 구현; 55 공지 별표·"이미지" 칩·첨부 목록·탭 복귀 재조회 구현 완료): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
 
-- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(draft — 56 보드 수집기·받기 API 5-6~5-9 추가 재승인 대기; 55 수집기 5-1~5-5)
-- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(draft — 56 관리자 수집 이력 K1 추가 재승인 대기; 55 공지 화면 N1~N3)
+- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(active — 56 보드 수집기·받기 API 5-6~5-9; 55 수집기 5-1~5-5)
+- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(active — 56 관리자 수집 이력 K1; 55 공지 화면 N1~N3)
 
 ## Concepts
 

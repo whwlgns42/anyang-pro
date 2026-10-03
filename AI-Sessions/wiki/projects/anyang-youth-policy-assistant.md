@@ -386,6 +386,19 @@ owner: pm
     - 확인 필요(구현·시험 단계): 안양시가 보드 IP도 차단하는지(시험 ① dry-run), 보드 → Vercel POST가 배포 보호에 막히는지(시험 ③, 루트 GET은 307), 실패 행 `error_summary` 정확한 형식(frontend 질문 — 정해지면 종류 표시 추가), 스위치 상태 조회 API 필요 여부(frontend, 이번 안은 불필요).
     - 범위 밖 참고(backend): 백필로 462건이 `collected_at=now()`로 한꺼번에 들어가면, 알림 잡 등록 후 `collected_at > enabled_at` 조건 때문에 과거 공지가 일괄 발송될 수 있다. 알림 잡 등록 전에 확인.
     - 보안 참고(database 읽기 전용 확인, 보드 기존 설정 — 변경하지 않음): 보드 `pg_hba.conf`가 local·127.0.0.1·::1 모두 `trust`라 보드의 모든 OS 사용자가 비밀번호 없이 기존 DB에도 슈퍼유저로 접속할 수 있다. 이전 psql 기록 파일에 비밀번호 문자열이 남아 있다(문서에 옮기지 않음). 조치 여부는 사용자 판단.
+    - **사용자 결정·승인(2026-10-04, user, 메인 세션 전달)**: (a) B안 — USB에 별도 PostgreSQL 클러스터, 기존 클러스터·DB 불변. (b) `DIRECT_COLLECT_ENABLED` 스위치로 닫음(코드 삭제 없음). (c) 시험 호출 `collect_runs` 1행을 failed·`error_summary` `ip_blocked`로 수정(운영 쓰기 승인). (d) `COLLECTOR_INGEST_SECRET`은 메인 세션이 생성해 Vercel production(sensitive)·`web/.env.local`에 둠 — 값 출력·기록 금지, 보드 `/etc/anyang-collector/collector.env`(root 0600)에는 `.env.local`에서 읽어 ssh로 직접 기록, `COLLECTOR_CONTACT`는 비워 둠. (e) esbuild devDependency 승인. (f) `/mnt/usb/postgresql`·`/mnt/usb/data` 건드리지 않음. (g) 제안값 전부 확정. 설계 7종 "제안대로 승인". 보드 보안(pg_hba trust, psql 기록 비밀번호 문자열)은 범위 밖 — 그대로 두고 아래 (h)로 남김. 알림 잡은 등록하지 않음.
+      - 진행 순서(승인): (미확정) 정리 → 23차 → 구현(파서 분리, 받기 API, 스위치, 차단 판정, 보드 수집기 번들, frontend 410 안내) → test·build → code-review → 커밋 → push → `vercel deploy --prod` → (c) → 보드 설치(무중단, 설치 전후 systemctl·ss 비교) → 시험 ① dry-run → ③ 실제 POST 1~2페이지·Supabase 확인 → backfill 1~47 → 462건·청크 없는 공지 0 → timer 활성화. 단계 실패 시 멈춤.
+    - **구현(2026-10-04)**: database `6581771`(보드 DB `web/collector/db/0001_init` up/down, `setup-cluster.sh`, `postgresql@17-collector` USB 드롭인; 로컬에 psql 없어 SQL 실행 검증 못 함), backend `791fd53`(파서 `notice-parser.ts`·저장 분리, 서버 수집기 차단·0건 failed)·`6d884df`(`POST /api/ingest/notices`, `DIRECT_COLLECT_ENABLED` 스위치)·`bea3372`(보드 수집기 `web/collector/`, systemd 유닛 3개, esbuild 번들 `npm run build:collector` → `web/dist-collector/anyang-collector.mjs` 약 2.4MB, 커밋 대상 아님), frontend `9b189a1`(관리자 410 안내·이력 문구). code-review: 치명 0, 주요 1, 경미 9 → 구현 수정 재위임 1회 backend `fdbe36a`(보드 DB 오류는 Vercel 보고 없이 `unexpected`, null 응답 항목만 재시도 `bad_item`, 유닛 의존 순서·`Requires=postgresql@17-collector`, content-length 선검사 413) → 재검수 치명·주요 0, 경미 1. npm test 382·build 통과. **push·배포·보드 설치는 아래 설계 변경 결정 뒤로 멈춤.**
+    - (j) **사용자 결정 필요 — 설계 변경(code-review)**: 
+      - ① (주요) full 성공 보고: 설계 A-4 6번 "full은 성공·실패 모두 보고"와 C-2(`report.status`는 failed만)·C-4 3번(항목·report 없으면 400)이 충돌. 구현은 실패 때만 보고 → 새 글 없는 날은 `collect_runs`에 행이 없어 "하루 1행 살아 있음 신호"가 없다. 선택: (가) 설계를 "실패 때만 보고"로 고침(코드 그대로) (나) `report.status`에 success 허용 + success 행 기록(backend 코드 수정). pm 권장 (나) — 관리자가 보드 정상 동작을 매일 확인할 수 있음. 
+      - ② 설계 표에 없는 값을 구현이 씀: `ip_blocked_skipped`(차단 중 60분 쉬는 실행 — 이게 없으면 쉬기가 풀림), `unexpected`(보드 DB 오류 등), `bad_item`(응답 항목 형식 불일치), `ingest_unavailable`, `ingest_bad_request`. 설계는 코드 값을 구현에 위임했지만 표에 빠짐 → 문서에 추가(backend·database 문서).
+      - ③ C-2 응답표 문구 "필드 누락 등 요청 전체 형식 오류 → 400"을 구현(필드 오류는 항목별 rejected `INVALID_FIELD`, 최상위 형식만 400, C-3과 일치)에 맞게 정리.
+      - ④ `collector.env` 변수 목록(A-3)에 `PGPORT=5433` 추가(없으면 기존 main 5432에 붙을 수 있어 구현이 막음, `.env.example`에는 있음).
+      - ⑤ 보드 `collector_runs` 90일 삭제 쿼리 미구현 — 삭제라 승인 대상. 승인하면 backend 구현.
+      - 그래서 `anyang-board-collector`·`anyang-board-collector-db`를 승인된 설계에서 뺐다(23차 이후). 결정 뒤 backend·database가 문서 반영 → 24차 → (나)면 backend 수정·재검수 → push → 배포 → (c) → 보드 설치 → 시험.
+    - (k) 경미(검수 기록, 조치 불필요): 같은 새 글이 동시에 두 번 들어오면 두 번째 처리에서 청크 삭제가 빠질 수 있으나 보드 락이 단일 실행을 보장해 사실상 발생하지 않음(`lib/notice-store.ts:24-53`).
+    - (h) **보드 보안(사용자 판단 대기, 이번 범위 밖)**: 보드 `pg_hba.conf` local·127.0.0.1·::1 trust, 이전 psql 기록 파일에 비밀번호 문자열 잔존. 변경하지 않음.
+    - (i) **알림 잡 등록 전 확인 필요**: 백필 462건이 `collected_at=now()`로 들어가 알림 잡 등록 후 과거 공지가 일괄 발송될 위험.
     - 역링크 남음(WARN): [[anyang-board-collector]] ← [[anyang-frontend-tasks]](backend 소유), [[anyang-database-schema]] ← [[anyang-board-collector]](database 소유). 다음 수정 때.
 
 ## 승인된 설계
@@ -435,6 +448,16 @@ owner: pm
 2026-10-04(21차): 55(x)·(w)·(y) 사용자 결정(메인 세션 전달 — 200초, `remaining_unembedded`·`INVALID_RANGE` 확정, null 보강)을 backend가 반영한 뒤 2종을 다시 기록한다.
 
 2026-10-04(22차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 56(안양시 클라우드 IP 차단, UNO Q 보드 수집기·Vercel 받기 API, 새 요청). 재승인 뒤 다시 기록한다. 같은 사유로 `anyang-frontend-screens`·`anyang-frontend-tasks`도 뺀다(관리자 "수동 수집" 버튼이 직접 수집 스위치로 410을 받음 — backend 보고). 남은 승인된 설계는 `anyang-cheongan-design-adoption`(19차)이다.
+
+2026-10-04(23차): 확인 항목 56 사용자 결정·승인(메인 세션 전달 — B안, 스위치, 제안값 전부 확정, "제안대로 승인"). database가 B안을 본문 기준으로 정리(별도 클러스터 `17 collector`, 포트 5433, `pg_createcluster`, 소켓 전용·peer, USB 가드 드롭인)한 뒤 7종을 기록한다. 포트 5433·클러스터 구성 세부는 B안 승인에서 직접 따라 나온 값으로 본다. 나머지 문서의 `(미확정)` 표시는 구현 단계에서 각 소유자가 지운다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(23차 이어서): `anyang-board-collector`·`anyang-board-collector-db`를 뺀다 — 사유: 확인 항목 56(j) code-review "설계 변경 필요"(full 성공 보고 충돌, 표에 없는 코드 값, 응답표 문구, PGPORT, 90일 삭제). 사용자 결정 후 24차로 재기록한다.
 
 ## Jev 도입 제안
 
