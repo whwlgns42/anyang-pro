@@ -212,7 +212,7 @@ export async function runCollectJob(
         if (known && known.content_hash === hash) {
           // 본문이 같으면 메타데이터 4개만 갱신한다(collected_at·notice_chunks는 그대로).
           await pool.query(
-            `update notices set is_pinned = $2, image_count = $3, attachments = $4::jsonb, published_at = $5
+            `update notices set is_pinned = $2, image_count = $3, attachments = $4::jsonb, published_at = coalesce($5, published_at)
               where id = $1`,
             [known.id, item.isPinned, detail.imageCount, attachmentsJson, item.publishedAt],
           );
@@ -224,7 +224,7 @@ export async function runCollectJob(
            values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
            on conflict (source_url) do update
              set title = excluded.title, body = excluded.body, content_hash = excluded.content_hash,
-                 published_at = excluded.published_at, is_pinned = excluded.is_pinned,
+                 published_at = coalesce(excluded.published_at, notices.published_at), is_pinned = excluded.is_pinned,
                  image_count = excluded.image_count, attachments = excluded.attachments, collected_at = now()`,
           [item.url, title, detail.body, hash, item.publishedAt, item.isPinned, detail.imageCount, attachmentsJson],
         );

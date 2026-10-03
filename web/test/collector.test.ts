@@ -272,6 +272,25 @@ describe("runCollectJob", () => {
     expect(sqlCalls("delete from notice_chunks")[0][1]).toEqual(["e1"]);
   });
 
+  it("unparseable list date (null): both update and upsert keep the stored published_at via coalesce", async () => {
+    const noDate = (ntt: number) => LIST_ROW(ntt).replace("<time>2026-09-01</time>", "");
+    setupDb({
+      existing: [
+        { id: "e1", source_url: urlFor(1), content_hash: contentHash("공지", "본문") },
+        { id: "e2", source_url: urlFor(2), content_hash: "old" },
+      ],
+    });
+    mockFetch({ "1": listHtml(noDate(1), noDate(2)) });
+
+    await runCollectJob("scheduled", null, { mode: "full" });
+    const upd = sqlCalls("update notices")[0];
+    expect(String(upd[0])).toContain("published_at = coalesce($5, published_at)");
+    expect(upd[1][4]).toBeNull();
+    const ins = sqlCalls("insert into notices")[0];
+    expect(String(ins[0])).toContain("coalesce(excluded.published_at, notices.published_at)");
+    expect(ins[1][4]).toBeNull();
+  });
+
   it("new URL: inserts without deleting chunks; same body under a different URL is still saved", async () => {
     setupDb();
     mockFetch({ "1": listHtml(LIST_ROW(1), LIST_ROW(2)) }); // 두 글의 제목·본문 해시가 같다
