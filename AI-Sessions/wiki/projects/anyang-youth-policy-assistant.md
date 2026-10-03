@@ -65,6 +65,7 @@ owner: pm
 - 2026-09-29: 사용자 새 요청(채팅이 이름을 기억 못 함). 원인 3개와 사용자 결정 2건을 확인 항목 43에 기록, [[anyang-ai-models-data-transfer]] 갱신, 설계 5종을 승인된 설계에서 뺌(9차). 설계 draft 완료(database 스키마 변경 없음, backend 기억 주입·매 답변 추출, frontend 안내·처리방침 문구). 재승인 대기, 구현은 재승인 뒤.
 - 2026-09-29: 43 재승인(user: Gemini 전송 허용, 부분 답변 저장 포함, 제안값 전부 확정). 결정 문서 갱신, 승인된 설계 10차. backend가 43-b 단락 추가 후 구현 236d410(npm test 193개·build 통과). frontend 문구 구현은 테스트 174개 통과, dev 서버(3100) 때문에 build·커밋 대기(44). code-review 치명 없음. push 대기(45).
 - 2026-10-03: overview 문서·코드 재검증(사용자 요청, 확인 항목 47). database·backend·frontend 조사, code-review 교차 검수. 채팅요청흐름 다이어그램만 최신 구현으로 갱신(매 답변 추출, 기억 주입, 0.08 갱신, 부분 답변 저장). 핵심 발견: 모순 선호는 정정되지 않고 공존(설계 범위 밖), 기억 화면 진입 경로 없음. 코드·설계 문서 변경 없음, 새 설계 draft 없음(전부 사용자 결정 대기). frontend 구현은 사용자 지시로 보류(팀원 앱 디자인 소스 적용 후 웹·앱 동시 구현으로 재개).
+- 2026-10-03: 사용자 결정 47-a = (ii) 추출 시 대체. 확인 항목 48 설계 draft(database-schema 12차로 뺌 → database → backend). 확인 항목 49 cheongan 적용 조사 draft(frontend, 새 문서 [[anyang-cheongan-design-adoption]], 코드 변경 없음). 둘 다 사용자 승인 대기, 구현은 승인 뒤.
 
 ### 설계 문서
 
@@ -227,6 +228,9 @@ owner: pm
       - (h) 프롬프트 문구 확정 전에 가짜 문장 쌍 약 12개(모순 6·비모순 6)로 DeepSeek 수동 확인을 할지.
       - (i) 46 게이트 거짓 음성이면 그 턴의 정정도 빠지는 것을 수용할지. — 46 보류로 지금은 묻지 않는다(46 재개 때 다시 확인).
 49. **설계 조사(2026-10-03, 사용자 요청 — 팀원 디자인 소스 cheongan 적용 가능성)**: 위치 `C:\Users\whwlg\Downloads\cheongan\`(design-system: Tailwind v4 + W3C 토큰, react-prototype: React 19 + Vite 해시라우터). `web/`은 Next.js 16 + React 19 + 순수 CSS. frontend가 재검증하고 Tailwind v4 도입 영향, `globals.css`와의 충돌·공존, 화면 매핑표를 새 설계 문서 draft로 정리한다. **코드·설치·파일 복사 금지, 조사·문서만**(47 frontend 구현 보류 유지). 47(b)·(c) 처리 시점 판단의 근거로 쓴다.
+    - 조사 draft 완료(2026-10-03, frontend): [[anyang-cheongan-design-adoption]]. 코드·설치 변경 없음. 기술적으로 적용 가능(React 19 동일, Next 16.3.6, Tailwind v4는 `@tailwindcss/postcss` 필요 — 프로토타입의 `@tailwindcss/vite`는 못 씀). 충돌 있음(설치된 tailwindcss 4.3.3 코드와 캐스케이드 규칙으로 추론, 브라우저 미확인): 레이어 밖 `globals.css`의 전역 `button`·`h1`·`a`·`fieldset` 규칙이 Tailwind 유틸리티를 이김, `--border-strong` 이름 같고 의미 다름(색 vs 2px), 색 체계 이중화. 공존안 A 전면 교체/B 점진/C preflight 끄기/D globals.css를 `@layer components`로 이동 — 제안 D 후 B(미확정). 화면: 대화 `/chat`·공지 목록 `/notices` 기존 API로 충분, 공지 상세는 `image_count` 없음(backend·database 설계 변경 필요), 알림은 구독 조회 GET 없음(backend 설계 변경 필요), 내 정보는 하단 탭 3→4개(frontend-screens 설계 변경 필요). 47(b)는 "내 정보" 탭으로 해결, 47(c) ①②③은 함께 처리 가능, ④⑤는 독립.
+    - 미확정·질문: (a) 공존안, (b) 본문 글꼴·로딩 방식, (c) 탭 4개, (d) 안양 비서에만 있는 화면(로그인·동의·온보딩·정지·처리방침·관리자 4종)에 디자인을 어디까지 입힐지, (e) `image_count`·구독 조회 GET 추가 여부, (f) 되돌리기 Toast 구현 방식, (g) 토큰 폴더 위치, 내 정보 고정 문구 파일 위치, (h) 받은 폴더에 없는 자료: `Icon.tsx`·`tokens.json`·`build-tokens.mjs` 확인 못 함, 「청안 화면 기능 정의서 v0」 못 찾음 — 팀원에게 받을지. (i) 적용을 진행한다면 frontend-screens·frontend-tasks를 승인된 설계에서 빼고 backend(필요 시 database) → frontend 설계부터 한다.
+    - 역링크 미완: [[anyang-frontend-screens]]·[[anyang-frontend-tasks]](승인 잠금, frontend 소유)·[[anyang-backend-api]](backend 소유)에서 새 문서로 가는 링크 없음(lint WARN). 다음 해당 문서 설계 수정 때 넣는다.
 
 ## 승인된 설계
 
@@ -296,3 +300,4 @@ owner: pm
 - [[anyang-backend-api-mihwakjeong-removal-corruption]]
 - [[anyang-jobs-collect-missing-maxduration]]
 - [[서비스-소개]]
+- [[anyang-cheongan-design-adoption]]

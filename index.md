@@ -48,8 +48,9 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(active, 공개 API 차단 반영 재승인 2026-09-28, 0019 운영 적용 완료): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
+- [[anyang-database-schema]] — 안양 비서 DB 설계(draft — 확인 항목 48 모순 선호 대체 반영 재승인 대기, 0019 운영 적용 완료): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
 - [[anyang-backend-api]] — 안양 비서 API 계약(active, 재승인 2026-09-28): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기(실제 셀렉터), Web Push, 관리자 API(공지 목록 포함), 배포, UNO Q runbook
+- [[anyang-cheongan-design-adoption]] — 안양 비서: 팀원 디자인 소스 cheongan(Tailwind v4 + 토큰, React 프로토타입) 적용 조사(draft) — Tailwind 도입·globals.css 충돌·공존안, 화면 매핑표, 작업 목록. 구현 보류
 - [[anyang-frontend-screens]] — 안양 비서 화면 설계(active, 재승인 2026-09-28): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
