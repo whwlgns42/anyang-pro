@@ -36,10 +36,17 @@ describe("GET /api/notices/recommended", () => {
       if (sql.includes("suspended_at")) return { rows: [{ suspended_at: null }] };
       if (sql.includes("policy_version")) return { rows: [{ policy_version: "2026-09-27" }] };
       if (sql.includes("select embedding from user_preferences")) return { rows: [] };
-      if (sql.includes("order by collected_at desc")) {
+      if (sql.includes("order by is_pinned desc, published_at desc nulls last, id desc")) {
         return {
           rows: [
-            { id: "n1", title: "제목1", body: "본문 내용".repeat(20), published_at: new Date("2026-01-01") },
+            {
+              id: "n1",
+              title: "제목1",
+              body: "본문 내용".repeat(20),
+              published_at: new Date("2026-01-01"),
+              is_pinned: true,
+              image_count: 2,
+            },
           ],
         };
       }
@@ -55,8 +62,11 @@ describe("GET /api/notices/recommended", () => {
         title: "제목1",
         excerpt: "본문 내용".repeat(20).slice(0, 100),
         posted_at: "2026-01-01T00:00:00.000Z",
+        is_pinned: true,
+        image_count: 2,
       },
     ]);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
   it("uses similarity search when preferences exist", async () => {
@@ -68,7 +78,7 @@ describe("GET /api/notices/recommended", () => {
         return { rows: [{ embedding: JSON.stringify([0.1, 0.2]) }] };
       }
       if (sql.includes("distinct on (n.id)")) {
-        return { rows: [{ id: "n2", title: "매칭 공지", body: "매칭 본문", published_at: null }] };
+        return { rows: [{ id: "n2", title: "매칭 공지", body: "매칭 본문", published_at: null, is_pinned: false, image_count: 0 }] };
       }
       return { rows: [] };
     });
@@ -76,6 +86,13 @@ describe("GET /api/notices/recommended", () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual([{ id: "n2", title: "매칭 공지", excerpt: "매칭 본문", posted_at: null }]);
+    expect(body).toEqual([
+      { id: "n2", title: "매칭 공지", excerpt: "매칭 본문", posted_at: null, is_pinned: false, image_count: 0 },
+    ]);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    // 추천 경로는 유사도 순서를 유지한다(고정 공지를 위로 올리지 않는다).
+    const sql = String(queryMock.mock.calls.find(([s]) => String(s).includes("distinct on"))?.[0]);
+    expect(sql).toContain("order by distance asc");
+    expect(sql).not.toContain("is_pinned desc");
   });
 });

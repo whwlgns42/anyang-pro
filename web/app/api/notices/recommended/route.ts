@@ -28,7 +28,17 @@ function parsePagination(request: NextRequest): { limit: number; offset: number 
   return { limit: pageSize, offset: (page - 1) * pageSize };
 }
 
-type NoticeRow = { id: string; title: string; body: string; published_at: Date | null };
+type NoticeRow = {
+  id: string;
+  title: string;
+  body: string;
+  published_at: Date | null;
+  is_pinned: boolean;
+  image_count: number;
+};
+
+// 2-1절(확인 항목 55) — 새 글이 수집된 직후 화면이 옛 목록을 보이지 않게 한다.
+const NO_STORE = { headers: { "Cache-Control": "no-store" } };
 
 function toListItem(row: NoticeRow) {
   return {
@@ -36,6 +46,8 @@ function toListItem(row: NoticeRow) {
     title: row.title,
     excerpt: row.body.slice(0, EXCERPT_LENGTH),
     posted_at: row.published_at,
+    is_pinned: row.is_pinned,
+    image_count: row.image_count,
   };
 }
 
@@ -51,23 +63,23 @@ export async function GET(request: NextRequest) {
   );
 
   if (prefRows.length === 0) {
-    // 선호 없는 신규 사용자: 최신 공지 순(설계 확정).
+    // 선호 없는 신규 사용자: 고정 공지 먼저, 그다음 게시일 최신 순(설계 확정, 2026-10-04 개정).
     const { rows } = await pool.query<NoticeRow>(
-      `select id, title, body, published_at
+      `select id, title, body, published_at, is_pinned, image_count
          from notices
         where hidden_at is null
-        order by collected_at desc
+        order by is_pinned desc, published_at desc nulls last, id desc
         limit $1 offset $2`,
       [limit, offset],
     );
-    return NextResponse.json(rows.map(toListItem));
+    return NextResponse.json(rows.map(toListItem), NO_STORE);
   }
 
   const avgPref = averageVectors(prefRows.map((r) => JSON.parse(r.embedding) as number[]));
 
   const { rows } = await pool.query<NoticeRow>(
-    `select id, title, body, published_at from (
-       select distinct on (n.id) n.id, n.title, n.body, n.published_at,
+    `select id, title, body, published_at, is_pinned, image_count from (
+       select distinct on (n.id) n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
               nc.embedding <=> $1 as distance
          from notice_chunks nc
          join notices n on n.id = nc.notice_id
@@ -79,5 +91,6 @@ export async function GET(request: NextRequest) {
     [JSON.stringify(avgPref), limit, offset],
   );
 
-  return NextResponse.json(rows.map(toListItem));
+  // 추천 경로는 유사도 순서를 유지하고 is_pinned는 별표 표시용이다.
+  return NextResponse.json(rows.map(toListItem), NO_STORE);
 }

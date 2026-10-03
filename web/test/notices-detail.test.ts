@@ -51,6 +51,8 @@ describe("GET /api/notices/:id", () => {
               body: "본문",
               source_url: "https://example.com/1",
               published_at: new Date("2026-01-02"),
+              attachments: [{ name: "a.hwp", url: "https://www.anyang.go.kr/youth/downloadBbsFile.do?atchmnflNo=1" }],
+              image_count: 3,
             },
           ],
         };
@@ -67,6 +69,9 @@ describe("GET /api/notices/:id", () => {
       body: "본문",
       source_url: "https://example.com/1",
       posted_at: "2026-01-02T00:00:00.000Z",
+      attachments: [{ name: "a.hwp", url: "https://www.anyang.go.kr/youth/downloadBbsFile.do?atchmnflNo=1" }],
+      image_count: 3,
     });
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });

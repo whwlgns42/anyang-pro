@@ -17,8 +17,10 @@ export async function GET(_request: Request, { params }: Params) {
     body: string;
     source_url: string;
     published_at: Date | null;
+    attachments: { name: string; url: string }[];
+    image_count: number;
   }>(
-    `select id, title, body, source_url, published_at
+    `select id, title, body, source_url, published_at, attachments, image_count
        from notices
       where id = $1 and hidden_at is null`,
     [id],
@@ -35,5 +37,7 @@ export async function GET(_request: Request, { params }: Params) {
     body: notice.body,
     source_url: notice.source_url,
     posted_at: notice.published_at,
-  });
+    attachments: notice.attachments ?? [],
+    image_count: notice.image_count,
+  }, { headers: { "Cache-Control": "no-store" } });
 }

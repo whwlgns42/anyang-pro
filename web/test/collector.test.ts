@@ -1,10 +1,21 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { parseRobotsTxt, isPathDisallowed } from "@/lib/robots";
+import { makePoolMock } from "./helpers";
 
-const queryMock = vi.fn();
-vi.mock("@/lib/db", () => ({ pool: { query: (...args: unknown[]) => queryMock(...args) } }));
+const poolMock = makePoolMock();
+vi.mock("@/lib/db", () => ({
+  pool: {
+    query: (...args: unknown[]) => poolMock.query(...args),
+    connect: () => poolMock.connect(),
+  },
+}));
 
 const { parseListPage, parseDetailPage, contentHash, runCollectJob } = await import("@/lib/collector");
+
+// 실제 게시판(2026-10-04 수집)에서 표 부분만 잘라 저장한 픽스처.
+const fixture = (name: string) => readFileSync(path.join(__dirname, "fixtures", name), "utf-8");
 
 describe("robots.txt parsing", () => {
   it("collects Disallow entries for the wildcard user-agent group", () => {
@@ -29,42 +40,81 @@ describe("robots.txt parsing", () => {
   });
 });
 
-describe("board HTML parsing (실제 게시판 구조 기준 픽스처, 2026-09-28 확인)", () => {
-  it("parses list page rows into items with canonical detail URL and list-page date", () => {
-    const html = `
-      <table class="p-table"><tbody>
-        <tr>
-          <td>123</td>
-          <td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=456&amp;pageIndex=1">청년 지원 사업 안내</a></td>
-          <td><i class="ico-attach"></i></td>
-          <td>10</td>
-          <td><time>2026-09-01</time></td>
-        </tr>
-      </tbody></table>`;
-    const items = parseListPage(html);
-    expect(items).toEqual([
-      {
-        url: "https://www.anyang.go.kr/youth/selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=456",
-        title: "청년 지원 사업 안내",
-        publishedAt: "2026-09-01",
-      },
-    ]);
+describe("parseListPage", () => {
+  it("parses a real list page: 10 rows, canonical URL, date, not pinned", () => {
+    const items = parseListPage(fixture("board-list-page1.html"));
+    expect(items).toHaveLength(10);
+    expect(items[0]).toEqual({
+      url: "https://www.anyang.go.kr/youth/selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=459084",
+      title: "2026년 안양 청년 역량강화 특강 PART.1 <래빗해빛>",
+      publishedAt: "2026-10-01",
+      isPinned: false,
+    });
+    expect(items.every((i) => i.isPinned === false)).toBe(true);
   });
 
-  it("parses detail page into title/body (no date on detail page)", () => {
-    const html = `
-      <table><tbody>
-        <tr><th>제목</th><td><span class="p-table__subject_text">청년 지원 사업 안내</span></td></tr>
-        <tr><th>내용</th><td class="p-table__content">본문 내용입니다.</td></tr>
-        <tr><th>첨부파일</th><td>
-          <ul class="p-attach"><li><a class="p-attach__link" href="/download/1.hwp">첨부파일.hwp</a></li></ul>
-        </td></tr>
-      </tbody></table>`;
-    const detail = parseDetailPage(html);
-    expect(detail).toEqual({
-      title: "청년 지원 사업 안내",
-      body: "본문 내용입니다.",
-    });
+  // 합성 픽스처: 실측한 1~2페이지에는 고정 행이 없어 사이트 CSS의 `.p-table .p-notice`를 근거로 만든 행이다.
+  it("marks tr.p-notice rows as pinned and keeps only the first of a duplicated nttNo", () => {
+    const row = (cls: string, ntt: string, title: string) =>
+      `<tr${cls}><td>x</td><td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=${ntt}">${title}</a></td><td></td><td>1</td><td><time>2026-01-01</time></td></tr>`;
+    const html = `<table class="p-table"><tbody>${row(' class="p-notice"', "9", "고정")}${row("", "10", "일반")}${row("", "9", "고정")}</tbody></table>`;
+    const items = parseListPage(html);
+    expect(items.map((i) => [i.title, i.isPinned])).toEqual([
+      ["고정", true],
+      ["일반", false],
+    ]);
+  });
+});
+
+describe("parseDetailPage", () => {
+  it("no attachment: empty attachments and imageCount 0", () => {
+    const d = parseDetailPage(fixture("detail-no-attach.html"));
+    expect(d.title).toBe("경기도 산후조리비 사업 중단에 따른 안내");
+    expect(d.attachments).toEqual([]);
+    expect(d.imageCount).toBe(0);
+  });
+
+  it("multiple attachments: file name only (no icon text), absolute download URLs", () => {
+    const d = parseDetailPage(fixture("detail-multi-attach.html"));
+    expect(d.attachments).toHaveLength(2);
+    expect(d.attachments[0].url).toBe("https://www.anyang.go.kr/youth/downloadBbsFile.do?atchmnflNo=842189");
+    expect(d.attachments[0].name).toMatch(/\.hwpx$/);
+    expect(d.attachments[0].name).not.toMatch(/파일$/);
+    expect(d.imageCount).toBe(0);
+  });
+
+  it("image attachment shown again by the site in div.p-photo counts once", () => {
+    const d = parseDetailPage(fixture("detail-image-attach.html"));
+    expect(d.attachments).toHaveLength(1);
+    expect(d.attachments[0].name).toMatch(/\.jpg$/i);
+    expect(d.imageCount).toBe(1); // 본문 p-photo <img>는 제외, 이미지 첨부 1건
+  });
+
+  it("two attachments (png + pdf) with p-photo: only the png counts", () => {
+    const d = parseDetailPage(fixture("detail-photo-two-attach.html"));
+    expect(d.attachments).toHaveLength(2);
+    expect(d.imageCount).toBe(1);
+  });
+
+  it("excludes the ckeditor smiley <img> from imageCount, counts the jpg attachment", () => {
+    const html = fixture("detail-emoji-image-attach.html");
+    expect(html).toContain("/plugin/ckeditor/plugins/smiley/");
+    expect(parseDetailPage(html).imageCount).toBe(1);
+  });
+
+  it("counts a real body <img> and dedupes identical attachment URLs", () => {
+    const html = `<table><tr><td><span class="p-table__subject_text">t</span></td></tr>
+      <tr><td class="p-table__content"><p>x</p><img src="/DATA/bbs/1184/a.png"></td></tr>
+      <tr><td><ul class="p-attach">
+        <li><a class="p-attach__link" href="./downloadBbsFile.do?atchmnflNo=1"><span class="p-icon">pdf</span><span>a.PDF</span></a></li>
+        <li><a class="p-attach__link" href="./downloadBbsFile.do?atchmnflNo=1"><span>dup.pdf</span></a></li>
+        <li><a class="p-attach__link" href="/other/link.do"><span>x.jpg</span></a></li>
+      </ul></td></tr></table>`;
+    const d = parseDetailPage(html);
+    expect(d.attachments).toEqual([
+      { name: "a.PDF", url: "https://www.anyang.go.kr/youth/downloadBbsFile.do?atchmnflNo=1" },
+    ]);
+    expect(d.imageCount).toBe(1);
   });
 
   it("hashes title+body deterministically", () => {
@@ -73,22 +123,67 @@ describe("board HTML parsing (실제 게시판 구조 기준 픽스처, 2026-09-
   });
 });
 
+const LIST_ROW = (ntt: number, cls = "") =>
+  `<tr${cls}><td>1</td><td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=${ntt}">공지${ntt}</a></td><td></td><td>0</td><td><time>2026-09-01</time></td></tr>`;
+const listHtml = (...rows: string[]) => `<table class="p-table"><tbody>${rows.join("")}</tbody></table>`;
+const detailHtml = (body: string) =>
+  `<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">${body}</td></tr></tbody></table>`;
+const urlFor = (ntt: number) =>
+  `https://www.anyang.go.kr/youth/selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=${ntt}`;
+
+type Existing = { id: string; source_url: string; content_hash: string };
+
+// pool.query 목: existing은 `source_url = any` 조회 결과. client는 락 트랜잭션용.
+function setupDb(opts: { existing?: Existing[]; locked?: boolean; runningRow?: boolean } = {}) {
+  poolMock.query.mockReset();
+  poolMock.client.query.mockReset();
+  poolMock.client.release.mockReset();
+  poolMock.query.mockImplementation(async (sql: string) => {
+    if (String(sql).includes("source_url = any")) return { rows: opts.existing ?? [] };
+    return { rows: [] };
+  });
+  poolMock.client.query.mockImplementation(async (sql: string) => {
+    const text = String(sql);
+    if (text.includes("pg_try_advisory_xact_lock")) return { rows: [{ locked: opts.locked ?? true }] };
+    if (text.includes("select 1 from collect_runs")) return { rows: opts.runningRow ? [{}] : [] };
+    if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
+    return { rows: [] };
+  });
+}
+
+function mockFetch(pages: Record<string, string>, detail: (url: string) => string = () => detailHtml("본문")) {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    const u = String(url);
+    if (u.includes("robots.txt")) return new Response("User-agent: *\nCrawl-delay: 0\n", { status: 200 });
+    if (u.includes("selectBbsNttList")) {
+      const m = /pageIndex=(\d+)/.exec(u);
+      return new Response(pages[m?.[1] ?? "1"] ?? listHtml(), { status: 200 });
+    }
+    return new Response(detail(u), { status: 200 });
+  });
+  global.fetch = fetchMock;
+  return fetchMock;
+}
+
+const requested = (f: ReturnType<typeof vi.fn>) => f.mock.calls.map(([u]) => String(u));
+const sqlCalls = (needle: string) => poolMock.query.mock.calls.filter(([sql]) => String(sql).includes(needle));
+
 describe("runCollectJob", () => {
   const originalFetch = global.fetch;
+  const originalContact = process.env.COLLECTOR_CONTACT;
 
   beforeEach(() => {
-    queryMock.mockReset();
+    setupDb();
+    delete process.env.COLLECTOR_CONTACT;
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    if (originalContact === undefined) delete process.env.COLLECTOR_CONTACT;
+    else process.env.COLLECTOR_CONTACT = originalContact;
   });
 
-  it("skips collection and records failure when robots.txt disallows the board path", async () => {
-    queryMock.mockImplementation(async (sql: string) => {
-      if (String(sql).includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
-      return { rows: [] };
-    });
+  it("records failure and fetches nothing else when robots.txt disallows the board path", async () => {
     global.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (String(url).includes("robots.txt")) {
         return new Response("User-agent: *\nDisallow: /youth/selectBbsNttList.do\n", { status: 200 });
@@ -97,136 +192,135 @@ describe("runCollectJob", () => {
     });
 
     const result = await runCollectJob("scheduled", null);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("ROBOTS_DISALLOWED");
-
-    const updateCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("update collect_runs"));
-    expect(updateCall?.[1]).toEqual(["run-1", "robots.txt disallow"]);
+    expect(result).toMatchObject({ ok: false, reason: "ROBOTS_DISALLOWED" });
+    expect(sqlCalls("update collect_runs")[0][1]).toEqual(["run-1", "robots.txt disallow"]);
   });
 
-  it("skips notices whose content_hash already exists (no duplicate insert)", async () => {
-    queryMock.mockImplementation(async (sql: string) => {
-      const text = String(sql);
-      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
-      if (text.includes("select id from notices where content_hash")) return { rows: [{ id: "existing" }] };
-      return { rows: [] };
-    });
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (String(url).includes("robots.txt")) {
-        return new Response("User-agent: *\nCrawl-delay: 0\n", { status: 200 });
-      }
-      if (String(url).includes("selectBbsNttList")) {
-        return new Response(
-          '<table class="p-table"><tbody><tr><td>1</td>' +
-            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
-            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
-          { status: 200 },
-        );
-      }
-      return new Response(
-        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">본문</td></tr></tbody></table>',
-        { status: 200 },
-      );
-    });
+  it("quick: requests only list page 1, details only for URLs not in the DB", async () => {
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: "h" }] });
+    const f = mockFetch({ "1": listHtml(LIST_ROW(1), LIST_ROW(2)) });
 
-    const result = await runCollectJob("scheduled", null);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.collectedCount).toBe(0);
-
-    const insertCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("insert into notices"));
-    expect(insertCall).toBeUndefined();
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toEqual({ ok: true, collectedCount: 1 });
+    const urls = requested(f);
+    expect(urls.filter((u) => u.includes("selectBbsNttList"))).toHaveLength(1);
+    expect(urls).toContain(urlFor(2));
+    expect(urls).not.toContain(urlFor(1));
+    expect(sqlCalls("insert into notices")).toHaveLength(1);
   });
 
-  it("deletes existing notice_chunks when a known source_url's content changes (re-embed queue)", async () => {
-    queryMock.mockImplementation(async (sql: string) => {
-      const text = String(sql);
-      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
-      if (text.includes("select id from notices where content_hash")) return { rows: [] }; // hash changed
-      if (text.includes("select id from notices where source_url")) return { rows: [{ id: "existing-notice" }] };
-      return { rows: [] };
-    });
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (String(url).includes("robots.txt")) return new Response("Not Found", { status: 404 });
-      if (String(url).includes("selectBbsNttList")) {
-        return new Response(
-          '<table class="p-table"><tbody><tr><td>1</td>' +
-            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
-            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
-          { status: 200 },
-        );
-      }
-      return new Response(
-        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">수정된 본문</td></tr></tbody></table>',
-        { status: 200 },
-      );
-    });
-
-    const result = await runCollectJob("scheduled", null);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.collectedCount).toBe(1);
-
-    const deleteCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("delete from notice_chunks"));
-    expect(deleteCall?.[1]).toEqual(["existing-notice"]);
+  it("quick with no new posts: robots + list only, no insert", async () => {
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: "h" }] });
+    const f = mockFetch({ "1": listHtml(LIST_ROW(1)) });
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toEqual({ ok: true, collectedCount: 0 });
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(sqlCalls("insert into notices")).toHaveLength(0);
   });
 
-  it("does not delete notice_chunks for a brand-new source_url", async () => {
-    queryMock.mockImplementation(async (sql: string) => {
-      const text = String(sql);
-      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
-      if (text.includes("select id from notices where content_hash")) return { rows: [] };
-      if (text.includes("select id from notices where source_url")) return { rows: [] }; // new notice
-      return { rows: [] };
-    });
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (String(url).includes("robots.txt")) return new Response("Not Found", { status: 404 });
-      if (String(url).includes("selectBbsNttList")) {
-        return new Response(
-          '<table class="p-table"><tbody><tr><td>1</td>' +
-            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
-            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
-          { status: 200 },
-        );
-      }
-      return new Response(
-        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">본문</td></tr></tbody></table>',
-        { status: 200 },
-      );
-    });
-
-    const result = await runCollectJob("scheduled", null);
-    expect(result.ok).toBe(true);
-
-    const deleteCall = queryMock.mock.calls.find(([sql]) => String(sql).includes("delete from notice_chunks"));
-    expect(deleteCall).toBeUndefined();
+  it("full (also the default): list pages 1-2, details for every row", async () => {
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: "h" }] });
+    const f = mockFetch({ "1": listHtml(LIST_ROW(1)), "2": listHtml(LIST_ROW(2)) });
+    await runCollectJob("scheduled", null);
+    const urls = requested(f);
+    expect(urls.filter((u) => u.includes("selectBbsNttList")).map((u) => /pageIndex=(\d+)/.exec(u)![1])).toEqual([
+      "1",
+      "2",
+    ]);
+    expect(urls).toContain(urlFor(1));
+    expect(urls).toContain(urlFor(2));
   });
 
-  it("treats a 404 robots.txt as no restrictions (proceeds to collect)", async () => {
-    queryMock.mockImplementation(async (sql: string) => {
-      const text = String(sql);
-      if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
-      if (text.includes("select id from notices where content_hash")) return { rows: [] };
-      return { rows: [] };
+  it("backfill: given page range, skipExisting skips known URLs, stops at an empty page", async () => {
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: "h" }] });
+    const f = mockFetch({ "3": listHtml(LIST_ROW(1), LIST_ROW(2)), "4": listHtml() });
+    const result = await runCollectJob("manual", null, {
+      mode: "backfill",
+      fromPage: 3,
+      toPage: 9,
+      skipExisting: true,
     });
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (String(url).includes("robots.txt")) {
-        return new Response("Not Found", { status: 404 });
-      }
-      if (String(url).includes("selectBbsNttList")) {
-        return new Response(
-          '<table class="p-table"><tbody><tr><td>1</td>' +
-            '<td class="p-subject"><a href="./selectBbsNttView.do?key=3543&amp;bbsNo=1184&amp;nttNo=1">공지</a></td>' +
-            '<td></td><td>0</td><td><time>2026-09-01</time></td></tr></tbody></table>',
-          { status: 200 },
-        );
-      }
-      return new Response(
-        '<table><tbody><tr><td><span class="p-table__subject_text">공지</span></td></tr><tr><td class="p-table__content">본문</td></tr></tbody></table>',
-        { status: 200 },
-      );
-    });
+    expect(result).toEqual({ ok: true, collectedCount: 1 });
+    const lists = requested(f).filter((u) => u.includes("selectBbsNttList"));
+    expect(lists).toHaveLength(2); // 3, 4(빈 페이지) 뒤 5~9는 요청하지 않는다
+    expect(requested(f)).not.toContain(urlFor(1));
+  });
 
-    const result = await runCollectJob("scheduled", null);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.collectedCount).toBe(1);
+  it("same body, known URL: updates only the 4 metadata columns, keeps chunks", async () => {
+    const hash = contentHash("공지", "본문");
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: hash }] });
+    mockFetch({ "1": listHtml(LIST_ROW(1, ' class="p-notice"')) });
+
+    const result = await runCollectJob("scheduled", null, { mode: "full" });
+    expect(result).toEqual({ ok: true, collectedCount: 0 });
+    const upd = sqlCalls("update notices");
+    expect(upd).toHaveLength(1);
+    expect(upd[0][1]).toEqual(["e1", true, 0, "[]", "2026-09-01"]);
+    expect(sqlCalls("insert into notices")).toHaveLength(0);
+    expect(sqlCalls("delete from notice_chunks")).toHaveLength(0);
+  });
+
+  it("changed body, known URL: upsert with the 3 new columns and delete chunks (re-embed)", async () => {
+    setupDb({ existing: [{ id: "e1", source_url: urlFor(1), content_hash: "old" }] });
+    mockFetch({ "1": listHtml(LIST_ROW(1)) }, () => detailHtml("수정된 본문"));
+
+    const result = await runCollectJob("scheduled", null, { mode: "full" });
+    expect(result).toEqual({ ok: true, collectedCount: 1 });
+    const ins = sqlCalls("insert into notices")[0];
+    expect(String(ins[0])).toContain("on conflict (source_url)");
+    expect(ins[1].slice(5)).toEqual([false, 0, "[]"]);
+    expect(sqlCalls("delete from notice_chunks")[0][1]).toEqual(["e1"]);
+  });
+
+  it("new URL: inserts without deleting chunks; same body under a different URL is still saved", async () => {
+    setupDb();
+    mockFetch({ "1": listHtml(LIST_ROW(1), LIST_ROW(2)) }); // 두 글의 제목·본문 해시가 같다
+    const result = await runCollectJob("scheduled", null, { mode: "full" });
+    expect(result).toEqual({ ok: true, collectedCount: 2 });
+    expect(sqlCalls("insert into notices")).toHaveLength(2);
+    expect(sqlCalls("delete from notice_chunks")).toHaveLength(0);
+  });
+
+  it("returns ALREADY_RUNNING without any insert or fetch when the advisory lock is held", async () => {
+    setupDb({ locked: false });
+    const f = mockFetch({});
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toMatchObject({ ok: false, reason: "ALREADY_RUNNING" });
+    expect(f).not.toHaveBeenCalled();
+    expect(poolMock.client.query.mock.calls.some(([s]) => String(s).includes("insert into collect_runs"))).toBe(false);
+    expect(poolMock.client.release).toHaveBeenCalled();
+  });
+
+  it("returns ALREADY_RUNNING when a fresh running row exists, and cleans stale rows first", async () => {
+    setupDb({ runningRow: true });
+    mockFetch({});
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toMatchObject({ ok: false, reason: "ALREADY_RUNNING" });
+    const stale = poolMock.client.query.mock.calls.find(([s]) => String(s).includes("STALE_RUNNING"));
+    expect(stale).toBeDefined();
+    expect(poolMock.client.query.mock.calls.some(([s]) => String(s).includes("insert into collect_runs"))).toBe(false);
+  });
+
+  it("User-Agent carries COLLECTOR_CONTACT when set, and no contact text when unset", async () => {
+    let f = mockFetch({ "1": listHtml() });
+    await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(f.mock.calls[0][1].headers["user-agent"]).toBe("anyang-youth-policy-bot/1.0");
+
+    process.env.COLLECTOR_CONTACT = "ops@example.invalid";
+    f = mockFetch({ "1": listHtml() });
+    await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(f.mock.calls[0][1].headers["user-agent"]).toBe(
+      "anyang-youth-policy-bot/1.0 (+contact: ops@example.invalid)",
+    );
+  });
+
+  it("marks the run failed when a request returns a non-2xx status", async () => {
+    global.fetch = vi.fn().mockImplementation(async (url: string) =>
+      String(url).includes("robots.txt")
+        ? new Response("User-agent: *\nCrawl-delay: 0\n", { status: 200 })
+        : new Response("err", { status: 503 }),
+    );
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toMatchObject({ ok: false, reason: "COLLECT_FAILED" });
   });
 });

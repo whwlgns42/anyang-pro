@@ -24,9 +24,10 @@ export async function POST() {
   const admin = await requireAdmin();
   if (admin instanceof Response) return admin;
 
-  const result = await runCollectJob("manual", admin.userId);
+  const result = await runCollectJob("manual", admin.userId, { mode: "full" });
   if (!result.ok) {
-    const status = result.reason === "ROBOTS_DISALLOWED" ? 409 : 500;
+    // 겹치면 409 ALREADY_RUNNING(5-1절 6번).
+    const status = result.reason === "ROBOTS_DISALLOWED" || result.reason === "ALREADY_RUNNING" ? 409 : 500;
     return NextResponse.json({ error: result.reason }, { status });
   }
   return NextResponse.json({ collected_count: result.collectedCount });

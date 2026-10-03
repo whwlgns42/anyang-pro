@@ -3,9 +3,8 @@ import { requireSchedulerSecret } from "@/lib/scheduler-auth";
 import { runCollectJob } from "@/lib/collector";
 import { runEmbedJob } from "@/lib/embed-job";
 
-// anyang-backend-api 5·7절 — 공지 수집기 잡. pg_cron이 5분 간격이 아닌 하루 1회 트리거한다.
-// 7절 표 "제안: 수집 잡 직후" — 별도 엔드포인트 호출 없이 같은 요청 안에서 임베딩 파이프라인을
-// 직접 호출한다(pg_cron 잡을 추가로 등록하지 않는다).
+// anyang-backend-api 5-1·7절 — 공지 수집기 잡. pg_cron이 mode=quick(10분마다)과 mode=full(하루 1회)로 호출한다.
+// 수집이 끝나면 같은 요청 안에서 임베딩 파이프라인을 직접 호출한다(별도 엔드포인트 호출 없음).
 // anyang-backend-api 10절 — Fluid Compute 함수 최대 300초 한도를 명시.
 export const maxDuration = 300;
 
@@ -13,8 +12,18 @@ export async function POST(request: Request) {
   const authError = requireSchedulerSecret(request);
   if (authError) return authError;
 
-  const result = await runCollectJob("scheduled", null);
+  // mode가 없으면 full(기존 템플릿 호출과의 호환, 5-1절 6번).
+  const mode = new URL(request.url).searchParams.get("mode") ?? "full";
+  if (mode !== "quick" && mode !== "full") {
+    return NextResponse.json({ error: "INVALID_MODE" }, { status: 400 });
+  }
+
+  const result = await runCollectJob("scheduled", null, { mode });
   if (!result.ok) {
+    // 겹침은 정상 건너뜀이라 200으로 돌려준다(pg_net 기록에서 오류처럼 보이지 않게). 임베딩은 호출하지 않는다.
+    if (result.reason === "ALREADY_RUNNING") {
+      return NextResponse.json({ mode, skipped: true, reason: "ALREADY_RUNNING" });
+    }
     const status = result.reason === "ROBOTS_DISALLOWED" ? 409 : 500;
     return NextResponse.json({ error: result.reason }, { status });
   }
@@ -26,5 +35,5 @@ export async function POST(request: Request) {
     console.error("jobs/collect: embed job failed", err);
   }
 
-  return NextResponse.json({ collected_count: result.collectedCount });
+  return NextResponse.json({ mode, collected_count: result.collectedCount });
 }

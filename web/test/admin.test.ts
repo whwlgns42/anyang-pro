@@ -87,8 +87,15 @@ describe("admin API endpoints when admin", () => {
     runCollectJobMock.mockResolvedValue({ ok: true, collectedCount: 3 });
     const res = await collectRuns.POST();
     expect(res.status).toBe(200);
-    expect(runCollectJobMock).toHaveBeenCalledWith("manual", "admin1");
+    expect(runCollectJobMock).toHaveBeenCalledWith("manual", "admin1", { mode: "full" });
     expect(await res.json()).toEqual({ collected_count: 3 });
+  });
+
+  it("POST /api/admin/collect-runs returns 409 ALREADY_RUNNING when a run is in progress", async () => {
+    runCollectJobMock.mockResolvedValue({ ok: false, reason: "ALREADY_RUNNING", errorSummary: "ALREADY_RUNNING" });
+    const res = await collectRuns.POST();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "ALREADY_RUNNING" });
   });
 
   it("GET /api/admin/collect-runs returns rows without raw content fields", async () => {
