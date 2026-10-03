@@ -32,7 +32,7 @@ owner: shared
 | 알림 시각 | notify-time | 사용자가 새 공지 알림을 받기로 정한 하루 중 시각 |
 | 대화 | conversation | 사용자와 AI 비서 사이의 채팅 한 묶음. 개별 발화는 메시지(message) |
 | 푸시 구독 | push-subscription | 사용자 기기의 Web Push 구독 정보 |
-| 대체된 선호 | superseded-preference | 모순으로 판단돼 새 선호에 자리를 넘긴 이전 선호 행. 지우지 않고 `superseded_at`으로 비활성 표시해 되돌릴 수 있게 남긴다. 기억 주입·추천에서 빠진다. 반대는 활성 기억(`superseded_at is null`). [[anyang-database-schema]] |
+| 직전 문장 | previous-fact | 선호가 모순으로 대체되기 직전의 문장. 같은 행을 새 문장으로 덮어쓰고 바뀌기 전 문장 1단계만 `user_preferences.previous_fact`에 보관해 되돌릴 수 있게 한다(기억 id 불변, 2단계 이상 이전 판본은 없다). [[anyang-database-schema]] |
 | Jev 게이트 | jev-gate | 비싼 LLM 호출(기억 추출) 앞에서 Jev가 "호출할 가치가 있는가"를 확률로 판정해 낮으면 호출을 건너뛰는 앞단 검사. [[anyang-backend-api]] 3-3-3절 |
 | 수집 잡 | collect-job | 게시판에서 새 공지를 가져와 저장·임베딩하는 예약 작업 |
 | 알림 잡 | notify-job | 알림 시각이 된 사용자에게 매칭된 새 공지를 푸시하는 예약 작업 |

@@ -17,9 +17,9 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 켜고 anon·authenticated 롤의 현재·미래 권한을 회수해 공개 키 접근을 차단한다(`0019_lock_public_api`,
 확장성 유지). 스케줄은 Supabase
 `pg_cron` + `pg_net`이 앱 API를
-호출하는 방식으로 앱 쪽 로직만 트리거한다. 모순으로 대체되는 선호는 지우지 않고
-`user_preferences.superseded_at`으로 비활성 표시해 이력을 남긴다(확인 항목 48(f), 컬럼 구조·
-마이그레이션 0020은 제안이며 미확정). 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
+호출하는 방식으로 앱 쪽 로직만 트리거한다. 모순으로 대체되는 선호는 같은 행을 UPDATE하되 직전 문장
+1단계를 `user_preferences.previous_fact`에 보관해 되돌릴 수 있게 한다(확인 항목 48(f), 사용자 결정 안
+2a, 마이그레이션 0020). 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
 사용자 설계 승인으로 확정됐다.
 
 ## Context
@@ -305,7 +305,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 #### user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터
 
 "AI가 기억하는 내 정보" 화면은 조회·수정·삭제를 지원한다([[anyang-service-scope]], user,
-2026-09-27 확정). 삭제는 행 삭제(DELETE)로 충분하다(대체된 이력과의 관계는 아래 "사용자 삭제와 이력", 미확정). 수정은 `preference_text`를 사용자가
+2026-09-27 확정). 삭제는 행 삭제(DELETE)로 충분하다(직전 문장 `previous_fact`가 같은 행에 있어 함께 삭제된다, 아래 "이력 보관 구조"). 수정은 `preference_text`를 사용자가
 고쳐 쓰는 것이므로 `updated_at`을 둔다.
 
 | 컬럼 | 타입 | 설명 |
@@ -318,10 +318,9 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | source_conversation_id | uuid, FK → conversations.id, null 허용 | 어느 대화에서 추출됐는지 추적. 사용자가 직접 추가한 항목이면 null |
 | created_at | timestamptz, default now() | |
 | updated_at | timestamptz, default now() | 사용자가 `preference_text`를 수정할 때마다 갱신 |
-| superseded_at | timestamptz, null 허용 (제안, 미확정, 0020) | 모순으로 대체되어 비활성이 된 시각. null이면 활성 기억. 아래 "이력 남김 구조" |
-| superseded_by | uuid, FK → user_preferences.id, on delete set null, null 허용 (제안, 미확정, 0020) | 이 행을 대체한 새 행. 아래 "이력 남김 구조" |
+| previous_fact | text, null 허용 (0020) | 모순으로 대체되기 직전의 `preference_text` 1단계. null이면 대체된 적 없음. 아래 "이력 보관 구조" |
 
-- 인덱스: HNSW(embedding). 대체 이력(0020) 때문에 새 인덱스는 추가하지 않는다(아래 "조회 쿼리 2종"의 인덱스 항목).
+- 인덱스: HNSW(embedding). `previous_fact`(0020) 때문에 새 인덱스는 추가하지 않는다(아래 "조회 쿼리 2종"의 인덱스 항목).
 - **수정 시 재임베딩 필요(제안)**: `preference_text`는 의미 기반 검색(코사인 유사도)의 입력이므로,
   텍스트를 고치면 `embedding`을 반드시 다시 계산해 함께 갱신한다. 텍스트만 바꾸고 `embedding`을
   갱신하지 않으면 검색 결과가 실제 문장과 어긋난다. 이 재계산은 행 하나 단위라 재임베딩 절차
@@ -329,33 +328,32 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   아니다 — 애플리케이션이 UPDATE 시점에 동기로 처리한다(backend 설계에서 확정).
 
 - **채팅 기억 자동 추출 시 모순 대체·중복 방지·갱신 (신규 2026-09-29, 확인 항목 43; 개정
-  2026-10-03, 확인 항목 47-a 결정·48 — 모순 선호 즉시 정정, 이력 남김(48(f)))**: 매 AI 답변마다 "새로
-  알게 된 사실" 문장 0~N개가 생긴다. 각 문장은 아래 세 경로를 **이 순서로** 시험하고 처음 맞는 경로
+  2026-10-03, 확인 항목 47-a 결정·48 — 모순 선호 즉시 정정, 직전 문장 보관(48(f), 안 2a))**: 매 AI 답변마다
+  "새로 알게 된 사실" 문장 0~N개가 생긴다. 각 문장은 아래 세 경로를 **이 순서로** 시험하고 처음 맞는 경로
   하나만 실행한다(사용자 확정, 2026-10-03, user — [[anyang-youth-policy-assistant#확인이 필요한 항목]]
-  47-a·48). **세 경로 모두 "활성 기억"(`superseded_at is null`)만 대상으로 한다**(아래 "이력 남김 구조").
-  1. **모순 대체(이력 남김)**: 추출 LLM이 이 문장과 모순되는 기존 기억의 id를 지정하면, 그 행을 지우거나
-     덮어쓰지 않고 `superseded_at`을 찍어 비활성으로 표시한 뒤 새 문장을 **새 행**으로 INSERT한다(아래
-     "대체 쿼리"). 예: 기억 "취업 준비 중"에 새 사실 "회사에 다닌다" → "취업 준비 중" 행은 대체됨 표시가
-     붙어 주입·추천에서 빠지고, "회사에 다닌다"가 새 활성 행이 된다. 거리가 멀어(실측 0.16~0.18) 유사
-     갱신으로는 못 잡던 경우다.
-  2. **유사 갱신**: id 지정이 없고, 같은 사용자의 **활성** 기억 중 가장 가까운 것의 거리가 `0.08` 미만이면
-     그 행을 덮어쓴다(UPDATE, 기존 로직, 아래 "갱신 쿼리"). 같은 사실의 표현만 다른 경우라 이력을 남기지
-     않는다(사용자가 이력을 요구한 대상은 "모순으로 대체되는 기억"이다. 이 해석은 미확정, 미해결 질문).
+  47-a·48).
+  1. **모순 대체(직전 문장 보관)**: 추출 LLM이 이 문장과 모순되는 기존 기억의 id를 지정하면, **그 행을
+     그대로 UPDATE**해 `preference_text`를 새 문장으로 바꾸고 바뀌기 전 문장을 `previous_fact`에 옮긴다(아래
+     "대체 쿼리"). **기억 id는 바뀌지 않는다.** 예: 기억 "취업 준비 중"에 새 사실 "회사에 다닌다" → 같은 행의
+     `preference_text`가 "회사에 다닌다", `previous_fact`가 "취업 준비 중"이 된다. 거리가 멀어(실측
+     0.16~0.18) 유사 갱신으로는 못 잡던 경우다.
+  2. **유사 갱신**: id 지정이 없고, 같은 사용자의 기억 중 가장 가까운 것의 거리가 `0.08` 미만이면
+     그 행을 덮어쓴다(UPDATE, 기존 로직, 아래 "갱신 쿼리"). 같은 사실의 표현만 다른 경우라 `previous_fact`를
+     바꾸지 않는다(사용자 결정 f-2, 이력은 모순 대체에만).
   3. **추가**: 둘 다 아니면 새 행을 INSERT한다.
 
   임계 완화(거리 기준을 늘려 모순까지 병합)와 만료·최신 우선 정책은 채택하지 않는다(user,
-  2026-10-03). **이력 남김은 사용자 확정(user, 2026-10-03, 확인 항목 48(f))** — 이전에 제안한 "이력
-  미보관"은 폐기됐다. 이 결정으로 **스키마 변경이 생긴다**(`user_preferences`에 컬럼 2개, 새 마이그레이션
-  0020, 아래 "마이그레이션 계획 (0020)"). 확정된 것은 "지우거나 덮어쓰지 않고 별도 컬럼으로 표시해
-  되돌릴 수 있게 한다"까지이며, 컬럼 이름·구조·인덱스·보존 기간은 모두 제안(미확정)이다.
+  2026-10-03). **직전 문장 보관은 사용자 확정(user, 2026-10-03, 확인 항목 48(f-1) 안 2a)** — 이전에 제안한
+  "이력 미보관"(1차 draft)과 "옛 행 비활성 표시 + 새 행 INSERT"(안 1, `superseded_at`/`superseded_by`)는 채택하지
+  않는다. 이 결정으로 **스키마 변경이 생긴다**(`user_preferences`에 `previous_fact` 컬럼 1개, 새 마이그레이션
+  0020, 아래 "마이그레이션 계획 (0020)"). 0020 이름·컬럼 이름 `previous_fact`는 사용자 예시를 따른 제안이다.
   - **임계값 (확정, 2026-09-29 승인, 확인 항목 43)**: 코사인 유사도 0.92 이상이면 같은 사실로 보고
     갱신한다. pgvector의 `<=>` 연산자(`vector_cosine_ops`)는 코사인 거리(`1 - 코사인유사도`)를
     반환하므로, 쿼리에서는 거리 `0.08` 미만으로 비교한다(구현 `PREFERENCE_UPDATE_DISTANCE_THRESHOLD`).
     이 값은 2경로(유사 갱신)에만 쓴다. 1경로(모순 대체)는 거리를 보지 않고 LLM이 지정한 id만 본다.
-  - **갱신 쿼리 (확정, 2경로. 개정 2026-10-03: 안쪽 select에 `superseded_at is null` 추가 — 제안, 미확정)**:
-    가장 가까운 **활성** 기존 기억 1행을 찾아 임계값 안이면 그 자리에서 갱신한다. 조건이 없으면 가장
-    가까운 행이 대체된(비활성) 행일 때 그 행을 새 문장으로 덮어써 되살리게 된다(대체됐던 옛 사실과
-    비슷한 말을 사용자가 다시 한 경우).
+  - **갱신 쿼리 (확정, 2경로. 쿼리 변경 없음)**: 가장 가까운 기존 기억 1행을 찾아 임계값 안이면 그 자리에서
+    갱신한다. **`previous_fact`는 SET 목록에 없으므로 그대로 둔다**(사용자 결정 f-2). 행이 비활성으로 나뉘지
+    않으므로 활성 조건은 필요 없다.
     ```sql
     -- $1 = user_id, $2 = 새 문장, $3 = 새 embedding, $4 = embedding_model, $5 = source_conversation_id
     update user_preferences
@@ -367,22 +365,21 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     where id = (
       select id from user_preferences
       where user_id = $1
-        and superseded_at is null
       order by embedding <=> $3
       limit 1
     )
     and (embedding <=> $3) < 0.08  -- 코사인 거리 임계값. 유사도 0.92에 대응
     returning id;
     ```
-    `UPDATE ... RETURNING`이 0행이면(가장 가까운 활성 기억도 임계값 밖이거나 활성 기억이 아예 없음)
+    `UPDATE ... RETURNING`이 0행이면(가장 가까운 기억도 임계값 밖이거나 기억이 아예 없음)
     애플리케이션이 이어서 `INSERT`한다(별도 `INSERT ... ON CONFLICT`는 쓰지 않는다. 유사도
     비교는 유니크 제약으로 표현할 수 없어 애플리케이션이 UPDATE 시도 후 실패하면 INSERT하는
     2단계 방식이 맞다).
-  - **추출 프롬프트용 기존 기억 목록 조회 (신규 2026-10-03, 제안; 개정: 활성 조건)**: LLM이 모순 대상을
+  - **추출 프롬프트용 기존 기억 목록 조회 (신규 2026-10-03, 제안)**: LLM이 모순 대상을
     지정하려면 기억의 id와 문장을 함께 봐야 한다. 현재 "조회 쿼리 2종"(아래)이 이미 `id`,
     `preference_text`를 돌려주므로, backend가 채팅 요청 때 조회한 합집합(최근 N + 유사 K)에서 문자열만
-    쓰던 것을 `{id, preference_text}` 쌍으로 쓰면 **추가 쿼리가 없다**. 조회 2종이 활성 조건을 가지므로
-    **대체된 기억은 LLM에 목록으로 보이지 않고 다시 대체 대상으로 지정될 수 없다.** 목록을 그보다
+    쓰던 것을 `{id, preference_text}` 쌍으로 쓰면 **추가 쿼리가 없다**. `previous_fact`는 목록에 싣지
+    않는다(프롬프트에 직전 문장은 필요 없다). 목록을 그보다
     넓히고 싶으면(예: 전체) "최근 기억 N개" 쿼리의 `limit $2`만 키운 다음 형태를 쓴다. 개수는 backend가
     정하며([[anyang-backend-api#3-3-1. 요약/추출 프롬프트 문구 변경 (신규, 2026-09-29, 확인 항목 43)]]),
     이 문서는 값을 정하지 않는다.
@@ -391,7 +388,6 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     select id, preference_text
     from user_preferences
     where user_id = $1
-      and superseded_at is null
     order by updated_at desc
     limit $2;
     ```
@@ -402,70 +398,52 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     프롬프트에 uuid 36자를 그대로 쓰면 토큰이 늘고 LLM이 id를 옮겨 적다 틀릴 수 있다. 목록 순번
     (1..N)을 프롬프트에 쓰고 애플리케이션이 순번을 id로 되돌리는 방식을 권한다(제안, 선택은
     backend). 이 방식이면 "목록에 없는 id"가 구조적으로 나오지 않는다.
-  - **대체 쿼리 (개정 2026-10-03, 제안, 1경로 — 이력 남김)**: LLM이 지정한 id의 활성 행에 대체됨 표시를
-    하고 새 문장을 새 행으로 INSERT한다. 두 동작을 **한 문장(CTE)**으로 묶어 원자적이다 — 중간에
-    실패해 "옛 행은 비활성인데 새 행이 없는" 상태가 생기지 않고, 앱이 트랜잭션 클라이언트를 따로 쓸
-    필요가 없다(현재 코드는 `pool.query` 단발 호출). **`user_id` 조건을 반드시 함께 건다.** id는 LLM
-    출력이므로(프롬프트 주입이나 환각으로) 다른 사용자의 id가 나와도 이 쿼리가 그 행을 건드리지 못해야
-    한다. 이 조건이 DB 쪽 마지막 방어선이다.
+  - **대체 쿼리 (개정 2026-10-03, 1경로 — 같은 행 UPDATE + 직전 문장 보관, 안 2a)**: LLM이 지정한 id의 행을
+    새 문장으로 덮어쓰면서 바뀌기 전 `preference_text`를 `previous_fact`로 옮긴다. **한 문장의 UPDATE 하나**라
+    원자적이고, 앱이 트랜잭션 클라이언트를 따로 쓸 필요가 없다(현재 코드는 `pool.query` 단발 호출). **`user_id`
+    조건을 반드시 함께 건다.** id는 LLM 출력이므로(프롬프트 주입이나 환각으로) 다른 사용자의 id가 나와도 이
+    쿼리가 그 행을 건드리지 못해야 한다. 이 조건이 DB 쪽 마지막 방어선이다.
     ```sql
     -- $1 = LLM이 지정한 기억 id, $2 = user_id(세션에서 온 값, LLM 출력 아님), $3 = 새 문장(maskPii 적용 후),
     -- $4 = 새 embedding, $5 = embedding_model, $6 = source_conversation_id
-    with old as (
-      select id from user_preferences
-       where id = $1::uuid and user_id = $2::uuid and superseded_at is null
-       for update
-    ), new as (
-      insert into user_preferences (user_id, preference_text, embedding, embedding_model, source_conversation_id)
-      select $2::uuid, $3::text, $4::vector, $5::text, $6::uuid from old
-      returning id
-    ), marked as (
-      update user_preferences p
-         set superseded_at = now(),
-             superseded_by = (select id from new)
-        from old
-       where p.id = old.id
-      returning p.id
-    )
-    select id from new;
+    update user_preferences
+       set previous_fact = preference_text,   -- SET 우변은 이 문장이 시작될 때의 옛 값을 본다
+           preference_text = $3,
+           embedding = $4,
+           embedding_model = $5,
+           source_conversation_id = $6,
+           updated_at = now()
+     where id = $1 and user_id = $2
+    returning id;
     ```
-    - **SQL 검증 상태**: 이 세션에서는 실행해 확인하지 못했다(로컬 PostgreSQL 없음, 설계 단계라 원격
-      DB에 적용하지 않음). 구현 단계에서 개발 환경 또는 `begin; … rollback;`으로 먼저 돌려 확인한다.
-      데이터 변경 CTE(`new`, `marked`)는 최종 select가 읽지 않아도 끝까지 실행된다는 PostgreSQL 규칙과
-      FK는 문장 끝에서 검사된다는 점에 기대고 있다(PostgreSQL 문서 기준 설명, 실행 확인은 구현 때).
-    - **캐스트(`::uuid` 등)가 필요한 이유**: `insert … select $3, $4 …`처럼 select 목록에 파라미터만
-      오면 PostgreSQL이 타입을 대상 컬럼에서 추론하지 못하고 `text`로 본다(`insert … values`와
-      다르다). 캐스트 없이는 `vector` 컬럼에 `text`를 넣는다는 타입 오류가 날 수 있다(추정, 근거:
-      PostgreSQL 파라미터 타입 추론 규칙, 실행 확인 전). 앱이 임베딩을 JSON 문자열로 넘기는 현재
-      방식(`JSON.stringify`)은 `$4::vector`로 그대로 동작한다.
-    - **결과 해석**: 반환 행이 1개면 그 `id`가 새 활성 행이다. **0행이면** 대체가 일어나지 않은 것이다
-      (새 행도 만들지 않았다) — 아래 0행 원인과 폴스루. 기존 대체 쿼리는 `returning id`가 옛 행의
-      id였으나 이제는 새 행의 id다(backend가 반환값을 쓰는 곳이 있다면 의미가 바뀐다).
-    - 컬럼 처리: **옛 행은 `superseded_at`·`superseded_by` 두 컬럼만 바뀐다.** `preference_text`·
-      `embedding`·`embedding_model`·`source_conversation_id`·`created_at`·`updated_at`은 그대로라 옛
-      문장과 임베딩이 온전히 남고, 되돌리기가 표시 해제 한 번으로 끝난다. 새 행은 새 문장 기준으로
-      `maskPii` 적용 후 임베딩해 넣는다(문장당 임베딩 1회, 2경로·3경로와 같다). `source_conversation_id`는
-      이번 대화(어느 대화에서 정정됐는지 추적, FK는 현재 대화라 유효), `created_at`·`updated_at`은
-      `now()` 기본값이라 새 행이 최근 기억 조회 상위로 올라온다. **행의 id는 바뀐다**(이전 설계는 같은
-      행을 덮어써 id가 유지됐다).
-    - 0행 반환 가능 원인 넷: ① 사용자가 기억 화면에서 그 기억을 삭제한 직후(요청 사이 레이스),
-      ② 다른 사용자의 id나 존재하지 않는 id(환각·주입), ③ 이미 대체된 행(같은 행을 두 요청이 동시에
-      대체했을 때 나중 쪽 — `for update`가 앞 요청의 커밋을 기다린 뒤 `superseded_at is null`을 다시
-      평가해 0행이 된다), ④ id 형식이 uuid가 아니면 `$1::uuid` 캐스트가 오류(`invalid input syntax
-      for type uuid`)를 던진다. ④는 애플리케이션이 "목록에 보여 준 id 집합에 있는지"를 먼저 확인하면
-      쿼리 전에 걸러진다(위 순번 방식이면 자동). 오류는 이 문장만 건너뛰는 기존 `catch`로 처리된다(구현
-      `extractAndStorePreference`).
-  - **대체 대상이 사라진 경우의 처리 (신규 2026-10-03, 제안, 미확정)**: 대체 쿼리가 0행이면
+    - **SQL 검증 상태**: 이 세션에서는 실행해 확인하지 못했다(로컬 PostgreSQL 없음, 설계 단계라 원격 DB에
+      적용하지 않음). `previous_fact = preference_text`가 같은 문장 안에서 `preference_text = $3`보다 먼저
+      쓰여도 옛 값을 가져온다는 점은 PostgreSQL 문서의 UPDATE 규칙(SET 우변의 컬럼 참조는 갱신 전 행 값을 본다)에
+      기댄 설명이며, **실행 확인은 구현 때** 개발 환경 또는 `begin; … rollback;`으로 한다(테스트 ①).
+    - **결과 해석**: 반환 행이 1개면 그 `id`가 대체된 기억이다 — **요청한 id와 같다**(행이 그대로이므로). 0행이면 대체가
+      일어나지 않은 것이다 — 아래 0행 원인과 폴스루. backend가 반환 id를 쓰는 곳이 있다면 값이 바뀌지 않는다
+      (안 1이었다면 새 행 id였을 것이다).
+    - 컬럼 처리: **`preference_text` → `previous_fact`로 옮기고, 그 외 `preference_text`·`embedding`·`embedding_model`·
+      `source_conversation_id`·`updated_at`을 새 값으로 바꾼다.** `id`·`user_id`·`created_at`은 그대로다. 새 문장은
+      `maskPii` 적용 후 임베딩해 넣는다(문장당 임베딩 1회, 2경로·3경로와 같다). `source_conversation_id`는 이번
+      대화(어느 대화에서 정정됐는지 추적), `updated_at = now()`라 최근 기억 조회 상위로 올라온다.
+    - **직전 임베딩은 보관하지 않는다**(사용자 결정은 "직전 문장만"). `embedding`은 항상 현재 `preference_text`의
+      것이다. 되돌릴 때 임베딩 재계산이 필요하다(아래 "되돌리기").
+    - 0행 반환 가능 원인 셋: ① 사용자가 기억 화면에서 그 기억을 삭제한 직후(요청 사이 레이스),
+      ② 다른 사용자의 id나 존재하지 않는 id(환각·주입), ③ id 형식이 uuid가 아니면 `id = $1`의 uuid 변환이
+      오류(`invalid input syntax for type uuid`)를 던진다(0행이 아니라 오류). ③은 애플리케이션이 "목록에 보여 준 id
+      집합에 있는지"를 먼저 확인하면 쿼리 전에 걸러진다(순번 방식이면 자동). 오류는 이 문장만 건너뛰는 기존
+      `catch`로 처리된다(구현 `extractAndStorePreference`). 안 1에 있던 "이미 대체된 행" 원인은 없다 — 대체된 행도 같은
+      행이라 다시 대체될 수 있다(아래 "같은 id 두 번").
+  - **대체 대상이 사라진 경우의 처리 (사용자 결정 e, 2026-10-03)**: 대체 쿼리가 0행이면
     **그 문장을 버리지 않고 2경로(유사 갱신)로 넘긴다.** 사용자가 방금 한 말에서 나온 새 사실이므로
     옛 기억이 없어졌다고 해서 새 사실까지 잃으면 안 된다. 2경로 거리 검사도 맞지 않으면 3경로로
-    INSERT한다. 반대로 "버린다"를 택하면 사용자가 옛 기억을 막 지운 순간 새 사실이 저장되지 않아
-    다음 대화에서 다시 말해야 한다. 어느 쪽이 맞는지는 사용자 결정 대기(위 제안 채택 시 코드는
-    `if (replaceResult.rows.length === 0) → 유사 갱신 시도 → INSERT` 폴스루 한 단계).
-  - **같은 id가 한 추출 결과에서 두 번 지정된 경우 (제안, 미확정)**: 첫 문장만 1경로로 대체하고
-    나머지는 id 지정이 없는 것으로 보고 2·3경로로 보낸다. 쿼리 쪽도 이제는 두 번째 호출이 이미 대체된
-    행이라 0행이 되어 폴스루로 가므로(위 0행 ③) 문장은 사라지지 않지만, 두 문장이 서로 다른 사실이면
-    둘 다 새 행으로 남게 하려는 의도라 backend 파싱 단계에서 먼저 정리하는 편이 낫다.
-  - **대체 시 유사 중복 (허용)**: 1경로는 거리 검사를 건너뛴다. 대체한 새 문장이 다른 활성 기억과
+    INSERT한다(코드는 `if (replaceResult.rows.length === 0) → 유사 갱신 시도 → INSERT` 폴스루 한 단계).
+  - **같은 id가 한 추출 결과에서 두 번 지정된 경우 (사용자 결정 g, 2026-10-03)**: 첫 문장만 1경로로 대체하고
+    나머지는 id 지정이 없는 것으로 보고 2·3경로로 보낸다. 이 정리는 backend 파싱 단계의 몫이다. 쿼리 쪽은 같은
+    행이 다시 대체되면 `previous_fact`가 첫 대체의 새 문장으로 덮여 원래 옛 문장이 사라지므로(1단계만 보관),
+    쿼리가 이를 막아 주지 않는다. 그래서 파싱 단계의 정리가 필요하다.
+  - **대체 시 유사 중복 (허용)**: 1경로는 거리 검사를 건너뛴다. 대체한 새 문장이 다른 기억과
     `0.08` 미만으로 가까우면 두 행이 비슷한 문장으로 공존한다. UPDATE는 가장 가까운 **한 행만**
     덮어쓰므로 이후 추출에서도 나머지 한 행은 자동으로 합쳐지지 않는다(사용자가 기억 화면에서 지울 수
     있다). 모순 정정이 드문 경로이고 발생 조건이 좁아 별도 병합 쿼리는 두지 않는다(제안).
@@ -473,169 +451,113 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     드물다(한 사용자가 한 번에 대화 하나만 진행). 같은 순간에 유사한 문장 2개가 동시에 INSERT되면
     행이 중복된 채 남을 수 있고, UPDATE는 가장 가까운 한 행만 덮어쓰므로 이후 추출 때 자동으로
     합쳐진다고 기대하지 않는다(중복 행 하나가 남아도 사용자가 기억 화면에서 지울 수 있다). **같은
-    id를 동시에 대체하는 경우는 이제 막힌다** — 대체 쿼리의 `for update`와 `superseded_at is null`
-    재평가로 한 요청만 성공하고 나머지는 0행(폴스루)이 된다(이전 설계의 lost update 문제 해소, 실행
-    확인은 구현 때). 낙관적 잠금(`updated_at` 비교)이나 advisory lock은 추가하지 않는다 — 사용자당
-    트래픽이 매우 낮아 남은 레이스(유사 중복 INSERT)의 피해가 잠금 코드의 복잡도를 정당화하지 못한다
-    (제안, ponytail 판단: 실제로 문제가 반복 관찰되면 그때 추가한다).
-  - **테스트 방법 (개정 2026-10-03, 제안)**: 개발용 프로젝트 또는 트랜잭션 안(`begin; … rollback;`)에서
+    id를 동시에 대체하는 경우**는 단일 UPDATE라 행 잠금으로 직렬화되어 나중 쪽이 앞 쪽이 커밋한 값을 기준으로
+    덮는다(PostgreSQL 기본 격리 수준 READ COMMITTED의 갱신 규칙, 실행 확인은 구현 때). 그 결과 `previous_fact`는 앞
+    요청이 넣은 문장이 되고 원래 옛 문장은 1단계 보관 한도로 사라진다 — 허용한다(드문 경우, 사용자 결정 f-6의
+    "2단계 이상 이전 판본 유실 수용"과 같은 성질). 낙관적 잠금이나 advisory lock은 추가하지 않는다 — 사용자당
+    트래픽이 매우 낮아 피해가 잠금 코드의 복잡도를 정당화하지 못한다(제안, ponytail 판단: 실제로 문제가 반복
+    관찰되면 그때 추가한다).
+  - **테스트 방법 (개정 2026-10-03, 안 2a 기준)**: 개발용 프로젝트 또는 트랜잭션 안(`begin; … rollback;`)에서
     테스트 사용자 A·B와 각자 기억 행을 만든 뒤 확인한다. 운영 DB에 테스트 행을 남기지 않는다.
-    ① 대체: A의 행 id로 대체 쿼리를 실행해 새 id 1행이 반환되고, 옛 행은 `superseded_at`이 찍히고
-    `superseded_by`가 새 id이며 `preference_text`·`embedding`·`created_at`·`updated_at`이 **변하지
-    않았는지**, 새 행은 새 문장·`embedding`·`source_conversation_id`를 갖고 `superseded_at is null`인지
+    ① 대체: A의 행 id로 대체 쿼리를 실행해 **같은 id 1행이 반환되고**, 그 행의 `previous_fact`가 **옛
+    `preference_text`와 같으며**(이것이 SET 우변 평가 규칙의 실행 확인이다), `preference_text`·`embedding`·
+    `embedding_model`·`source_conversation_id`가 새 값이고 `id`·`user_id`·`created_at`이 변하지 않았는지
     확인한다. ② 소유자 방어: **B의 행 id를 A의 `user_id`로** 대체 쿼리에 넣어 0행이 반환되고 B의 행이
-    바뀌지 않았으며 새 행도 생기지 않았는지 확인한다(핵심). ③ 존재하지 않는 uuid로 0행, uuid가 아닌
-    문자열은 오류가 나는지 확인한다(애플리케이션 사전 검증이 이를 걸러야 한다는 근거). ④ 이미 대체된
-    행의 id로 다시 대체 쿼리를 실행하면 0행인지, 두 세션이 같은 id를 동시에 대체(한 세션을 커밋 전에
-    멈춘 채)하면 나중 세션이 0행인지 확인한다. ⑤ 대체 직전에 행을 `delete`해 0행을 만든 뒤 위
-    폴스루(2경로 → 3경로)가 새 문장을 저장하는지 애플리케이션 단위 테스트로 확인한다. ⑥ 경로 순서:
-    id 지정이 있으면 거리와 무관하게 대체하고, id 지정이 없고 활성 기억과의 거리가 `0.08` 미만이면 유사
-    갱신, 둘 다 아니면 행 수가 1 늘어나는지 확인한다. ⑦ **비활성 행 제외**: 대체된 옛 행과 거의 같은
-    문장(거리 < 0.08)을 2경로에 넣었을 때 그 옛 행이 갱신되지 않고(여전히 `superseded_at` not null,
-    문장 불변) 새 행이 INSERT되는지 확인한다. ⑧ 대체 후 "조회 쿼리 2종"에서 옛 행이 나오지 않고 새
-    행이 최근 기억 맨 위인지, `buildQueryVector`·추천·알림 쿼리의 선호 벡터 입력에 옛 행이 빠지는지
-    확인한다. 애플리케이션 단위 테스트(DeepSeek·Gemini 목)는 backend가 [[anyang-backend-api]]의 테스트
-    방법에 적는다.
+    바뀌지 않았는지 확인한다(핵심). ③ 존재하지 않는 uuid로 0행, uuid가 아닌 문자열은 오류가 나는지
+    확인한다(애플리케이션 사전 검증이 이를 걸러야 한다는 근거). ④ 같은 행을 두 번 대체하면 `previous_fact`가 첫
+    대체의 새 문장이 되고 원래 옛 문장은 남지 않는지(1단계 보관 한도) 확인한다. ⑤ 대체 직전에 행을 `delete`해 0행을
+    만든 뒤 위 폴스루(2경로 → 3경로)가 새 문장을 저장하는지 애플리케이션 단위 테스트로 확인한다. ⑥ 경로 순서:
+    id 지정이 있으면 거리와 무관하게 대체하고, id 지정이 없고 기억과의 거리가 `0.08` 미만이면 유사
+    갱신, 둘 다 아니면 행 수가 1 늘어나는지 확인한다. ⑦ **유사 갱신·사용자 수정(PUT)은 `previous_fact` 불변**:
+    `previous_fact`가 채워진 행에 갱신 쿼리와 PUT의 UPDATE를 각각 실행해 `previous_fact`가 그대로인지 확인한다.
+    ⑧ **되돌리기(swap)**: 대체 후 아래 "되돌리기" SQL을 실행해 `preference_text`와 `previous_fact`가 서로 바뀌고
+    다른 사용자의 id를 넣으면 0행인지 확인한다. 애플리케이션 단위 테스트(DeepSeek·Gemini 목)는 backend가
+    [[anyang-backend-api]]의 테스트 방법에 적는다.
   - **행 수 상한 (미확정)**: 이 설계는 사용자당 기억 행 수에 상한을 두지 않는다. 갱신 위주 정책이라
-    자연히 느리게 늘겠지만, 대체된 행이 활성 행과 함께 쌓이므로(아래 "보존 기간·정리") 상한이 필요한지는
+    자연히 느리게 늘겠지만(모순 대체는 행을 늘리지 않는다), 상한이 필요한지는
     backend/frontend가 화면 설계에서 판단한다(이 문서 범위 밖).
 
-- **이력 남김 구조 (신규 2026-10-03, 확인 항목 48(f), 구조는 제안·미확정)**: `user_preferences`에
-  컬럼 2개를 더한다. 비교한 안과 고른 이유는 아래 표 아래에 있다.
+- **이력 보관 구조 (확정, 확인 항목 48(f-1) 안 2a, 사용자 결정 2026-10-03)**: `user_preferences`에
+  컬럼 1개를 더한다.
 
   | 컬럼 | 타입 | 설명 |
   |---|---|---|
-  | superseded_at | timestamptz, null 허용 (제안, 미확정) | null이면 활성 기억. not null이면 모순으로 대체되어 비활성이 된 시각 |
-  | superseded_by | uuid, FK → user_preferences.id, `on delete set null`, null 허용 (제안, 미확정) | 이 행을 대체한 새 행의 id. `superseded_at`이 null이면 항상 null. 새 행이 사용자 삭제로 사라지면 null이 되지만 옛 행은 비활성인 채로 남는다 |
+  | previous_fact | text, null 허용 | 모순으로 대체되기 직전의 `preference_text` 1단계. null이면 대체된 적이 없다. 기본값 없음 |
 
-  - 제약(제안, 미확정): `check (superseded_by is null or superseded_at is not null)` — 대체됨 표시 없이
-    대체한 행만 가리키는 모순 상태를 막는다.
-  - **안 1(제안): 이전 행에 표시 + 새 문장은 새 행** — 위 구조. 옛 행을 건드리는 것은 표시 두 컬럼뿐이라
-    옛 문장·임베딩이 손실 없이 보존된다. 되돌리기는 표시를 지우는 UPDATE 하나다. 대체가 여러 번
-    쌓여도(A→B→C) 모든 판본이 남고, 사용자의 "지우거나 그냥 덮어쓰지 않고 별도 컬럼으로 표시"라는
-    표현과 그대로 맞는다. 대가: 행 id가 바뀌고(기억 화면이 들고 있던 옛 id는 PUT/DELETE에서 404),
-    `user_preferences`를 읽는 **모든** 쿼리에 `superseded_at is null`이 필요하다(하나라도 빠지면 대체된
-    옛 사실이 주입·추천에 다시 섞인다 — 아래 "영향 쿼리"로 목록화하고 테스트 ⑧로 확인한다).
-  - **안 2a(채택하지 않음): 같은 행 UPDATE + 직전 문장·임베딩을 컬럼으로 보관**(`previous_text`,
-    `previous_embedding VECTOR(768)`, `superseded_at`). 활성 조건이 필요 없어 쿼리가 안 바뀌고 행 id가
-    유지된다. 그러나 이력이 한 단계뿐이라 두 번 연속 대체되면 첫 판본이 사라지고, 되돌리려면 컬럼 맞바꿈
-    UPDATE가 필요하며, 행마다 벡터가 2배 저장된다. "덮어쓰지 않는다"는 표현과도 어긋난다(덮어쓰되
-    사본을 둔다).
-  - **안 2b(채택하지 않음): 같은 행 UPDATE + 별도 이력 테이블**(`user_preference_history`). 쿼리·id는
-    안 바뀌고 이력이 여러 단계 쌓인다. 그러나 새 테이블이라 0019 관례(같은 파일에서 RLS 켜기)를 따라야
-    하고, 이력 행에도 `embedding`을 둬야 되돌릴 때 재임베딩이 필요 없어 저장량이 안 2a와 비슷하다.
-    FK·cascade·정리 잡이 테이블 하나만큼 늘어난다.
-  - 안 1을 고른 이유: 사용자 표현에 가장 직접 맞고, 안 2a·2b와 달리 되돌리기가 표시 해제로 끝나며, 새
-    테이블이 없다. 이 선택의 가장 큰 위험은 활성 조건 누락이라 쿼리 목록과 정적 점검(테스트)을 함께 둔다.
-    **사용자 표현("별도 컬럼으로 마킹한 뒤 UPDATE")이 안 1(옛 행에 표시 후 새 행 INSERT)을 뜻하는지,
-    "같은 행을 UPDATE하되 이전 값을 컬럼에 보관"(안 2a)을 뜻하는지는 문장만으로 단정할 수 없다** —
-    미해결 질문으로 올린다. 안 2a·2b가 선택되면 이 절의 쿼리·마이그레이션은 다시 쓴다.
-  - 기존 행 기본값: 두 컬럼 모두 null(`default` 없음)이라 기존 모든 행이 활성이다. 컬럼 추가는 기본값
-    없는 nullable 컬럼이라 기존 행을 다시 쓰지 않는다(0020, 아래).
+  - 컬럼 이름 `previous_fact`는 사용자 예시를 그대로 쓴다. `check` 제약·FK·인덱스는 없다.
+  - **채택하지 않은 안(비교 근거)**: 안 1(옛 행 `superseded_at`/`superseded_by` 표시 + 새 행 INSERT)은 행 id가
+    바뀌고 `user_preferences`를 읽는 모든 쿼리에 활성 조건이 필요해 누락 위험이 컸다. 안 2b(별도 이력 테이블)는
+    새 테이블이라 0019 RLS 규칙과 FK·cascade가 늘어난다. 안 2a는 쿼리·id가 그대로이고 컬럼 하나로 끝난다. 대가는
+    이력이 1단계뿐이라는 것이며 사용자가 이를 수용했다(f-6).
+  - **직전 임베딩은 보관하지 않는다**(사용자 결정은 "직전 문장만"). 그래서 행당 벡터는 1개 그대로이고 저장량이
+    늘지 않는다.
+  - 기존 행 기본값: `previous_fact`는 null(`default` 없음)이다. 컬럼 추가는 기본값 없는 nullable 컬럼이라 기존 행을
+    다시 쓰지 않는다(0020, 아래).
+  - 사용자 수정(PUT)이 `previous_fact`를 그대로 둘지 비울지는 사용자 결정 범위 밖(미확정)이라 **기존 동작 유지 = 건드리지
+    않음**으로 한다(현재 PUT의 UPDATE는 `previous_fact`를 SET 목록에 넣지 않는다 — 구현 때도 넣지 않는다).
 
-- **이력 남김의 영향 쿼리 전부 (신규 2026-10-03, 제안, 코드 위치는 읽기 전용 확인)**: `user_preferences`를
-  읽거나 바꾸는 쿼리는 아래가 전부다(`web/`에서 `user_preferences` 검색으로 확인). 줄 번호는 구현 때
-  달라질 수 있다. "활성 조건"은 `superseded_at is null`이다. 이 문서는 코드를 고치지 않는다.
+- **영향 쿼리 (개정 2026-10-03, 안 2a, 코드 위치는 읽기 전용 확인)**: 행이 활성·비활성으로 나뉘지 않으므로
+  **`user_preferences`를 읽는 기존 쿼리에 활성 조건을 추가할 필요가 없다.** 바뀌는 것은 새 대체 쿼리 하나다.
+  이 문서는 코드를 고치지 않는다.
 
   | 쿼리 | 현재 위치 | 필요한 변경 |
   |---|---|---|
-  | 기억 주입 — 최근 N개 | `web/app/api/chat/route.ts` `fetchMemories`(50행) | 활성 조건 추가 |
-  | 기억 주입 — 유사 K개 | 같은 함수(62행) | 활성 조건 추가 |
-  | 추출 프롬프트용 기존 기억 목록 | 위 두 쿼리 결과 재사용(추가 쿼리 없음) | 위 두 쿼리의 활성 조건으로 충족. 대체된 기억은 목록·대체 대상에서 빠진다 |
-  | 유사 갱신(0.08) | 같은 파일 `extractAndStorePreference`(107행) | 안쪽 `select id`에 활성 조건(위 "갱신 쿼리") |
-  | 대체 | 현재 코드에 없음(신규) | 위 "대체 쿼리" CTE |
-  | 채팅 검색 선호 벡터 | 같은 파일 `buildQueryVector`(31행) | 활성 조건 추가. 대체된 옛 사실이 공지 검색 벡터에 섞이지 않게 한다 |
-  | 추천 공지 선호 벡터 | `web/app/api/notices/recommended/route.ts`(49행) | 활성 조건 추가 |
-  | 알림 잡 선호 벡터 | `web/app/api/jobs/notify/route.ts`(116행) | 활성 조건 추가 |
-  | 기억 화면 목록 GET | `web/app/api/preferences/route.ts`(11행) | 활성 조건 추가(대체된 기억을 보여 줄지는 미확정 — 아래 "되돌리기"). 응답 필드가 늘지 않는다 |
-  | 기억 화면 수정 PUT | `web/app/api/preferences/[id]/route.ts` 소유 확인 select(22행)·update(42행) | 두 쿼리 모두 활성 조건 추가. 비활성 행은 수정할 수 없고 404로 처리한다. 사용자 수정은 이력을 남기지 않는 제자리 UPDATE 그대로다(사용자가 직접 고치는 것은 "모순 대체"가 아니다 — 미확정) |
-  | 기억 화면 삭제 DELETE | 같은 파일(59행) | 아래 "사용자 삭제와 이력"(미확정) |
-  | 탈퇴 cascade | `users` 행 삭제 | 변경 없음. `user_id`의 `on delete cascade`가 활성·비활성 행을 모두 지운다. 자기 참조 FK(`set null`)는 같은 문장 안에서 지워지는 행끼리라 충돌하지 않는다(테스트로 확인) |
+  | 기억 주입(최근 N·유사 K), 추출 프롬프트용 목록, 채팅·추천·알림 선호 벡터, 탈퇴 cascade | `web/app/api/chat/route.ts`, `web/app/api/notices/recommended/route.ts`, `web/app/api/jobs/notify/route.ts`, `users` 삭제 | 변경 없음. `previous_fact`는 읽지 않는다 |
+  | 유사 갱신(0.08) | `web/app/api/chat/route.ts` `extractAndStorePreference` | 변경 없음. `previous_fact` 불변 |
+  | 대체 | 현재 코드에 없음(신규) | 위 "대체 쿼리" |
+  | 기억 화면 목록 GET | `web/app/api/preferences/route.ts` | 변경 없음. 응답 필드가 늘지 않는다(이전 문장 표시 없음, 결정 f-5). `select *`로 바뀌어 `previous_fact`가 응답에 섞이지 않는지 구현 때 확인한다 |
+  | 기억 화면 수정 PUT | `web/app/api/preferences/[id]/route.ts` | 변경 없음. `previous_fact`를 건드리지 않는 제자리 UPDATE |
+  | 기억 화면 삭제 DELETE | 같은 파일 | 변경 없음. `previous_fact`가 같은 행이라 함께 삭제된다(결정 f-4) |
 
-  관리자 집계 쿼리(연령대·직군 등)는 `user_preferences`를 읽지 않는다(이 문서 "연령대·직군 집계 쿼리
-  예시"에 없음). 모델 교체 재임베딩(위 `notice_chunks` 절)이 `user_preferences`에도 적용되면 대체된 행도
-  같은 재임베딩 대상이어야 되돌린 뒤 검색이 어긋나지 않는다 — 보존 기간 정책이 정해지면 정리된 행은
-  대상에서 빠진다.
+  관리자 집계 쿼리(연령대·직군 등)는 `user_preferences`를 읽지 않는다. 모델 교체 재임베딩(위 `notice_chunks` 절)이
+  `user_preferences`에도 적용되면 `previous_fact`는 문장 컬럼이라 임베딩 대상이 아니다(직전 임베딩이 없다). 되돌릴
+  때 임베딩을 다시 계산한다.
 
-- **되돌리기 (신규 2026-10-03, 제안, SQL 수준만)**: 잘못 대체됐을 때 운영자가 사용자 요청으로 옛 행을
-  복구하는 SQL이다. **되돌리기 UI·API는 이번 범위가 아니다(범위 밖, 미확정)** — 대체된 기억을 기억 화면에
-  보여 주고 사용자가 직접 되돌리게 할지는 frontend·backend 설계 변경이므로 사용자 결정 대기다. 지금은
-  기억 화면(GET)에 대체된 기억이 나오지 않는다(위 영향 쿼리, 제안). 관리자 화면에서도 기억 원문은 보이지
-  않는 원칙이 있으므로(위 Context) 이 SQL은 관리자 화면이 아니라 DB에 직접 접속해 실행하는 운영
-  작업이며, 사용자의 요청이 있을 때만 쓴다.
+- **되돌리기 (사용자 결정 f-5·f-6, 2026-10-03, SQL 수준만)**: 잘못 대체됐을 때 운영자가 사용자 요청으로 옛 문장을
+  복구한다. **이전 문장을 보여 주는 UI와 되돌리기 API는 만들지 않는다**(f-5) — 되돌리기는 운영자가 DB에 직접
+  접속해 실행하는 SQL이며(관리자 화면에서도 기억 원문은 보이지 않는 원칙이 있다), 사용자의 요청이 있을 때만 쓴다.
+  되돌리기는 **현재 문장과 `previous_fact`를 맞바꾸는 것**이다. 2단계 이상 이전 판본은 이미 사라졌고 이를 수용한다(f-6).
   ```sql
-  -- (1) 대체됨 목록 확인 — $1 = user_id. 기억 원문이 나오므로 사용자 요청 처리 중에만 실행
-  select id, superseded_at, superseded_by, preference_text
+  -- (1) 대체된 적이 있는 기억 확인 — $1 = user_id. 기억 원문이 나오므로 사용자 요청 처리 중에만 실행
+  select id, preference_text, previous_fact, updated_at
   from user_preferences
-  where user_id = $1 and superseded_at is not null
-  order by superseded_at desc;
+  where user_id = $1 and previous_fact is not null
+  order by updated_at desc;
 
-  -- (2) 되돌리기 — $1 = 되돌릴 옛 기억 id, $2 = user_id
+  -- (2) 되돌리기(swap) — $1 = 기억 id, $2 = user_id, $3 = 되돌린 문장(= 현재 previous_fact)의 새 embedding,
+  --     $4 = embedding_model. $3은 backend가 계산해 넘긴다(아래)
   update user_preferences
-     set superseded_at = null,
-         superseded_by = null
-   where id = $1::uuid
-     and user_id = $2::uuid
-     and superseded_at is not null
+     set preference_text = previous_fact,
+         previous_fact = preference_text,
+         embedding = $3,
+         embedding_model = $4
+   where id = $1 and user_id = $2 and previous_fact is not null
   returning id;
   ```
-  - (2)는 옛 행의 표시만 지운다. **옛 행의 `updated_at`·`embedding`은 그대로**라 복구 직후 최근 기억 조회
-    순위는 옛 `updated_at` 기준이다(복구한 기억이 즉시 상위로 오기를 원하면 `updated_at = now()`를 함께
-    갱신하는 선택지가 있다 — 미확정, 되돌림은 내용 변경이 아니라 기본은 건드리지 않는다).
-  - **새 행의 처리(미확정)**: 기본은 새 행을 그대로 활성으로 둔다(둘이 함께 활성이 된다). 잘못된
-    대체의 흔한 경우는 모순이 아니라 병존 가능한 두 사실이라 새 행도 참일 가능성이 높고, 지우면 사용자
-    말이 사라지기 때문이다. 새 행도 없애야 하면 (2) 전에 `select superseded_by …`로 id를 읽어 두었다가
-    같은 트랜잭션에서 `delete from user_preferences where id = <그 id> and user_id = $2;`를 한다. 두
-    행이 서로 모순인 채 둘 다 활성이 될 수 있으므로 어느 쪽을 남길지는 사용자 요청에 따른다.
-  - 연쇄(A→B→C)에서 A를 되돌리려면 B가 비활성이어서 A·C가 함께 활성이 된다. 연쇄 되돌리기 규칙은 이번
-    범위가 아니다(미확정).
-  - 보존 기간이 지나 정리된 행은 되돌릴 수 없다(아래).
+  - **임베딩 재계산은 backend 몫이다.** 문장이 바뀌므로 `embedding`을 되돌린 문장 기준으로 다시 계산해야 검색이 실제
+    문장과 어긋나지 않는다(위 "수정 시 재임베딩 필요"와 같은 이유). 직전 임베딩을 보관하지 않으므로 이 계산을 피할 수
+    없다. 운영자가 임베딩을 계산해 `$3`을 넘기는 방법(스크립트 등)은 이 문서가 정하지 않는다 — backend 설계에서
+    다룬다(결정 범위 밖, 미확정). 임베딩 없이 문장만 맞바꾸는 SQL은 쓰지 않는다.
+  - (2)는 `updated_at`을 건드리지 않는다(되돌림은 기본은 내용 변경으로 보지 않는다 — 결정 범위 밖, 미확정). 복구
+    직후 최근 기억 조회 순위는 기존 `updated_at` 기준이다. 즉시 상위로 오기를 원하면 `updated_at = now()`를 함께
+    갱신하는 선택지가 있다.
+  - swap은 한 번 더 실행하면 원래대로 돌아온다(대체된 적이 있는 행만 대상).
 
-- **대체된 행의 보존 기간·정리 (신규 2026-10-03, 미확정)**: 대체된 행은 사용자가 더는 사실이 아니라고
-  한 과거 개인 정보("취업 준비 중" 등)를 계속 담는다. 개인정보 최소화 관점에서 영원히 보관할 이유는
-  약하고, 되돌릴 이유는 대체 직후에 가장 크다. 제안: 일정 기간(미확정, 값은 정하지 않는다 — 근거가 되는
-  측정이나 결정이 없다) 뒤 정리 잡이 삭제한다. 비교용으로 로그성 테이블의 90일 보존(확정, 다른 목적)이
-  있으나 같은 값을 쓸 근거는 아니다.
-  ```sql
-  -- 제안(미확정): 보존 기간 N은 사용자 결정 대기. 0020에는 포함하지 않는다
-  delete from user_preferences
-  where superseded_at is not null
-    and superseded_at < now() - interval '<N>';
-  ```
-  - 삭제 대상은 비활성 행뿐이다(활성 조건의 반대). 지운 행을 가리키던 포인터는 없다(포인터는 옛 행이
-    새 행을 가리키므로, 옛 행을 지워도 새 행은 영향이 없다).
-  - **되돌릴 수 없는 작업**이다. 정리 잡 등록은 마이그레이션 0020과 별개이며 구현 단계 지시서에 이 잡
-    등록에 대한 별도 사용자 승인이 적혀 있어야 한다(`cleanup-logs`와 같은 규칙, 아래 "되돌릴 수 없는
-    마이그레이션 표시"). 정리 잡이 없으면 대체된 행은 계정 삭제 때까지 쌓인다.
-  - 대체된 이전 문장이 보관된다는 사실이 처리방침·기억 화면 안내 문구("삭제하면 사라진다" 등)와 어긋나는지는
-    이 문서 범위 밖이므로 미해결 질문으로 올린다.
-  - **사용자 삭제와 이력(미확정)**: 사용자가 기억 화면에서 활성 기억을 지우면 그 행만 지워지고, 그
-    행이 대체했던 옛 행(`superseded_by`가 지운 행의 id)은 `set null`로 포인터만 잃은 채 비활성으로
-    남는다. 사용자는 비활성 행을 볼 수도 지울 수도 없다. 두 선택지: (1) 지운 행과 그것이 대체했던 옛
-    행들(연쇄 포함)을 함께 지운다 — 사용자가 지운 사실의 옛 판본이 남지 않아 사용자의 기대에 가깝지만
-    되돌리기가 불가능해진다. (2) 지운 행만 지우고 옛 행은 보존 기간 정리에 맡긴다 — 단순하나 위 정리
-    잡이 없으면 숨은 개인 정보가 남는다. 제안은 (1)이며(근거: 사용자가 볼 수 없는 데이터를 사용자
-    삭제 요청에서 빼면 최소화 원칙과 어긋난다) 선택은 미해결 질문이다. (1)의 쿼리:
-    ```sql
-    -- $1 = 삭제할 기억 id, $2 = user_id
-    with recursive chain as (
-      select id from user_preferences where id = $1::uuid and user_id = $2::uuid
-      union all
-      select p.id from user_preferences p join chain c on p.superseded_by = c.id
-       where p.user_id = $2::uuid
-    )
-    delete from user_preferences where id in (select id from chain);
-    ```
+- **보존 기간·정리 잡 없음 (사용자 결정 f-3, 2026-10-03)**: `previous_fact`는 1단계만 남고 다음 대체 때 자동으로
+  덮이므로(최신 직전 문장만 남는다) 별도 정리 잡을 두지 않는다. 대체된 적 없는 기억은 `previous_fact`가 null이다.
+  처리방침·기억 화면 안내 문구("삭제하면 사라진다" 등)와 이력 보관의 정합성은 보류다(f-8, frontend 재개 때 확인).
+  - **사용자 삭제와 이력 (사용자 결정 f-4)**: 사용자가 기억을 삭제하면 `previous_fact`도 같은 행이라 함께
+    삭제된다. 연쇄 삭제 쿼리나 비활성 행 정리는 필요 없다. 탈퇴 cascade도 `user_id`의 `on delete cascade` 그대로다.
 
-- **조회 쿼리 2종 (신규, 2026-09-29, 개정 2026-10-03: 활성 조건 추가 — 제안)**: 채팅 요청마다 시스템 프롬프트에 넣을 기억을 이 두 조회의
+- **조회 쿼리 2종 (신규, 2026-09-29, 개정 2026-10-03: 안 2a라 활성 조건 없음 — 제안)**: 채팅 요청마다 시스템 프롬프트에 넣을 기억을 이 두 조회의
   합집합(중복 id 제거)으로 구성한다(제안). 각각 몇 개를 가져올지는 backend가 정한다(합쳐서 최대
-  10개 제안, [[anyang-youth-policy-assistant#추천 설계]] 2번).
+  10개 제안, [[anyang-youth-policy-assistant#추천 설계]] 2번). 모순 대체는 같은 행을 덮어쓰므로 이 쿼리들은
+  `previous_fact`를 읽지 않고 조건도 늘지 않는다.
   1. **최근 기억 N개**:
      ```sql
      select id, preference_text, updated_at
      from user_preferences
      where user_id = $1
-       and superseded_at is null
      order by updated_at desc
      limit $2;
      ```
@@ -644,35 +566,26 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
      select id, preference_text, embedding <=> $2 as distance
      from user_preferences
      where user_id = $1
-       and superseded_at is null
      order by embedding <=> $2
      limit $3;
      ```
   - **인덱스: 이번에도 추가하지 않는다 (제안, 개정 2026-10-03, 근거: 운영 DB 실측)**: 2026-09-29 기준
     `user_preferences`는 전체 3행, 사용자 1명이다(이번 세션에서 다시 측정하지 않았다). 이 설계(유사
-    기억은 갱신, 신규는 새 사실일 때만 추가, 모순은 새 행 + 옛 행 비활성)에서는 사용자당 행 수가 대화량
-    대비 훨씬 느리게 늘어난다. 위 두 쿼리 모두 `where user_id = $1 and superseded_at is null`로 사용자별
+    기억은 갱신, 신규는 새 사실일 때만 추가, 모순은 같은 행 덮어쓰기)에서는 사용자당 행 수가 대화량
+    대비 훨씬 느리게 늘어난다. 위 두 쿼리 모두 `where user_id = $1`로 사용자별
     행을 먼저 좁히는데, 사용자당 행 수가 수십 단위를 넘지 않는 한 Postgres 플래너가 순차 스캔으로도
     충분히 빠르게 처리한다 — 현재 `user_preferences`에는 `user_id` 단독 인덱스도 없다
-    (`0009_user_preferences.up.sql` 확인, HNSW만 있음). `superseded_at`에는 새 인덱스를 만들지
-    않는다(0020은 컬럼 추가만).
-    - **HNSW 검색과 `superseded_at is null` 필터의 상호작용**: 기존 HNSW 인덱스는 모든 사용자·모든
+    (`0009_user_preferences.up.sql` 확인, HNSW만 있음). `previous_fact`는 조회 조건에 쓰이지 않으므로 인덱스를
+    만들지 않는다(0020은 컬럼 추가만).
+    - **HNSW 검색과 `user_id` 필터의 상호작용**: 기존 HNSW 인덱스는 모든 사용자·모든
       행을 담은 전역 인덱스다. HNSW는 근사 검색이라 `where` 조건은 인덱스로 후보를 먼저 뽑은 **뒤**
       걸러진다(post-filter, pgvector 동작에 대한 이 세션의 설명이며 설치된 pgvector 버전은 확인하지
-      않았다). 그래서 플래너가 이 쿼리에 HNSW를 고르면 `user_id` 조건에 이어 `superseded_at is null`
-      조건에서도 후보가 더 걸러져 요청한 `limit`보다 적게 돌려줄 수 있다. 특히 대체된 옛 행은 새 활성
-      행과 의미가 가까워(대체 쌍의 거리 0.16~0.18) 같은 후보 영역에 몰려 있으므로 필터에 가장 잘 걸린다.
-      현재 규모(수 행)에서는 플래너가 순차 스캔을 고르므로 영향이 없고, 위 "인덱스 필요 없음"의 근거와
-      같은 전제다. 이 필터가 새로 만드는 위험은 없다(기존 `user_id` 필터가 이미 같은 성질).
+      않았다). 그래서 플래너가 이 쿼리에 HNSW를 고르면 `user_id` 조건에서 후보가 걸러져 요청한 `limit`보다
+      적게 돌려줄 수 있다. 현재 규모(수 행)에서는 플래너가 순차 스캔을 고르므로 영향이 없고, 위 "인덱스 필요
+      없음"의 근거와 같은 전제다.
     - **재검토 조건**: 사용자당 행이 수백 단위로 늘거나 `EXPLAIN`에서 위 두 쿼리가 HNSW를 쓰면서 `limit`보다
-      적은 행을 돌려주는 것이 관찰되면 그때 (a) `create index concurrently … on user_preferences (user_id)
-      where superseded_at is null`(되돌릴 수 있는 마이그레이션)을 추가하고, (b) HNSW를 부분 인덱스
-      (`… using hnsw (embedding vector_cosine_ops) where superseded_at is null`)로 바꾸는 안과 pgvector의
-      반복 스캔 설정 사용(버전 확인 필요)을 비교한다. 부분 HNSW는 쿼리의 `where`에 `superseded_at is
-      null`이 그대로 있어야 플래너가 쓸 수 있고, 인덱스 재구축(오래 걸리는 작업)이 필요하다.
-    - `superseded_by`의 자기 참조 FK도 인덱스를 만들지 않는다(제안). 행을 지울 때 그 행을 가리키는 행을
-      찾는 순차 스캔이 생기지만 사용자당·전체 행 수가 작을 때는 문제없다. 위 재검토 조건과 같은 시점에
-      본다.
+      적은 행을 돌려주는 것이 관찰되면 그때 `create index concurrently … on user_preferences (user_id)`
+      (되돌릴 수 있는 마이그레이션)를 추가하는 안과 pgvector의 반복 스캔 설정 사용(버전 확인 필요)을 비교한다.
 
 #### consents — 가입 시 개인정보 필수 동의 기록
 
@@ -908,8 +821,8 @@ select count(*) from users where suspended_at is null;
   근거 데이터이므로 이 정리 대상에서 **제외**한다(확정) — 오래된 행을 지우면 같은 (사용자, 공지)
   조합에 다시 알림을 보낼 수 있어 서비스 목적과 상충하기 때문이다. `notices`/`notice_chunks`/
   `consents`/`user_preferences`는 서비스 핵심 데이터(또는 별도 보관 정책, 위 `consents` 절
-  참고)라 이 절의 정리 대상이 아니다. 단 `user_preferences`의 대체된 행(`superseded_at` not null)은
-  별도 정리 후보다(미확정, 위 `user_preferences` 절 "대체된 행의 보존 기간·정리").
+  참고)라 이 절의 정리 대상이 아니다. `user_preferences.previous_fact`도 정리 잡이 없다(사용자 결정 f-3,
+  위 `user_preferences` 절 "보존 기간·정리 잡 없음").
 - 정리 잡은 위 collect-job/notify-job과 같은 방식(pg_cron이 트리거, 삭제 로직은 앱 API 또는
   단순 SQL)으로 둔다(제안):
   ```sql
@@ -1151,58 +1064,44 @@ authenticated 롤에 애초에 권한이 없다.
 
 ### 마이그레이션 계획 (0020, 확인 항목 48(f))
 
-모순으로 대체된 기억의 이력을 남기기 위한 컬럼 추가다. 현재 마지막 마이그레이션은
-`0019_lock_public_api`(`web/db/migrations/` 파일 목록 확인)이므로 다음 번호로 계획한다(제안, 이름·번호
-미확정, 파일은 구현 단계에서 생성 — 이번 설계 단계에서는 만들지 않았고 원격 DB에도 적용하지 않았다).
-컬럼의 의미와 구조 선택 근거는 위 `user_preferences` 절의 "이력 남김 구조"에 있다(중복 기재 방지).
+모순으로 대체되기 직전의 문장을 같은 행에 보관하기 위한 컬럼 추가다(사용자 결정 안 2a, 2026-10-03). 현재 마지막
+마이그레이션은 `0019_lock_public_api`(`web/db/migrations/` 파일 목록 확인)이므로 다음 번호로 계획한다(파일은 구현
+단계에서 생성 — 이번 설계 단계에서는 만들지 않았고 원격 DB에도 적용하지 않았다). 컬럼의 의미와 구조 선택 근거는 위
+`user_preferences` 절의 "이력 보관 구조"에 있다(중복 기재 방지). 새 테이블은 없다.
 
-- **0020_user_preferences_superseded** (제안)
+- **0020_user_preferences_previous_fact** (이름은 제안)
   - up:
     ```sql
     begin;
     alter table user_preferences
-      add column superseded_at timestamptz,
-      add column superseded_by uuid references user_preferences(id) on delete set null,
-      add constraint user_preferences_superseded_chk
-        check (superseded_by is null or superseded_at is not null);
+      add column previous_fact text;
     commit;
     ```
-  - down:
+  - down (사용자 결정 f-7: 안전장치 없는 단순 컬럼 drop):
     ```sql
     begin;
-    do $$
-    begin
-      if exists (select 1 from user_preferences where superseded_at is not null) then
-        raise exception 'user_preferences에 대체된 행이 남아 있어 down을 중단한다';
-      end if;
-    end $$;
     alter table user_preferences
-      drop column superseded_by,
-      drop column superseded_at;
+      drop column previous_fact;
     commit;
     ```
-  - **기존 행**: 두 컬럼 모두 `default` 없는 nullable이라 기존 모든 행이 null, 즉 활성이다. 컬럼 추가는 기존
-    행을 다시 쓰지 않는다. 체크 제약은 기존 행이 모두 만족한다(둘 다 null).
-  - **되돌릴 수 있는가**: up은 컬럼 추가라 되돌릴 수 있는 마이그레이션이다(0018과 같은 성격). **down은 조건부다.**
-    대체된 행이 하나라도 있으면 down을 그냥 실행하면 비활성 행이 활성으로 되살아나 옛 사실이 주입·추천에
-    다시 섞이고, 행을 지우고 실행하면 이력이 사라진다. 그래서 위 down은 대체된 행이 있으면 오류로
-    멈추는 가드를 둔다(제안, 미확정). 대체된 행을 지우고 down을 진행하려면 그 삭제가 데이터 삭제이므로
-    구현 단계 지시서에 별도 사용자 승인이 있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시"). 대체가
-    한 번도 일어나지 않았을 때(앱 배포 전)는 가드를 통과해 그냥 되돌릴 수 있다.
+  - **기존 행**: `default` 없는 nullable이라 기존 모든 행의 `previous_fact`는 null(대체된 적 없음)이다. 컬럼 추가는
+    기존 행을 다시 쓰지 않는다.
+  - **되돌릴 수 있는가**: up은 컬럼 추가라 되돌릴 수 있는 마이그레이션이다(0018과 같은 성격). down은 컬럼 drop이라
+    **보관된 직전 문장이 사라진다.** 사용자가 안전장치 없음으로 정했으므로(f-7) down에 가드를 두지 않는다. 다만
+    `previous_fact`가 채워진 행이 있을 때 down을 실행하면 데이터 삭제이므로 되돌릴 수 없는 마이그레이션 표시 절을
+    따른다(아래).
   - **0019 "공개 API 차단" 규칙**: 새 테이블을 만들지 않으므로 "같은 파일에서 RLS 켜기" 관례는 해당 없다.
     `user_preferences`는 0019에서 이미 RLS가 켜지고 anon·authenticated 권한이 회수됐고, 컬럼 추가는 둘 다
     바꾸지 않는다. 그래도 운영 적용 뒤 위 "적용 후 점검" 절의 점검 SQL 2개(0행이어야 함)를 다시 돌린다.
-    구조 안 2b(별도 이력 테이블)가 선택되면 이 마이그레이션은 새 테이블을 만들게 되므로 같은 파일에서
-    `enable row level security`를 적용해야 한다.
   - **적용 순서**: DB(0020)를 먼저, backend 코드를 나중에 배포한다. 코드가 먼저 나가면 없는 컬럼
-    `superseded_at`을 참조해 모든 기억 쿼리가 오류가 난다. 반대로 0020만 먼저 적용되면 현재 코드는 컬럼을
-    모른 채 정상 동작한다(대체된 행이 아직 없다).
+    `previous_fact`를 참조하는 대체 쿼리가 오류가 난다. 반대로 0020만 먼저 적용되면 현재 코드는 컬럼을
+    모른 채 정상 동작한다(기존 쿼리가 `previous_fact`를 쓰지 않는다).
   - 인덱스는 이 마이그레이션에 포함하지 않는다(위 "조회 쿼리 2종"의 인덱스 항목).
 
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
-  삭제, 데이터 삭제, 타입 축소)은 없다. 단 0020(대체 이력 컬럼 추가, 확인 항목 48(f))은 아래 항목을 따른다.
+  삭제, 데이터 삭제, 타입 축소)은 없다. 단 0020(직전 문장 컬럼 추가, 확인 항목 48(f))의 down은 아래 항목을 따른다.
 - 구현 단계에서 재임베딩 절차 중 "기존 임베딩 컬럼 삭제"(모델 교체 시)는 되돌릴 수 없는
   마이그레이션이다. 실행 전 별도 사용자 승인이 필요하다(dev-common.md 규칙 4단계).
 - 위 "로그성 테이블 보존 기간·정리 잡"의 `cleanup-logs` pg_cron 등록(`collect_runs`/
@@ -1224,14 +1123,13 @@ authenticated 롤에 애초에 권한이 없다.
   "운영 적용 시 원자성"과 "적용 후 점검" 절의 절차(트랜잭션, 소유자·접속 롤 점검, 점검 SQL,
   `get_advisors`)는 승인 여부와 무관하게 반드시 따른다 — 이는 되돌릴 수 없음 여부가 아니라
   운영 장애 방지 목적이다.
-- `0020_user_preferences_superseded`(위 "마이그레이션 계획 (0020)")의 up은 컬럼 추가라 되돌릴 수 없는
-  마이그레이션이 아니다. 다만 **down은 대체된 행이 하나라도 있으면 오류로 멈추게 했다**(제안). 그 행을 지우고
-  down을 강행하는 것은 데이터 삭제(이력 손실)이므로 구현 단계 지시서에 그 삭제에 대한 별도 사용자 승인이
-  있어야 한다. 없으면 down을 실행하지 않고 멈춰서 보고한다.
-- 대체된 행의 보존 기간 정리 잡(위 `user_preferences` 절, 보존 기간 미확정)과 사용자 삭제 시 이력 연쇄 삭제
-  (미확정)는 되돌릴 수 없는 삭제다. 정리 잡을 pg_cron에 등록하려면 `cleanup-logs`와 같이 구현 단계 지시서에
-  그 등록에 대한 별도 사용자 승인이 적혀 있어야 한다. 없으면 등록하지 않고 멈춰서 보고한다. 사용자 삭제 시
-  연쇄 삭제는 앱 코드가 실행하는 일상 삭제(기억 삭제 API)이지 마이그레이션이 아니다.
+- `0020_user_preferences_previous_fact`(위 "마이그레이션 계획 (0020)")의 up은 컬럼 추가라 되돌릴 수 없는
+  마이그레이션이 아니다. down은 단순 컬럼 drop이며(사용자 결정 f-7, 안전장치 없음) 가드를 두지 않는다. 다만
+  **`previous_fact`가 채워진 행이 하나라도 있을 때 down을 실행하면 보관된 직전 문장이 사라지는 데이터 삭제**이므로
+  그 경우에는 구현 단계 지시서에 별도 사용자 승인이 있어야 한다. 없으면 down을 실행하지 않고 멈춰서 보고한다
+  (모두 null이면 손실이 없어 해당 없다). up 적용은 별도 승인이 필요 없다.
+- 대체된 행 정리 잡은 두지 않으므로(사용자 결정 f-3) pg_cron 등록이나 정리용 삭제는 없다. 사용자가 기억을 삭제할 때
+  `previous_fact`가 함께 사라지는 것은 앱 코드가 실행하는 일상 삭제(기억 삭제 API)이지 마이그레이션이 아니다.
 
 ## 테스트 방법 (제안)
 
@@ -1294,23 +1192,18 @@ authenticated 롤에 애초에 권한이 없다.
     때문). down 파일은 문법 검토만 한다. 반복 테스트는 개발용 Supabase 프로젝트가 생긴 뒤
     (프로젝트 문서 확인 항목 36)로 미룬다.
   - 앱 확인: `npm test`, `npm run build` 통과.
-- 대체 이력 확인(0020, 확인 항목 48(f), 개발용 프로젝트 또는 `begin; … rollback;`): 쿼리별 확인 ①~⑧은
-  위 `user_preferences` 절의 "테스트 방법"에 있다. 마이그레이션 자체는 다음을 확인한다.
-  - 적용 후 `\d user_preferences`에 두 컬럼·체크 제약·자기 참조 FK가 있고, 기존 행의 `superseded_at`·
-    `superseded_by`가 모두 null인지(활성) 확인한다.
-  - 체크 제약: `superseded_at`이 null인데 `superseded_by`만 채우는 UPDATE가 오류인지 확인한다.
-  - `on delete set null`: 대체한 새 행을 지우면 옛 행의 `superseded_by`만 null이 되고 `superseded_at`은
-    유지되는지(비활성 그대로) 확인한다.
-  - cascade: 대체 쌍(옛 행·새 행)을 가진 테스트 사용자를 삭제해 두 행이 모두 오류 없이 사라지는지 확인한다.
-  - down 가드: 대체된 행이 있을 때 down이 오류로 멈추고 아무것도 바뀌지 않는지, 대체된 행이 없을 때
-    통과해 컬럼이 사라지는지, 적용 → 롤백 → 재적용이 반복되는지 확인한다.
-  - 되돌리기 SQL: 대체 후 위 "되돌리기" (2)를 실행해 옛 행이 활성으로 돌아오고 `preference_text`·
-    `embedding`이 대체 전과 같은지, 다른 사용자의 id를 넣으면 0행인지 확인한다.
-  - **활성 조건 누락 정적 점검**: `web/`에서 `user_preferences`를 읽는 쿼리를 검색해(영향 쿼리 표의 모든
-    줄) 읽기 쿼리마다 `superseded_at is null`이 들어 있는지 확인한다. 표에 없는 새 쿼리가 생기면 표를
-    먼저 고친다.
-  - 플랜 확인: 개발 환경에서 위 "조회 쿼리 2종"을 `EXPLAIN`으로 보고 어떤 스캔을 쓰는지, 대체된 행이
-    섞여 있을 때 `limit`만큼 돌려주는지 확인한다.
+- 직전 문장 보관 확인(0020, 확인 항목 48(f), 안 2a, 개발용 프로젝트 또는 `begin; … rollback;`): 쿼리별 확인 ①~⑧은
+  위 `user_preferences` 절의 "테스트 방법"에 있다(대체 후 id 불변·`previous_fact` = 옛 문장, 다른 사용자 id 차단,
+  유사 갱신·PUT은 `previous_fact` 불변, swap 되돌리기). 마이그레이션 자체는 다음을 확인한다.
+  - 적용 후 `\d user_preferences`에 `previous_fact text`(null 허용, default 없음)가 있고, 기존 행의 `previous_fact`가
+    모두 null인지 확인한다.
+  - cascade: `previous_fact`가 채워진 행을 가진 테스트 사용자를 삭제해 행이 오류 없이 사라지는지, 기억 DELETE 뒤 그
+    행(`previous_fact` 포함)이 남지 않는지 확인한다.
+  - down: 컬럼이 사라지고 다른 컬럼 값이 그대로인지, 적용 → 롤백 → 재적용이 에러 없이 반복되는지 확인한다.
+  - 되돌리기 SQL: 대체 후 위 "되돌리기" (2)를 실행해 `preference_text`·`previous_fact`가 맞바뀌고 `embedding`이 $3으로
+    바뀌는지, `previous_fact`가 null인 행과 다른 사용자의 id는 0행인지 확인한다.
+  - 플랜 확인: 개발 환경에서 위 "조회 쿼리 2종"을 `EXPLAIN`으로 보고 어떤 스캔을 쓰는지 확인한다(쿼리가 바뀌지
+    않았으므로 `previous_fact` 추가 전과 같아야 한다).
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
@@ -1373,23 +1266,19 @@ authenticated 롤에 애초에 권한이 없다.
   마이그레이션과 "공개 API 차단" 절로 반영(위 참고). 점검 SQL의 정확한 문구, `migrate.sh`
   출력 형식은 제안값으로 `` — 구현 단계에서 확정.
 - 모순으로 대체되는 기억의 이력 — 해결(2026-10-03, user, [[anyang-youth-policy-assistant#확인이 필요한 항목]]
-  48(f)): 지우거나 덮어쓰지 않고 별도 컬럼으로 표시해 되돌릴 수 있게 한다. "이력 미보관" 제안은 폐기.
-  `superseded_at`/`superseded_by` 컬럼과 마이그레이션 0020은 제안이며 미확정이다(위 `user_preferences` 절,
-  "마이그레이션 계획 (0020)").
-- 미확정 — 이력 보존 구조(미해결 질문): 안 1(옛 행에 표시 + 새 행 INSERT, 제안) vs 안 2a(같은 행 UPDATE +
-  직전 문장·임베딩 컬럼 보관) vs 안 2b(같은 행 UPDATE + 이력 테이블). 사용자 표현 "별도 컬럼으로 마킹한 뒤
-  UPDATE"가 어느 쪽인지 단정할 수 없다. 위 "이력 남김 구조" 비교 참고.
-- 미확정 — 이력 범위: 이력은 모순 대체(1경로)에만 남기고 유사 갱신(2경로, 같은 사실의 표현 차이)과 사용자 직접
-  수정은 제자리 UPDATE로 이력을 남기지 않는다(제안). 이 범위가 맞는지.
-- 미확정 — 대체된 행의 보존 기간·정리 잡 여부와 값(위 "대체된 행의 보존 기간·정리"). 값은 정하지 않았다.
-- 미확정 — 사용자가 기억 화면에서 기억을 지울 때 그 행이 대체했던 옛 판본도 함께 지울지(제안: 함께 지움)
-  vs 옛 판본은 보존 기간 정리에 맡길지.
-- 미확정 — 기억 화면에 대체된 기억을 보여 줄지, 사용자가 직접 되돌리게 할지(되돌리기 UI·API). 지금은
-  범위 밖이며 되돌리기는 운영자 SQL뿐이다. 보이게 하려면 backend·frontend 설계 변경이다.
-- 미확정 — 되돌릴 때 새 행을 활성으로 둘지 지울지, `updated_at`을 갱신할지, 연쇄(A→B→C) 되돌리기 규칙.
-- 미확정 — 0020 down 가드(대체된 행이 있으면 중단)를 둘지.
-- 확인 요청(이 문서 범위 밖) — 대체된 이전 문장이 DB에 일정 기간 남는다는 사실이 처리방침·기억 화면
-  안내 문구와 맞는지(pm이 frontend에 확인).
+  48(f) 최종 결정): 안 2a — 같은 행을 UPDATE하고 직전 문장 1단계만 `previous_fact text`에 보관한다. 기억 id는
+  바뀌지 않는다. 안 1(`superseded_at`/`superseded_by`)·안 2b(이력 테이블)는 채택하지 않는다. 이력은 모순 대체에만
+  남기고 유사 갱신·사용자 수정은 `previous_fact`를 바꾸지 않는다(f-2). 보존 기간·정리 잡 없음(f-3), 기억 삭제 시
+  같은 행이라 함께 삭제(f-4), 이전 문장 UI·되돌리기 API 없음·되돌리기는 운영자 SQL(f-5), 되돌리기는 swap이고 2단계
+  이상 이전 판본 유실 수용(f-6), 0020 down 안전장치 없음(f-7). 반영 위치는 위 `user_preferences` 절과
+  "마이그레이션 계획 (0020)"이다.
+- 미확정 — 사용자가 기억 화면에서 문장을 직접 수정(PUT)할 때 `previous_fact`를 그대로 둘지 비울지는 사용자 결정
+  범위 밖이다. 기존 동작 유지(건드리지 않음)로 적었다.
+- 미확정 — 되돌리기(swap) 때 `updated_at`을 갱신할지(기본은 건드리지 않음)와, 되돌린 문장의 임베딩을 운영자가 계산해
+  넘기는 방법(스크립트 등)은 backend 설계 몫이다(위 "되돌리기").
+- 미확정 — 사용자당 기억 행 수 상한(위 "행 수 상한").
+- 확인 요청(이 문서 범위 밖, 보류 f-8) — 직전 문장이 DB에 남는다는 사실이 처리방침·기억 화면 안내 문구("삭제하면
+  사라진다" 등)와 맞는지는 frontend 재개 때 확인한다.
 
 ## Links
 

@@ -237,7 +237,14 @@ owner: pm
       - (f-5) 기억 화면에 대체된 기억 표시·되돌리기 UI/API — 이번 범위 밖(제안). 되돌리기는 운영 SQL만.
       - (f-6) 되돌릴 때 새 행 처리·`updated_at`·연쇄 되돌리기 규칙.
       - (f-7) 0020 down 가드 유지 여부.
-      - (f-8) 처리방침·기억 화면 문구("삭제하면 사라진다" 등)·탈퇴 안내와 이력 보관의 정합성, 기억 화면이 id 변경 뒤 목록을 다시 불러오는지 — frontend 확인 필요(frontend 보류 중이라 이번에 호출 안 함). 보이지 않는 과거 개인정보가 늘어나는 점을 [[anyang-ai-models-data-transfer]]·처리방침에 어떻게 적을지.
+      - (f-8, 아래 결정 참고) 처리방침·기억 화면 문구("삭제하면 사라진다" 등)·탈퇴 안내와 이력 보관의 정합성, 기억 화면이 id 변경 뒤 목록을 다시 불러오는지 — frontend 확인 필요(frontend 보류 중이라 이번에 호출 안 함). 보이지 않는 과거 개인정보가 늘어나는 점을 [[anyang-ai-models-data-transfer]]·처리방침에 어떻게 적을지.
+    - **최종 결정(2026-10-03, user, 메인 세션 전달) — 48 확정**:
+      - (f-1) 구조 **안 2a**: 같은 행을 그대로 UPDATE하고 직전 문장 1단계만 별도 컬럼(예: `previous_fact` text)에 보관. 기억 id 불변. 안 1·안 2b 미채택, `superseded_at`/`superseded_by` 대신 보관 컬럼 하나로 단순화.
+      - (a) 주입용 10개 재사용, (b) 기존 추출 호출에 통합, (c) 순번 표기·`fact`/`replaces`, (d) 잘못된 `replaces`는 null, 문장 유지, (e) 대체 대상 없으면 유사 갱신 → INSERT, (g) 중복 순번은 첫 문장만 대체, (h) 가짜 문장 쌍으로 DeepSeek 사전 테스트 진행 허용.
+      - (f-2) 이력은 모순 대체만, 유사 갱신·사용자 수정은 제자리 덮어씀. (f-3) 별도 정리 잡 없음(1단계 보관이라 자동으로 최신만 남음). (f-4) 기억 삭제 시 보관 문장도 함께 삭제(같은 행이라 자연히). (f-5) 이전 문장 표시·되돌리기 UI 없음, 되돌리기는 운영자 SQL. (f-6) 되돌리기 = 현재 문장과 직전 문장 swap, 2단계 이상 이전 판본 유실 수용. (f-7) 0020 down 안전장치 없음.
+      - (f-8) **보류**: 처리방침·기억 화면 문구 정합성은 frontend 재개(팀원 소스 적용) 때 확인.
+      - (i)·46 Jev 게이트는 보류 유지.
+      - 진행: database → backend 설계 최종 반영 후 "승인된 설계"에 기록(13차), 구현 database(0020 적용) → backend, 테스트 후 커밋. push 보류.
 49. **설계 조사(2026-10-03, 사용자 요청 — 팀원 디자인 소스 cheongan 적용 가능성)**: 위치 `C:\Users\whwlg\Downloads\cheongan\`(design-system: Tailwind v4 + W3C 토큰, react-prototype: React 19 + Vite 해시라우터). `web/`은 Next.js 16 + React 19 + 순수 CSS. frontend가 재검증하고 Tailwind v4 도입 영향, `globals.css`와의 충돌·공존, 화면 매핑표를 새 설계 문서 draft로 정리한다. **코드·설치·파일 복사 금지, 조사·문서만**(47 frontend 구현 보류 유지). 47(b)·(c) 처리 시점 판단의 근거로 쓴다.
     - 조사 draft 완료(2026-10-03, frontend): [[anyang-cheongan-design-adoption]]. 코드·설치 변경 없음. 기술적으로 적용 가능(React 19 동일, Next 16.3.6, Tailwind v4는 `@tailwindcss/postcss` 필요 — 프로토타입의 `@tailwindcss/vite`는 못 씀). 충돌 있음(설치된 tailwindcss 4.3.3 코드와 캐스케이드 규칙으로 추론, 브라우저 미확인): 레이어 밖 `globals.css`의 전역 `button`·`h1`·`a`·`fieldset` 규칙이 Tailwind 유틸리티를 이김, `--border-strong` 이름 같고 의미 다름(색 vs 2px), 색 체계 이중화. 공존안 A 전면 교체/B 점진/C preflight 끄기/D globals.css를 `@layer components`로 이동 — 제안 D 후 B(미확정). 화면: 대화 `/chat`·공지 목록 `/notices` 기존 API로 충분, 공지 상세는 `image_count` 없음(backend·database 설계 변경 필요), 알림은 구독 조회 GET 없음(backend 설계 변경 필요), 내 정보는 하단 탭 3→4개(frontend-screens 설계 변경 필요). 47(b)는 "내 정보" 탭으로 해결, 47(c) ①②③은 함께 처리 가능, ④⑤는 독립.
     - 미확정·질문: (a) 공존안, (b) 본문 글꼴·로딩 방식, (c) 탭 4개, (d) 안양 비서에만 있는 화면(로그인·동의·온보딩·정지·처리방침·관리자 4종)에 디자인을 어디까지 입힐지, (e) `image_count`·구독 조회 GET 추가 여부, (f) 되돌리기 Toast 구현 방식, (g) 토큰 폴더 위치, 내 정보 고정 문구 파일 위치, (h) 받은 폴더에 없는 자료: `Icon.tsx`·`tokens.json`·`build-tokens.mjs` 확인 못 함, 「청안 화면 기능 정의서 v0」 못 찾음 — 팀원에게 받을지. (i) 적용을 진행한다면 frontend-screens·frontend-tasks를 승인된 설계에서 빼고 backend(필요 시 database) → frontend 설계부터 한다.
@@ -268,6 +275,12 @@ owner: pm
 2026-10-03(11차): `anyang-backend-api`와 `anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 46(Jev 게이트 도입, 새 요청). 재승인 뒤 다시 기록한다.
 
 2026-10-03(12차): `anyang-database-schema`를 뺀다 — 사유: 확인 항목 48(모순 선호 대체, 새 요청). 재승인 뒤 다시 기록한다.
+
+2026-10-03(13차): 확인 항목 48 최종 결정(user, 메인 세션 전달 — 안 2a `previous_fact`, 나머지 제안값 전부 채택)을 database → backend가 draft에 반영한 뒤 3종을 기록한다. 승인 범위는 48이다. backend 두 문서 안의 46(Jev 게이트) 3-3-3절·6-1은 보류 상태로 승인 범위 밖이며 그 `(미확정)`은 확정이 아니다(46 재개 때 문서를 다시 빼고 재승인). (f-8) 문구 정합성은 보류. 결정 밖 세부(사용자 PUT 시 `previous_fact` 그대로, 운영자 swap 시 `updated_at` 그대로·임베딩 재계산 스크립트 범위 밖)는 문서에 적힌 제안 그대로 "제안값 전부 채택" 결정으로 본다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-03, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-03, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-03, 승인자 user
 
 ## Jev 도입 제안
 
