@@ -297,6 +297,14 @@ owner: pm
       - (k) 구현 때 확인할 것: `tokens.css` `layer(base)` import, `next/font` 한국어 서브셋, 브라우저 레이어 우선순위.
       - (l) 삭제 승인: C10에서 옛 클래스와 `app/_components/bottom-nav.tsx` 삭제.
     - 역링크 필요: [[anyang-backend-api]] ← [[anyang-cheongan-design-adoption]] (backend 소유, 다음 backend 설계 수정 때).
+    - **승인(2026-10-03, user, 메인 세션 전달)**: draft 전부 승인. (g) 청안 시안 순서(대화·공지·알림·내 정보), (h) 문구 제거, (i) 2개 필드(나이대·학/직), (j) 47(c)①은 범위 밖(나머지 47(c) 버그와 함께 나중에), (l) C10 삭제 승인. (d)·(e)는 범위 밖·프로토타입 근거로 그대로. 승인된 설계 15차 기록 → 구현(frontend) → code-review.
+    - **구현 완료(2026-10-03)**: frontend C1~C3 `1fe7d2e`(토큰 `web/design-system/` 복사, `@tailwindcss/postcss`, `globals.css` 이행, 글꼴·viewport·manifest), C4~C9 `19b1a7b`(`(tabs)/layout.tsx`·`app-nav`·`ui/` 5개·lib 5개, 화면 전부, 내 정보 `/settings` 신규, 테스트 5파일), C10 `28862dd`(`bottom-nav.tsx`·옛 클래스 삭제). npm test 240개·build 통과. 설계 3종 active, `(미확정)` 54개 제거. 화면 확인은 `DATABASE_URL`이 없어 API 목 화면 + 헤드리스 Chrome으로만(실제 로그인·DB 흐름, 탭 강조·상세 탭 바 숨김 화면 확인, 푸시·iOS 안내, 포커스 윤곽, 관리자 1040 폭은 못 봄). 설계 밖 보정(승인 범위 안): `:where(.page, .auth-shell)` 프리플라이트 복원, 관리자 `max-w-admin`, 표 가로 스크롤, `.field min-width:0`. 스킬 `design-taste-frontend`(아이콘 직접 그린 SVG는 승인 설계 우선).
+    - code-review: 치명·주요 없음, 재위임 없음. 설계-코드 일치, API·인증·41 문구 회귀 없음, 지연 삭제 데이터 손실 경로 없음, C10 삭제 클래스 미사용 확인.
+53. **후속(2026-10-03, 52 구현·검수에서 나옴, 차단 아님)**:
+    - (a) **push 여부(사용자 결정 필요)**: 로컬이 원격보다 5개 이상 앞섬(52 커밋 포함). 45·51(c) 보류 유지인지.
+    - (b) 채팅 입력에 한글 조합 중 Enter 처리(`isComposing`)가 없어 중복 전송 가능(frontend 발견, 기존 동작). 47(c) 버그 목록과 함께 처리할지.
+    - (c) 경미(code-review): ① `memory-client.tsx` 버튼이 전역 `button` 규칙을 인라인 유틸리티로 덮음 — 설계 4절 4번 문장("옛 클래스를 쓰지 않는다")과 어긋남. 전역 `button` 규칙을 지울 때 함께 정리. ② `admin/admin-nav.tsx`가 인라인 style과 `.bottom-nav` 클래스를 상단 탭으로 씀(동작 정상). ③ 탭 강제 종료로 `pagehide`가 안 오면 5초 안에 지운 기억이 남음(데이터 손실 아님, 설계 범위 안). ④ `layout.tsx` 글꼴 `subsets: ["latin"]` — 한글은 포함되나 preload 안 돼 첫 렌더 글꼴 깜빡임 가능(브라우저 미확인).
+    - (d) 실제 로그인 상태 390/768/1200 화면 확인은 사람이 해야 한다(`DATABASE_URL` 없는 환경).
 
 ## 승인된 설계
 
@@ -327,6 +335,12 @@ owner: pm
 - [[anyang-backend-tasks]] — 승인일 2026-10-03, 승인자 user
 
 2026-10-03(14차): `anyang-frontend-screens`와 `anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 52(청안 디자인 웹 적용, 새 요청). 재승인 뒤 다시 기록한다.
+
+2026-10-03(15차): 확인 항목 52 사용자 승인(메인 세션 전달, draft 커밋 0e06c78). 세 문서에 적힌 제안값 전부 확정(탭 순서는 청안 시안대로 대화·공지·알림·내 정보, 사이드바 240px, 테마색 `#F5F3ED`, 채팅 조건 줄 2개 필드, C10 삭제 승인 포함). 47(c)①은 범위 밖.
+
+- [[anyang-cheongan-design-adoption]] — 승인일 2026-10-03, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-10-03, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-03, 승인자 user
 
 ## Jev 도입 제안
 
