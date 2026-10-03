@@ -1,3 +1,4 @@
+// 사용 안 함(DATABASE_URL 로컬 미보관) — 백필은 서버 분할 호출 /api/jobs/collect?mode=backfill로 대체됐다.
 // anyang-backend-api 5-1절 7번 — 공지 전체 수집(백필). Vercel 함수가 아니라 로컬 일회성 스크립트다.
 // 실행: npx tsx --env-file=.env.local scripts/backfill.ts [--pages 1-2]
 // 운영 DB에 쓰므로 실행(시험 포함)은 사용자 승인 뒤에만 한다.

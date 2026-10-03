@@ -16,6 +16,15 @@ export function splitIntoChunks(body: string): string[] {
   return chunks;
 }
 
+// 임베딩 대기열 = 청크 없는 공지 수 (백필 응답의 remaining_unembedded).
+export async function countUnembedded(): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `select count(*)::text as n from notices n
+      where not exists (select 1 from notice_chunks nc where nc.notice_id = n.id)`,
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 export type EmbedJobResult = { processed_notices: number; embedded_chunks: number };
 
 export async function runEmbedJob(): Promise<EmbedJobResult> {

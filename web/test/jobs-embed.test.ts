@@ -11,10 +11,10 @@ vi.mock("@/lib/embeddings", () => ({
 
 const { POST, splitIntoChunks } = await import("@/app/api/jobs/embed/route");
 
-function makeRequest(secret?: string) {
+function makeRequest(secret?: string, headerName = "x-scheduler-secret") {
   return new Request("http://localhost/api/jobs/embed", {
     method: "POST",
-    headers: secret ? { "x-scheduler-secret": secret } : {},
+    headers: secret ? { [headerName]: secret } : {},
   });
 }
 
@@ -42,6 +42,18 @@ describe("POST /api/jobs/embed", () => {
 
   afterEach(() => {
     process.env.SCHEDULER_SHARED_SECRET = original;
+    delete process.env.BACKFILL_SECRET;
+  });
+
+  it("x-backfill-secret: 200 when BACKFILL_SECRET matches, 401 when empty/wrong", async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+    process.env.BACKFILL_SECRET = "bf";
+    expect((await POST(makeRequest("bf", "x-backfill-secret"))).status).toBe(200);
+    expect((await POST(makeRequest("nope", "x-backfill-secret"))).status).toBe(401);
+    process.env.BACKFILL_SECRET = "";
+    expect((await POST(makeRequest("", "x-backfill-secret"))).status).toBe(401);
+    delete process.env.BACKFILL_SECRET;
+    expect((await POST(makeRequest("bf", "x-backfill-secret"))).status).toBe(401);
   });
 
   it("401 without valid scheduler secret", async () => {
