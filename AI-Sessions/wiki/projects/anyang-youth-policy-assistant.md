@@ -302,6 +302,7 @@ owner: pm
     - code-review: 치명·주요 없음, 재위임 없음. 설계-코드 일치, API·인증·41 문구 회귀 없음, 지연 삭제 데이터 손실 경로 없음, C10 삭제 클래스 미사용 확인.
 53. **후속(2026-10-03, 52 구현·검수에서 나옴, 차단 아님)**:
     - (a) **push 여부(사용자 결정 필요)**: 로컬이 원격보다 5개 이상 앞섬(52 커밋 포함). 45·51(c) 보류 유지인지.
+      - **결정(2026-10-03, user, 메인 세션 전달)**: 지금 배포 — 52 청안 적용 + 53(b) 수정을 `git push origin master`로 올려 Vercel 자동 배포. 배포 후 검증(로그인, 한글 Enter 1회 전송, 390/768/1200)은 메인 세션·사용자.
     - (b) 채팅 입력에 한글 조합 중 Enter 처리(`isComposing`)가 없어 중복 전송 가능(frontend 발견, 기존 동작). 47(c) 버그 목록과 함께 처리할지.
       - **해결(2026-10-03, user 결정 "지금 수정", 메인 세션 전달)**: frontend `8d4de22` — `web/app/_lib/composer-key.ts` `shouldSubmitOnKey`(Enter·Shift 아님·`isComposing` 아님·`keyCode` 229 아님), `ui/chat.tsx` Composer 연결, 테스트 4건(npm test 244개·build 통과). 설계 변경 없음. code-review 치명·주요·경미 없음, 다른 Enter 전송 패턴 없음. 실제 한글 IME 수동 확인은 못 함(Chrome·Safari 사람 확인 권장).
       - 참고(경미, 설계 잠금 대상): [[anyang-frontend-screens]]는 채팅 키 처리 위치를 `chat-client.tsx`로 적지만 실제는 `ui/chat.tsx`의 Composer. 다음 frontend 설계 수정 때 정리.
