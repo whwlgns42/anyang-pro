@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireBackfillSecret, requireSchedulerSecret } from "@/lib/scheduler-auth";
 import { runCollectJob } from "@/lib/collector";
 import { countUnembedded, runEmbedJob } from "@/lib/embed-job";
+import { directCollectDisabled } from "@/lib/direct-collect";
+import { EMBED_TIME_BUDGET_MS } from "@/lib/job-limits";
 
 // anyang-backend-api 5-1·7절 — 공지 수집기 잡. pg_cron이 mode=quick(10분마다)과 mode=full(하루 1회)로 호출한다.
 // mode=backfill은 사용자가 수동으로 분할 호출하는 일회성 전체 수집이다(5-1절 7번).
@@ -12,7 +14,6 @@ export const maxDuration = 300;
 const BACKFILL_LAST_PAGE = 47;
 const BACKFILL_MAX_PAGES = 5;
 // 요청 시작 후 이 시간이 지나면 다음 임베딩 반복을 시작하지 않는다(maxDuration 300초 기준).
-const BACKFILL_EMBED_BUDGET_MS = 200_000; // user 확정(승인 21차)
 
 // 양의 정수 문자열만 허용한다(null·빈 값·소수·부호 불가).
 function parsePage(value: string | null): number | null {
@@ -29,6 +30,10 @@ export async function POST(request: Request) {
   // backfill은 x-backfill-secret만, 나머지는 x-scheduler-secret만 받는다. 인증이 mode 검사보다 먼저.
   const authError = isBackfill ? requireBackfillSecret(request) : requireSchedulerSecret(request);
   if (authError) return authError;
+
+  // 56 — 직접 수집은 기본 꺼짐(인증은 위에서 먼저 본다).
+  const disabled = directCollectDisabled();
+  if (disabled) return disabled;
 
   if (mode !== "quick" && mode !== "full" && !isBackfill) {
     return NextResponse.json({ error: "INVALID_MODE" }, { status: 400 });
@@ -64,7 +69,7 @@ export async function POST(request: Request) {
   try {
     if (isBackfill) {
       // 대기열이 비거나(embedded_chunks === 0) 시간 예산에 닿을 때까지 반복한다.
-      while (Date.now() - startedAt < BACKFILL_EMBED_BUDGET_MS) {
+      while (Date.now() - startedAt < EMBED_TIME_BUDGET_MS) {
         const r = await runEmbedJob();
         if (r.embedded_chunks === 0) break;
       }

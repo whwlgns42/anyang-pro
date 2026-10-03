@@ -28,12 +28,33 @@ describe("POST /api/jobs/collect", () => {
     runEmbedJobMock.mockReset();
     countUnembeddedMock.mockReset();
     process.env.SCHEDULER_SHARED_SECRET = "secret";
+    process.env.DIRECT_COLLECT_ENABLED = "true"; // 기존 동작 테스트는 스위치를 켠 상태로 돈다(56)
   });
 
   afterEach(() => {
     process.env.SCHEDULER_SHARED_SECRET = original;
     delete process.env.BACKFILL_SECRET;
+    delete process.env.DIRECT_COLLECT_ENABLED;
     vi.useRealTimers();
+  });
+
+  it("DIRECT_COLLECT_ENABLED off: 401 first, then 410 DIRECT_COLLECT_DISABLED without running anything", async () => {
+    for (const v of [undefined, "", "false", "1"]) {
+      if (v === undefined) delete process.env.DIRECT_COLLECT_ENABLED;
+      else process.env.DIRECT_COLLECT_ENABLED = v;
+      const res = await POST(makeRequest("secret", "?mode=quick"));
+      expect(res.status).toBe(410);
+      expect(await res.json()).toEqual({ error: "DIRECT_COLLECT_DISABLED" });
+    }
+    expect((await POST(makeRequest(undefined, "?mode=quick"))).status).toBe(401);
+    process.env.BACKFILL_SECRET = "bf";
+    const bf = new Request("http://localhost/api/jobs/collect?mode=backfill&from=1&to=2", {
+      method: "POST",
+      headers: { "x-backfill-secret": "bf" },
+    });
+    expect((await POST(bf)).status).toBe(410);
+    expect(runCollectJobMock).not.toHaveBeenCalled();
+    expect(runEmbedJobMock).not.toHaveBeenCalled();
   });
 
   it("401 without valid scheduler secret, does not run any job", async () => {

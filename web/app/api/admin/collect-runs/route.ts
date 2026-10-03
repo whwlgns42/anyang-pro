@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requireAdmin } from "@/lib/require-admin";
 import { runCollectJob } from "@/lib/collector";
+import { directCollectDisabled } from "@/lib/direct-collect";
 
 // anyang-backend-api 13-1절 — collect_runs 목록 조회, 수동 수집 실행(동기, manual).
 // anyang-backend-api 10절 — POST가 실행하는 runCollectJob과 동일한 Fluid Compute 300초 한도 전제.
@@ -23,6 +24,10 @@ export async function GET() {
 export async function POST() {
   const admin = await requireAdmin();
   if (admin instanceof Response) return admin;
+
+  // 56 — 직접 수집이 꺼져 있으면(기본) 410. GET(이력 조회)은 영향 없다.
+  const disabled = directCollectDisabled();
+  if (disabled) return disabled;
 
   const result = await runCollectJob("manual", admin.userId, { mode: "full" });
   if (!result.ok) {

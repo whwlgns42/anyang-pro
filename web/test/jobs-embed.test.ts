@@ -45,6 +45,21 @@ describe("POST /api/jobs/embed", () => {
     delete process.env.BACKFILL_SECRET;
   });
 
+  it("x-collector-secret: 200 when COLLECTOR_INGEST_SECRET matches, 401 when empty/wrong/unset", async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+    process.env.COLLECTOR_INGEST_SECRET = "cs";
+    expect((await POST(makeRequest("cs", "x-collector-secret"))).status).toBe(200);
+    expect((await POST(makeRequest("nope", "x-collector-secret"))).status).toBe(401);
+    process.env.COLLECTOR_INGEST_SECRET = "";
+    expect((await POST(makeRequest("", "x-collector-secret"))).status).toBe(401);
+    delete process.env.COLLECTOR_INGEST_SECRET;
+    expect((await POST(makeRequest("cs", "x-collector-secret"))).status).toBe(401);
+    // 키를 헤더 이름 사이에 섞어 쓸 수 없다
+    process.env.COLLECTOR_INGEST_SECRET = "cs";
+    expect((await POST(makeRequest("cs", "x-scheduler-secret"))).status).toBe(401);
+    delete process.env.COLLECTOR_INGEST_SECRET;
+  });
+
   it("x-backfill-secret: 200 when BACKFILL_SECRET matches, 401 when empty/wrong", async () => {
     queryMock.mockResolvedValue({ rows: [] });
     process.env.BACKFILL_SECRET = "bf";

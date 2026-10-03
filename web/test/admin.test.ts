@@ -23,6 +23,9 @@ const notifyLogsSummary = await import("@/app/api/admin/notify-logs/summary/rout
 const apiUsageSummary = await import("@/app/api/admin/api-usage/summary/route");
 const adminNotices = await import("@/app/api/admin/notices/route");
 
+// 56 — 직접 수집 스위치. 기존 수동 수집 테스트는 켠 상태로 돈다.
+process.env.DIRECT_COLLECT_ENABLED = "true";
+
 const FORBIDDEN = new Response(JSON.stringify({ error: "ADMIN_ONLY" }), { status: 403 });
 
 function params(id: string) {
@@ -81,6 +84,17 @@ describe("admin API endpoints when admin", () => {
     requireAdminMock.mockReset();
     runCollectJobMock.mockReset();
     requireAdminMock.mockResolvedValue({ userId: "admin1", email: "admin@example.com" });
+  });
+
+  it("POST /api/admin/collect-runs returns 410 DIRECT_COLLECT_DISABLED when the switch is off; GET is unaffected", async () => {
+    delete process.env.DIRECT_COLLECT_ENABLED;
+    const res = await collectRuns.POST();
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ error: "DIRECT_COLLECT_DISABLED" });
+    expect(runCollectJobMock).not.toHaveBeenCalled();
+    queryMock.mockResolvedValue({ rows: [] });
+    expect((await collectRuns.GET()).status).toBe(200);
+    process.env.DIRECT_COLLECT_ENABLED = "true";
   });
 
   it("POST /api/admin/collect-runs runs manual collect with admin id", async () => {

@@ -32,7 +32,19 @@ export function requireBackfillSecret(request: Request): Response | null {
   return verifyBackfillSecret(request) ? null : new Response(null, { status: 401 });
 }
 
-// /api/jobs/embed — 둘 중 하나만 맞아도 통과.
-export function requireSchedulerOrBackfillSecret(request: Request): Response | null {
-  return verifySchedulerSecret(request) || verifyBackfillSecret(request) ? null : new Response(null, { status: 401 });
+
+// anyang-board-collector C-1 — 보드 수집기 전용 키. COLLECTOR_INGEST_SECRET이 비면 항상 false(받기 API 비활성).
+export function verifyCollectorSecret(request: Request): boolean {
+  return verifyHeaderSecret(request, "x-collector-secret", process.env.COLLECTOR_INGEST_SECRET);
+}
+
+export function requireCollectorSecret(request: Request): Response | null {
+  return verifyCollectorSecret(request) ? null : new Response(null, { status: 401 });
+}
+
+// /api/jobs/embed (C-5) — 스케줄러·백필·보드 키 셋 중 하나만 맞아도 통과.
+export function requireAnyJobSecret(request: Request): Response | null {
+  return verifySchedulerSecret(request) || verifyBackfillSecret(request) || verifyCollectorSecret(request)
+    ? null
+    : new Response(null, { status: 401 });
 }
