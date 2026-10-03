@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-// anyang-backend-api 7절 — 공유 시크릿 인증. /api/jobs/* 라우트(2차 이후 구현)가 이 헬퍼를
-// 공통으로 쓴다. 이번 1차 묶음에는 아직 소비하는 라우트가 없다.
+// anyang-backend-api 7절 — 공유 시크릿 인증. /api/jobs/* 라우트가 이 헬퍼를 공통으로 쓴다.
 function verifyHeaderSecret(request: Request, header: string, expected: string | undefined): boolean {
   if (!expected) return false;
 

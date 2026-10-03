@@ -187,15 +187,15 @@ describe("POST /api/jobs/collect", () => {
       expect(runEmbedJobMock).toHaveBeenCalledTimes(2);
     });
 
-    it("stops starting new embed rounds after the 250s budget", async () => {
+    it("stops starting new embed rounds after the 200s budget", async () => {
       vi.useFakeTimers();
       vi.setSystemTime(0);
       runEmbedJobMock.mockImplementation(async () => {
-        vi.setSystemTime(Date.now() + 100_000);
+        vi.setSystemTime(Date.now() + 80_000);
         return { processed_notices: 15, embedded_chunks: 15 };
       });
       await POST(bf("&from=1&to=2", ok));
-      expect(runEmbedJobMock).toHaveBeenCalledTimes(3); // 0s, 100s, 200s start; 300s does not
+      expect(runEmbedJobMock).toHaveBeenCalledTimes(3); // 0s, 80s, 160s start; 240s does not
     });
 
     it("embed throwing still returns 200 with collected_count", async () => {

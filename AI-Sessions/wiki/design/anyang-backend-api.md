@@ -1079,8 +1079,8 @@ database에 요청한다).
 | 같은 라우트(겹침) | 같음 | 200 `{ mode, skipped: true, reason: "ALREADY_RUNNING" }` (임베딩 호출 안 함) |
 | 같은 라우트(잘못된 mode) | 같음 | 400 `{ error: "INVALID_MODE" }` |
 | 같은 라우트(인증 실패) | 헤더 없음/불일치 | 401(빈 body, 기존). mode 검사보다 먼저. `mode=backfill`의 인증은 7번 |
-| `POST /api/jobs/collect?mode=backfill&from=N&to=M` | 헤더 `x-backfill-secret` | 200 `{ mode: "backfill", collected_count, remaining_unembedded }`(필드명 `remaining_unembedded` `(미확정)`). 겹침은 위 `skipped` 응답과 같음 |
-| 같은 라우트(백필 범위 위반) | `from`·`to` 누락·비정수, `1 ≤ from ≤ to ≤ 47` 위반, `to-from+1 > 5` | 400 `{ error: "INVALID_RANGE" }`(코드명 `(미확정)`). 인증·mode 검사 뒤 |
+| `POST /api/jobs/collect?mode=backfill&from=N&to=M` | 헤더 `x-backfill-secret` | 200 `{ mode: "backfill", collected_count, remaining_unembedded }`. 미임베딩 건수 조회가 실패하면 `remaining_unembedded`는 `null`이고 응답은 그대로 200이다. 겹침은 위 `skipped` 응답과 같음 |
+| 같은 라우트(백필 범위 위반) | `from`·`to` 누락·비정수, `1 ≤ from ≤ to ≤ 47` 위반, `to-from+1 > 5` | 400 `{ error: "INVALID_RANGE" }`. 인증·mode 검사 뒤 |
 | 같은 라우트(robots 거부/수집 실패) | 같음 | 409 `ROBOTS_DISALLOWED` / 500 `COLLECT_FAILED`(기존) |
 
 - `mode` 쿼리가 없으면 `full`로 처리한다(기존 템플릿 호출과의 호환). 겹침을 200으로 돌려주는 이유: pg_net 호출
@@ -1103,10 +1103,10 @@ database에 요청한다).
   - 범위(확정): `1 ≤ from ≤ to ≤ 47`, `to-from+1 ≤ 5`. 위반은 400(6번 표). 호출은 `skipExisting=true`로 고정이다.
   - 겹침 방지: 4번 그대로(advisory lock + `running` 행).
 - 수집 뒤 임베딩(확정): 같은 요청에서 수집이 끝나면 `runEmbedJob()`을 대기열이 빌 때(`embedded_chunks === 0`)까지
-  또는 시간 예산에 닿을 때까지 반복한다(한 번에 15건). 시간 예산은 요청 시작부터 250초 경과 시 다음 반복을 시작하지 않는다
-  (`maxDuration` 300초 기준, 값 250초는 `(미확정)` — user 예시값이며 구현 상수로 둔다). 임베딩 실패는 수집을 실패시키지 않고
+  또는 시간 예산에 닿을 때까지 반복한다(한 번에 15건). 시간 예산은 요청 시작부터 200초 경과 시 다음 반복을 시작하지 않는다
+  (확정, user, 2026-10-04. `maxDuration` 300초 안에서 마지막 묶음이 끝날 여유를 두기 위해 250초를 200초로 낮춤 — code-review 지적. 구현 상수). 임베딩 실패는 수집을 실패시키지 않고
   반복만 멈춘다(5번과 같음). 응답: `collected_count`(수집 건수, 3번 기준)와 남은 미임베딩 건수(`remaining_unembedded`,
-  임베딩 대기열 = 청크 없는 공지 수. 응답 필드명은 `(미확정)`).
+  임베딩 대기열 = 청크 없는 공지 수. 조회 실패 시 `null`, 응답은 200).
 - `POST /api/jobs/embed`도 `x-backfill-secret`을 허용한다(확정). `x-scheduler-secret` 또는 `x-backfill-secret` 중 하나가
   맞으면 통과하되, `BACKFILL_SECRET`이 비어 있으면 후자는 불허다. 응답·동작은 기존과 같다(1회 15건).
 - 호출 순서(운영 절차): 1~5, 6~10, …, 41~45, 46~47 총 10회. 각 응답의 `remaining_unembedded`가 0이 될 때까지, 필요하면
@@ -1700,7 +1700,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   - 백필 범위 검증: `from`·`to` 누락·비정수·`from<1`·`to>47`·`from>to`·`to-from+1=6` → 400 `INVALID_RANGE`(수집 호출 없음),
     경계 `1~5`·`46~47`·`from=to`는 통과. 인증 실패가 범위 오류보다 먼저(401).
   - 백필 겹침: 진행 중 행이 있으면 200 `skipped`(`ALREADY_RUNNING`), `runEmbedJob` 호출 없음.
-  - 백필 시간 예산: 가짜 타이머/시계로 `runEmbedJob`이 계속 처리 건수를 돌려줄 때 250초 경과 뒤 더 호출하지 않고 끝나는지,
+  - 백필 시간 예산: 가짜 타이머/시계로 `runEmbedJob`이 계속 처리 건수를 돌려줄 때 200초 경과 뒤 더 호출하지 않고 끝나는지,
     대기열이 비면(`embedded_chunks === 0`) 예산 전에 끝나는지, 임베딩이 던져도 200이고 `collected_count`가 유지되는지.
     응답에 `collected_count`와 `remaining_unembedded`가 있는지.
   - `/api/jobs/embed` 인증: `x-scheduler-secret` 맞음 200(기존), `x-backfill-secret` 맞음 200, `BACKFILL_SECRET` 비어
@@ -1811,8 +1811,8 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   이미지 확장자 첨부, stale N=10분 + failed 정리, `pg_try_advisory_xact_lock` 겹침 방지(200 `skipped` / 관리자 409),
   `mode` 생략은 `full`·잘못된 값 400 `INVALID_MODE`, `collect_runs.mode` 컬럼 없음, `COLLECTOR_CONTACT` 환경변수.
   백필은 서버 분할 호출(2026-10-04 변경, user): `mode=backfill&from&to`, `x-backfill-secret`↔`BACKFILL_SECRET`(비면 비활성),
-  한 호출 최대 5페이지, 수집 뒤 시간 예산까지 임베딩 반복, `/api/jobs/embed`도 백필 시크릿 허용. 미확정으로 남은 것:
-  시간 예산 250초 상수, 응답 필드명 `remaining_unembedded`, 범위 위반 코드명 `INVALID_RANGE`.
+  한 호출 최대 5페이지, 수집 뒤 시간 예산까지 임베딩 반복, `/api/jobs/embed`도 백필 시크릿 허용. 시간 예산 200초,
+  응답 필드명 `remaining_unembedded`, 코드명 `INVALID_RANGE`는 2026-10-04 user 결정으로 확정.
   구현·운영 확인 항목으로 남김:
   - 55-b 고정 공지 마크업 — 구현 첫 단계에서 실제 HTML로 판정 규칙을 확정한 뒤 결과 확인. 같은 시점에 작은
     이모지·아이콘 `<img>` 제외 규칙도 정한다(`image_count` 정의 중 이 부분만 구현 단계 확정).

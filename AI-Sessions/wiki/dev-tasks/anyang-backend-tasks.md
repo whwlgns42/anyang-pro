@@ -82,7 +82,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    `/api/jobs/collect`에 `mode=backfill&from=N&to=M` 추가: 인증 `x-backfill-secret`↔`BACKFILL_SECRET`
    (`timingSafeEqual`, 비어 있으면 401, `x-scheduler-secret`로는 불허, `quick`·`full` 경로 불변), 범위 `1≤from≤to≤47`·
    `to-from+1≤5` 위반 400, `skipExisting=true` 고정, 기존 advisory lock 겹침 방지, 수집 뒤 같은 요청에서
-   `runEmbedJob`을 시간 예산(250초 `(미확정)`)까지 반복, 응답 `collected_count`·`remaining_unembedded`(필드명 `(미확정)`).
+   `runEmbedJob`을 시간 예산(200초, 확정)까지 반복, 응답 `collected_count`·`remaining_unembedded`(조회 실패 시 null, 200).
    `/api/jobs/embed`도 `x-backfill-secret` 허용(`BACKFILL_SECRET` 비면 불허). 환경변수 `BACKFILL_SECRET`(9절)은 사용자가
    Vercel에 넣고 백필이 끝나면 지운다(코드 변경 없음). `web/scripts/backfill.ts`는 쓰지 않는다 — 파일은 남기고
    "사용 안 함(DATABASE_URL 로컬 미보관)"으로만 표시한다(구현 시 파일 상단 주석 한 줄). 5-1·5-2 의존. 테스트:

@@ -12,7 +12,7 @@ export const maxDuration = 300;
 const BACKFILL_LAST_PAGE = 47;
 const BACKFILL_MAX_PAGES = 5;
 // 요청 시작 후 이 시간이 지나면 다음 임베딩 반복을 시작하지 않는다(maxDuration 300초 기준).
-const BACKFILL_EMBED_BUDGET_MS = 250_000; // (미확정) user 예시값
+const BACKFILL_EMBED_BUDGET_MS = 200_000; // user 확정(승인 21차)
 
 // 양의 정수 문자열만 허용한다(null·빈 값·소수·부호 불가).
 function parsePage(value: string | null): number | null {

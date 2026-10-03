@@ -364,6 +364,7 @@ owner: pm
     - **백필 구현(2026-10-04)**: backend `e9d1805`(collect backfill 모드·embed 라우트 `x-backfill-secret`·`countUnembedded`, test 297·build 통과). push·배포 안 함. code-review: 치명 없음, 보안 경계(빈 시크릿, 길이 다른 값, 시크릿 분리, 인증 순서, 로그) 문제 없음, 범위 검증 문제 없음.
     - (x) **사용자 결정 필요(2026-10-04, code-review 주요 — 설계 변경 필요)**: 임베딩 반복은 시작 시각이 250초 미만이면 `runEmbedJob`(최대 15건, Gemini 순차 호출, fetch 타임아웃 없음, 재시도 백오프 최대 7초/호출)을 한 번 더 시작한다. 249초에 시작한 마지막 호출이 `maxDuration` 300초를 넘기면 함수가 강제 종료되고, 청크 단위 insert가 공지 도중에 끊긴다. 그 공지는 "청크 있음"으로 취급돼 나머지 청크가 다시 임베딩되지 않는다(기존 취약성, 백필이 만날 확률을 높임). 선택지: (1) 예산을 낮춘다(예: 200초) — 값 변경만, 가장 단순 (2) `runEmbedJob`을 공지 단위로 시간 예산에 연동 — 코드·설계 변경이 더 큼. pm 권장 (1). 정상 응답 속도면 수십 초 안에 끝나므로 위험은 Gemini 지연·429 때다. 함께: 수집 단계 시간(5페이지 × 10건 × 2초 ≈ 100초+, 목록 1페이지 항목 수 실측 필요)은 `from=1&to=2` 시험 호출로 실측 권장. 그래서 `anyang-backend-api`를 승인된 설계에서 뺐다(20차 이후). push·배포는 이 결정 뒤로 미뤘다.
     - (y) 경미(code-review): `web/lib/scheduler-auth.ts:3-4` 낡은 주석(구현 수정, backend). `remaining_unembedded`가 건수 조회 실패 시 null — 설계 6번 표에 null 경우 한 줄 보강 필요(설계 변경, (x)와 함께).
+    - **결정(2026-10-04, user, 메인 세션 전달)**: (x) 선택지 (1) — 임베딩 반복의 새 묶음 시작 기준 200초(250초 대체), 상수만 변경, `runEmbedJob` 구조 그대로. (w) `remaining_unembedded`·`INVALID_RANGE` 제안대로 확정. (y) 조회 실패 시 `remaining_unembedded` null을 설계 표에 보강, `scheduler-auth.ts` 낡은 주석 정리(동작 변경 없음). 이어서 21차 → 구현·재검수 → 커밋 → push → `vercel deploy --prod`. 실제 백필 호출은 메인 세션. 55(v) 보류 유지.
     - (u) 경미(문서·서식, 차단 아님): [[anyang-database-schema]] 1439행이 advisory lock·`collect_runs.mode`를 아직 "미확정(55)"으로 적는다(사용자가 확정, backend-api에는 반영). `web/app/_lib/notices-refetch.ts:23` `type Doc =Pick` 공백 누락. 다음 수정 때 정리.
     - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
 
@@ -413,9 +414,12 @@ owner: pm
 
 2026-10-04(20차): 백필 방식 변경(user, 메인 세션 전달 — "사용자가 승인한 설계 값, 별도 재승인 불필요")을 backend가 반영한 뒤 2종을 다시 기록한다. 승인 범위는 전달된 값 1~4와 그로부터 직접 따라 나온 값이다. 55(w) 제안값 3건(250초, `remaining_unembedded`, `INVALID_RANGE`)은 `(미확정)` 그대로 승인 범위 밖이다.
 
-- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+2026-10-04(20차 이어서): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(x) code-review "설계 변경 필요"(백필 임베딩 시간 예산 250초가 maxDuration 300 안에서 안전하지 않음). 사용자 결정 후 재기록한다. 같은 사유로 `anyang-backend-tasks`도 뺀다(5-3에 250초가 적혀 있음).
 
-2026-10-04(20차 이어서): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(x) code-review "설계 변경 필요"(백필 임베딩 시간 예산 250초가 maxDuration 300 안에서 안전하지 않음). 사용자 결정 후 재기록한다.
+2026-10-04(21차): 55(x)·(w)·(y) 사용자 결정(메인 세션 전달 — 200초, `remaining_unembedded`·`INVALID_RANGE` 확정, null 보강)을 backend가 반영한 뒤 2종을 다시 기록한다.
+
+- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 
