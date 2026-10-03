@@ -1,0 +1,11 @@
+# 설치 위치: /etc/systemd/system/anyang-collector-quick.timer
+# 10분 주기. 04:00 full과 겹치지 않게 매 시 03·13·23·33·43·53분에 돈다.
+[Unit]
+Description=Anyang youth notice collector - quick every 10 minutes
+
+[Timer]
+OnCalendar=*:3/10
+Unit=anyang-collector@quick.service
+
+[Install]
+WantedBy=timers.target

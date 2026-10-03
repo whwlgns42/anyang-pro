@@ -1,0 +1,21 @@
+# 설치 위치: /etc/systemd/system/anyang-collector@.service  (인스턴스 이름 = 명령: quick | full | sync)
+# 설계: AI-Sessions/wiki/design/anyang-board-collector.md A-2·A-3. backfill은 타이머가 없고 systemd-run으로 수동 실행한다(F-3 7번).
+[Unit]
+Description=Anyang youth notice collector (%i)
+# USB가 마운트되지 않았으면 실행하지 않는다(조용히 건너뜀, journald에 condition failed).
+ConditionPathIsMountPoint=/mnt/usb
+
+[Service]
+Type=oneshot
+User=arduino
+# 설정·비밀값은 root 소유 0600 파일에서 systemd가 읽어 환경변수로 넘긴다(arduino가 파일을 읽을 필요 없음).
+EnvironmentFile=/etc/anyang-collector/collector.env
+ExecStart=/usr/bin/node /home/arduino/anyang-collector/anyang-collector.mjs %i
+TimeoutStartSec=900
+Nice=10
+MemoryMax=300M
+CPUQuota=50%
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only

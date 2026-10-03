@@ -1,0 +1,12 @@
+# 설치 위치: /etc/systemd/system/anyang-collector-full.timer
+# 서울 04:00 하루 1회. 꺼져 있던 시간은 켜질 때 한 번 보충한다(Persistent).
+[Unit]
+Description=Anyang youth notice collector - full daily at 04:00 Asia/Seoul
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Seoul
+Persistent=true
+Unit=anyang-collector@full.service
+
+[Install]
+WantedBy=timers.target
