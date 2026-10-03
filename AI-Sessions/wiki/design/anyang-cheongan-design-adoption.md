@@ -16,7 +16,7 @@ owner: frontend
 - 사용자 확정(2026-10-03, 메인 세션 전달): 웹(PWA)만(Expo·React Native 앱 없음), 청안 `tokens.json`·`tokens.css`·`tailwind.css`는 그대로 가져와 쓰고 컴포넌트는 새로 작성, 반응형 모바일 390 / 태블릿 768 / 데스크톱 1200(데스크톱은 사이드바).
 - 그 밖의 값은 모두 제안이다. 권장안은 프로젝트 문서 확인 항목 52 (c)에 있고, 이 문서는 그것을 구체화했다.
 - 핵심 설계: 토큰은 `web/design-system/`에 원본 그대로 두고, `globals.css`는 `@layer components`로 옮겨 Tailwind 유틸리티가 이기게 하며, 옛 의미 토큰(`--accent`, `--bg` 등)을 청안 토큰으로 다시 가리켜 시안 없는 화면도 한 번에 같은 팔레트가 되게 한다. 화면은 단위별로 이행한다.
-- API 변경(2026-10-04, 확인 항목 55): 본문 이미지 배지와 별표 고정 공지는 사용자 결정으로 넣는다. 공지 응답의 `is_pinned`·`image_count`·`attachments`는 [[anyang-backend-api]]가 정한다. 알림 "받는 기기" 목록은 여전히 뺀다(기존 API만 사용).
+- API 변경(2026-10-04, 확인 항목 55): 이미지 배지와 별표 고정 공지는 사용자 결정으로 넣는다. 공지 응답의 `is_pinned`·`image_count`·`attachments`는 [[anyang-backend-api]]가 정한다. 알림 "받는 기기" 목록은 여전히 뺀다(기존 API만 사용).
 
 화면별 스펙은 [[anyang-frontend-screens]]의 "청안 디자인 적용 화면 스펙" 절, 작업 순서·파일·테스트는 [[anyang-frontend-tasks]]의 "청안 디자인 적용" 절에 있다. 이 문서는 토큰·공존·글꼴·반응형·공통 컴포넌트만 다룬다.
 
@@ -157,7 +157,7 @@ A안(전면 교체)은 화면 19개를 한 번에 건드려야 하고, C안(프�
 | `TabBar`, `Sidebar` | `app-nav.tsx` | `TabBar.tsx` | (tabs) 전체 | `<a href>`를 `next/link`로, 현재 탭 판정을 `usePathname()`으로. 항목 배열 하나를 둘이 공유 |
 | `MessageBubble`, `AnswerBlock`, `Composer` | `ui/chat.tsx` | `Chat.tsx` | `/chat` | 입력 키 처리 등 현재 `ui/chat.tsx` `Composer`의 동작은 유지하고 외형만 바꾼다. `Cite`는 만들지 않는다(8절) |
 | `SourceList` | `ui/chat.tsx` | `SourceList.tsx` | `/chat` | 필드 `{id, title, posted_at}`. 링크는 `/notices/[id]` |
-| `NoticeRow` | `ui/notice-row.tsx` | `NoticeRow.tsx` | `/notices` | 2026-10-04(확인 항목 55): `ImageBadge`에 해당하는 "본문 이미지" 칩과 고정 공지 별표를 넣는다([[anyang-frontend-screens]] 공지 목록 절). `ImageNote`는 만들지 않는다 |
+| `NoticeRow` | `ui/notice-row.tsx` | `NoticeRow.tsx` | `/notices` | 2026-10-04(확인 항목 55): `ImageBadge`에 해당하는 "이미지" 칩과 고정 공지 별표를 넣는다([[anyang-frontend-screens]] 공지 목록 절). `ImageNote`는 만들지 않는다 |
 | 입력·선택 | 옛 `.field` 유지 | (청안에 입력 컴포넌트 없음, `Composer` 입력과 `EditInterest` 텍스트 영역만 있음) | 로그인·동의·온보딩 | 이번에 새 컴포넌트를 만들지 않는다. 옛 클래스가 토큰 다시 가리키기로 같은 모습을 얻는다 |
 | 사이드바, `AppShell` | 위 | — | — | **청안에 없어 새로 추가하는 것** |
 | 확인 다이얼로그(`<dialog>`) | `ui/controls.tsx`의 `ConfirmDialog` | `MemoryScreen.tsx`의 탈퇴 `<dialog>` | 계정 탈퇴 | 관리자 화면의 `window.confirm`(`admin/_lib/confirm.ts`)은 그대로 둔다 |
@@ -168,7 +168,7 @@ A안(전면 교체)은 화면 19개를 한 번에 건드려야 하고, C안(프�
 
 | 청안 요소 | 처리 | 이유 |
 |---|---|---|
-| 본문 이미지 배지(`ImageBadge`) | 가져온다 (2026-10-04, 확인 항목 55) | 사용자가 시안대로 별표와 배지를 둘 다 넣기로 결정했다. 공지 응답의 `image_count`는 [[anyang-backend-api]]가 정의한다(정의는 55-c 대기). 이전 "뺀다" 결정을 대체한다 |
+| 이미지 배지(`ImageBadge`) | 가져온다 (2026-10-04, 확인 항목 55) | 사용자가 시안대로 별표와 배지를 둘 다 넣기로 결정했다. 공지 응답의 `image_count`는 [[anyang-backend-api]]가 정의한다(정의는 55-c 대기). 이전 "뺀다" 결정을 대체한다 |
 | 이미지 안내(`ImageNote`) | 뺀다 | 사용자 결정은 배지와 별표까지이고 안내 상자는 포함되지 않았다 |
 | 알림 "받는 기기" 목록 | 뺀다 | 구독 조회 GET API가 없다. 같은 이유 |
 | 답변 속 인용 번호 `<Cite n>` | 만들지 않는다 | 답변은 DeepSeek 스트림 일반 텍스트이고 인용 번호 규약이 없다. 번호를 넣으려면 backend 프롬프트 계약이 바뀌므로 이번에 하지 않는다. 근거 카드의 번호(1, 2, 3)는 표시한다 |

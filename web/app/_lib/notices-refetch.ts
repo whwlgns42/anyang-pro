@@ -20,7 +20,7 @@ export function appendPage<T extends { id: string }>(prev: T[], next: T[]): T[] 
   return [...prev, ...next.filter((x) => !ids.has(x.id))];
 }
 
-type Doc =Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
+type Doc = Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
 type Win = Pick<Window, "addEventListener" | "removeEventListener">;
 
 // visible이 될 때와 persisted pageshow일 때만 onTrigger를 부른다. 반환 함수로 해제한다.

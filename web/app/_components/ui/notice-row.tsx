@@ -37,7 +37,7 @@ type NoticeRowProps = {
   imageCount?: number;
 };
 
-// 공지 목록의 한 줄. 고정 공지는 별표 + 굵은 제목(일반 공지는 500), image_count>0이면 "본문 이미지" 칩.
+// 공지 목록의 한 줄. 고정 공지는 별표 + 굵은 제목(일반 공지는 500), image_count>0이면 "이미지" 칩.
 // 별표는 장식이라 숨기고 같은 링크 안에 읽기 글자 "고정 공지, "를 둔다.
 export function NoticeRow({ id, title, excerpt, postedAt, isPinned, imageCount }: NoticeRowProps) {
   const day = formatDate(postedAt);
@@ -60,7 +60,7 @@ export function NoticeRow({ id, title, excerpt, postedAt, isPinned, imageCount }
               </time>
             )}
             {(imageCount ?? 0) > 0 && (
-              <span className="rounded-badge border border-rule px-1.5 text-meta text-ink-2">본문 이미지</span>
+              <span className="rounded-badge border border-rule px-1.5 text-meta text-ink-2">이미지</span>
             )}
           </span>
         )}

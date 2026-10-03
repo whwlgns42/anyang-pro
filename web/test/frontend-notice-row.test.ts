@@ -21,8 +21,8 @@ describe("NoticeRow", () => {
     }
   });
   it("chip only when image_count > 0", () => {
-    expect(row({ imageCount: 2 })).toContain("본문 이미지");
-    expect(row({ imageCount: 0 })).not.toContain("본문 이미지");
-    expect(row()).not.toContain("본문 이미지");
+    expect(row({ imageCount: 2 })).toContain("이미지");
+    expect(row({ imageCount: 0 })).not.toContain("이미지");
+    expect(row()).not.toContain("이미지");
   });
 });
