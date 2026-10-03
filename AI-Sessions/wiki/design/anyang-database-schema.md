@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: database
 ---
 
@@ -725,6 +725,8 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
     겹침을 mode와 무관하게 하나만 허용하면 컬럼이 필요 없다. mode별로 구분하거나 관리자 화면에 mode를 보이려면
     `mode text` 컬럼 추가가 필요하며 이는 스키마 변경이다 ``, backend 결정 뒤 0021에 합칠지 0022로 나눌지
     정한다. 이번 설계는 컬럼을 추가하지 않는다.
+- **확인 항목 56**: Supabase `collect_runs`는 스키마 변경 없이 쓴다(권고). 받기 API 호출 1회당 1행, 보드 실행 이력 원본은 보드 DB의 `collector_runs`다. 시험 호출이 남긴
+  success 0건 1행 처리(failed 갱신 권고)와 차단 페이지·0건을 성공으로 쓰지 않는 규칙은 [[anyang-board-collector-db]]의 D절. `mode` 컬럼은 여전히 미확정.
 - collect-job(수집 잡) 실행 시작 시 1행을 만들고(`status='running'`), 끝나면 `finished_at`·
   `status`·`collected_count`·`error_summary`를 갱신한다(애플리케이션 책임).
 - 관리자 화면의 "수동 수집 실행"은 이 테이블에 `trigger_type='manual'` 행을 만들며 잡을
@@ -949,7 +951,10 @@ select cron.schedule(
     보낸다"는 보장은 `notify_logs` 쪽 책임으로 분리한다(제안).
   - 자정 경계를 포함한 정확한 조건식과 pg_cron 실행이 지연될 때의 창 보정(예: 5분보다 오래
     걸린 실행 사이의 빈 구간)은 backend 구현 단계에서 최종 확정한다.
-- collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)이다. Vercel Cron은 이전 가능성 원칙 3과
+- **확인 항목 56(2026-10-04)으로 수집 트리거는 대체된다**: 안양시가 클라우드 IP를 막아 Supabase pg_cron·Vercel 직접 수집은 쓰지 않고 UNO Q 보드가 수집해 Vercel 받기 API로 보낸다.
+  아래 `collect-quick`·`collect-full` 두 잡과 템플릿 교체 계획은 **등록하지 않는다**(pg_cron은 2026-10-04 읽기 전용 확인으로 미설치, 등록된 잡 없음). 보드 쪽 DB는
+  [[anyang-board-collector-db]]가 원본이다. 알림 잡(`notify-job-trigger`)은 그대로다. 아래 서술은 알림 잡 이후를 위해 이력으로 남긴다.
+- (대체됨, 56) collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)이다. Vercel Cron은 이전 가능성 원칙 3과
   Hobby 하루 1회 제한 때문에 쓰지 않는다. **확인 항목 55(사용자 결정 2026-10-04)로 "하루 1회" 서술을 대체**한다.
   새 글을 분 단위로 반영해야 하므로 잡을 둘로 나눈다(두 cron 식은 확정, 10분 주기 조정 가능성은 55-f `(미확정)`).
 
@@ -1450,6 +1455,7 @@ authenticated 롤에 애초에 권한이 없다.
 - [[anyang-ai-models-data-transfer]]
 - [[anyang-service-scope]]
 - [[glossary]]
+- [[anyang-board-collector-db]]
 - [[anyang-backend-api]]
 - [[anyang-backend-tasks]]
 - [[anyang-frontend-screens]]

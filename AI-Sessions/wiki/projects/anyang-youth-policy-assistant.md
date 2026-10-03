@@ -366,8 +366,27 @@ owner: pm
     - (y) 경미(code-review): `web/lib/scheduler-auth.ts:3-4` 낡은 주석(구현 수정, backend). `remaining_unembedded`가 건수 조회 실패 시 null — 설계 6번 표에 null 경우 한 줄 보강 필요(설계 변경, (x)와 함께).
     - **결정(2026-10-04, user, 메인 세션 전달)**: (x) 선택지 (1) — 임베딩 반복의 새 묶음 시작 기준 200초(250초 대체), 상수만 변경, `runEmbedJob` 구조 그대로. (w) `remaining_unembedded`·`INVALID_RANGE` 제안대로 확정. (y) 조회 실패 시 `remaining_unembedded` null을 설계 표에 보강, `scheduler-auth.ts` 낡은 주석 정리(동작 변경 없음). 이어서 21차 → 구현·재검수 → 커밋 → push → `vercel deploy --prod`. 실제 백필 호출은 메인 세션. 55(v) 보류 유지.
     - **반영·배포 완료(2026-10-04)**: backend 설계 반영 → 21차 → 구현 `71a138d`(200초 상수, scheduler-auth 주석, 테스트; test 297·build 통과) → code-review 재검수 치명·주요·경미 0(잔여 위험: 마지막 묶음이 100초를 넘으면 300초 초과 가능 — Gemini 지연·429 때, 사용자 선택 (1)의 범위, 필요하면 선택지 (2)를 별도 설계로) → push `e770734..71a138d`(4커밋, 원격 일치) → `vercel deploy --prod` Ready(`dpl_ErU6b4BaNJsFh6yzS3Qi7QRdrgTC`, 운영 별칭 갱신), `/login` 200, 시크릿 없이 backfill·embed 401, 10분간 error 로그 없음. 실제 백필 호출(5페이지씩, 462건·청크 확인)은 메인 세션. 끝나면 사용자가 Vercel에서 `BACKFILL_SECRET` 삭제(선택).
+    - (v) 갱신(2026-10-04): 수집이 보드로 옮겨져(56) `SCHEDULER_SHARED_SECRET`은 수집에 더 이상 필요 없다. 알림 잡 등록 때 다시 다룬다.
     - (u) 경미(문서·서식, 차단 아님): [[anyang-database-schema]] 1439행이 advisory lock·`collect_runs.mode`를 아직 "미확정(55)"으로 적는다(사용자가 확정, backend-api에는 반영). `web/app/_lib/notices-refetch.ts:23` `type Doc =Pick` 공백 누락. 다음 수정 때 정리.
     - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
+56. **설계 변경(2026-10-04, 메인 세션 실측 — 안양시 클라우드 IP 차단, UNO Q 보드 수집기)**:
+    - 확인된 사실(메인 세션 실측): ① 서버 백필 시험 호출(`from=1&to=2`)이 200 `{collected_count:0}`으로 2.5초 만에 끝났고 `collect_runs`에 success 0건 1행이 남았다. ② 원인은 클라우드 IP 차단이다. Supabase(AWS 서울)에서 pg_net으로 목록을 GET하면 200, 10KB "IP 차단 안내" 페이지(meta description "IP 차단 안내", `p-subject` 0개)가 온다. Vercel icn1도 AWS 서울이라 같다. 가정용 회선(개발 PC, UNO Q)은 정상(90KB, `p-subject` 10개). 차단 기준은 미확인. 진단용으로 Supabase에 pg_net 확장을 설치했다(55 4단계 승인 범위). ③ Vercel·pg_cron 직접 수집은 불가. ④ UNO Q 보드: SSH 키 접속 가능(접속 정보는 raw 문서 `AI-Sessions/raw/arduino-server/아두이노-보드-포트-및-접속-방법.md`, 읽기만), Debian 13, Node v20.20.2, RAM 3.6G, PostgreSQL 17.10 실행 중(data_directory eMMC `/var/lib/postgresql/17/main`, 기존 DB `agentvault_licensing`·`aura_cafe` — 건드리지 않음), pgvector 없음, USB `/dev/sda1` ext4 15G가 `/mnt/usb`(fstab nofail, 1.1G 사용, apps·data·monitor-data·postgresql(postgres 소유)·public). 보드는 다른 서비스(AgentVault, 모니터, 시험 서버 등)도 운영 중.
+    - 사용자 결정(2026-10-04, user): 수집은 UNO Q 보드가 맡는다. 보드 PostgreSQL은 "수집 보관함 + 전송 대기열", 저장 위치 USB. 앱 주 DB는 Supabase 그대로(앱·추천·임베딩·푸시 불변). 기존 비밀번호·키·환경변수 절대 변경 금지, 새 키 추가는 가능. `DATABASE_URL` 로컬 미보관. 기록: [[anyang-deployment-portability]].
+    - 설계 요구(메인 세션, 제안값은 `(미확정)`): A 보드 수집기(Node 20, collector.ts 파서 재사용 방식, quick 10분·full 하루 1회·수동 backfill, systemd timer/cron 택일, 설치 경로, 로그, 2초 간격, `COLLECTOR_CONTACT`, 차단 페이지·0건은 성공 아님). B 보드 DB(새 DB 예 `anyang_collector`, USB 테이블스페이스와 미마운트 시 동작, 원문 HTML·정리 값·`sync_status` pending/synced/failed·재시도·last_error, 로컬 소켓 peer 인증, 기존 DB·서비스 무영향). C Vercel 받기 API(예 `POST /api/ingest/notices`, 새 키 하나 — 이름 제안·`BACKFILL_SECRET` 재사용 판단, `source_url` 배치 upsert, 해시 변경 시 청크 삭제·재임베딩, 시간 예산 임베딩, 항목별 결과, 남은 임베딩은 보드가 `/api/jobs/embed` 호출, 본문·첨부·is_pinned·image_count 규칙은 기존 승인값). D 서버 측(Vercel 직접 수집·pg_cron 수집 잡을 운영 경로에서 빼는 방식, 서버 수집기도 차단 페이지·0건을 실패로 기록, 시험 호출 success 0건 1행 처리). E 결정 문서 갱신(pm 완료). F 테스트 방법, 보드 배포 절차(기존 서비스 무중단), 롤백, 장애 영향.
+    - 진행: `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 승인된 설계에서 뺐다(22차). 설계 database → backend → (필요하면) frontend draft. 이번 호출은 설계만 — 코드·보드 변경·배포 없음.
+    - **설계 draft 완료(2026-10-04)**: database 새 문서 [[anyang-board-collector-db]](보드 DB `anyang_collector`, `collected_notices`(원문 HTML·정리 값·`sync_status`·`retry_count`·`last_error`·백오프 10분×2^n·상한 5), `collector_runs`, 롤 `anyang_collector`·OS 사용자 `arduino`, 로컬 소켓, 폴더 `/mnt/usb/anyang-collector/pg`, 마이그레이션 `web/collector/db/0001_init`, 시험은 보드 임시 클러스터) + [[anyang-database-schema]] 56 단락(수집 pg_cron 잡 등록 안 함 — Supabase에 pg_cron 미설치·잡 없음 확인, `collect_runs` 호출당 1행·mode 컬럼 불필요). backend 새 문서 [[anyang-board-collector]](파서 `web/lib/notice-parser.ts` 분리 공유, 보드 소스 `web/collector/` → esbuild 단일 파일 → scp, systemd timer(quick 매시 03·13…53분, full 서울 04:00, backfill 수동), 코드 `/home/arduino/anyang-collector/`, 설정 `/etc/anyang-collector/collector.env`(root 0600), 차단 페이지·첫 목록 0건 failed + 차단 시 60분 쉼, `POST /api/ingest/notices` 최대 20건·항목별 created/updated/unchanged/rejected/error·입력 검증·해시 재계산·200초 임베딩·`remaining_unembedded`, 새 키 `COLLECTOR_INGEST_SECRET`(헤더 `x-collector-secret`, `BACKFILL_SECRET` 재사용 안 함), 직접 수집은 `DIRECT_COLLECT_ENABLED` 스위치(없으면 꺼짐, 410 `DIRECT_COLLECT_DISABLED`)·서버 수집기 차단·0건 failed 보강, 보드 `collected_at` 미전송) + backend-api 포인터, backend-tasks 5-6~5-9. frontend [[anyang-frontend-screens]] 11절 "56 개정"·[[anyang-frontend-tasks]] K1(수동 수집 410이면 안내·이후 비활성, 이력 표 `describeRun` 문구 매핑, `/notices` 변경 없음). 재승인 대기.
+    - 사용자 결정 필요:
+      - (a) **보드 DB 구성안**: A안 = 기존 클러스터 + USB 테이블스페이스(지시서 기본) — USB 오류 시 PostgreSQL이 fsync 실패로 PANIC → 기존 DB까지 재시작될 수 있음(일반 동작 설명, 보드 재현 안 함). B안 = USB에 별도 클러스터 — 그 위험 없음, 별도 pg_hba로 peer 인증 가능, 프로세스 하나 추가. database 권고 B.
+      - (b) 직접 수집 경로: 스위치로 닫기(권장) / 그대로 / 삭제(승인 대상).
+      - (c) 시험 호출이 남긴 `collect_runs` success 0건 1행: database 권고 failed로 갱신 + `error_summary` `ip_blocked`(삭제·그대로도 비교, 모두 운영 쓰기라 승인 필요).
+      - (d) 새 환경변수 `COLLECTOR_INGEST_SECRET` — 사용자가 값을 만들어 Vercel과 보드 `/etc/anyang-collector/collector.env`에 직접 입력(에이전트는 값을 보지 않음). `COLLECTOR_CONTACT` 실제 값.
+      - (e) `esbuild` devDependency 추가.
+      - (f) 기존 `/mnt/usb/postgresql`(2026-08-01 미사용 데이터 디렉터리 복사본 71MB)·`/mnt/usb/data`(빈 폴더)의 용도 — 건드리지 않고 새 폴더를 쓰는 안.
+      - (g) 제안값 전부 `(미확정)`: 상태 전이·백오프·상한 5·90일 보존·raw_html 정책, systemd timer·03분 오프셋·`MemoryMax` 300M·60분 쉼·배치 20건, 화면 안내 문구·코드 문구 5종.
+    - 확인 필요(구현·시험 단계): 안양시가 보드 IP도 차단하는지(시험 ① dry-run), 보드 → Vercel POST가 배포 보호에 막히는지(시험 ③, 루트 GET은 307), 실패 행 `error_summary` 정확한 형식(frontend 질문 — 정해지면 종류 표시 추가), 스위치 상태 조회 API 필요 여부(frontend, 이번 안은 불필요).
+    - 범위 밖 참고(backend): 백필로 462건이 `collected_at=now()`로 한꺼번에 들어가면, 알림 잡 등록 후 `collected_at > enabled_at` 조건 때문에 과거 공지가 일괄 발송될 수 있다. 알림 잡 등록 전에 확인.
+    - 보안 참고(database 읽기 전용 확인, 보드 기존 설정 — 변경하지 않음): 보드 `pg_hba.conf`가 local·127.0.0.1·::1 모두 `trust`라 보드의 모든 OS 사용자가 비밀번호 없이 기존 DB에도 슈퍼유저로 접속할 수 있다. 이전 psql 기록 파일에 비밀번호 문자열이 남아 있다(문서에 옮기지 않음). 조치 여부는 사용자 판단.
+    - 역링크 남음(WARN): [[anyang-board-collector]] ← [[anyang-frontend-tasks]](backend 소유), [[anyang-database-schema]] ← [[anyang-board-collector]](database 소유). 다음 수정 때.
 
 ## 승인된 설계
 
@@ -401,14 +420,10 @@ owner: pm
 
 2026-10-04(17차): 확인 항목 55 사용자 결정·승인(메인 세션 전달 — (j) `source_url`만·unique 해제, (k)·(d) 최근 공지만 고정 위로, (c)·(p) image_count 합산, 나머지 제안값 전부, "제안대로 승인")을 database → backend → frontend가 반영한 뒤 6종을 기록한다. 55-b(고정 공지 마크업)·이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정하는 것으로 승인됐다. 55-i(첨부 직접 링크)와 (r)(배지 문구)는 승인 범위 밖 미결이다.
 
-- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-
 2026-10-04(18차): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(s) code-review "설계 변경 필요"(image_count에서 `div.p-photo` img 제외 규칙이 설계에 없음). 사용자 확인 후 재기록한다. 같은 날 18차로 `anyang-frontend-screens`·`anyang-frontend-tasks`·`anyang-cheongan-design-adoption`도 뺀다 — 사유: 55(r) 배지 문구 "본문 이미지" → "이미지"(user 결정). 반영 후 19차로 재기록한다.
 
 2026-10-04(19차): 55(s)·(r) 사용자 결정(메인 세션 전달)을 backend(5-1절 p-photo·smiley 제외 규칙, 실측 셀렉터)와 frontend(칩 문구 "이미지", `0c66ed0`)가 반영한 뒤 4종을 다시 기록한다. 55-b(고정 공지 실측)·55-i(첨부 직접 링크)는 미확인 그대로다.
 
-- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-cheongan-design-adoption]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(19차 이어서): `anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 55 백필 방식 변경(서버 분할 실행, `BACKFILL_SECRET`, user 결정). backend 설계 반영 후 20차로 재기록한다.
@@ -419,8 +434,7 @@ owner: pm
 
 2026-10-04(21차): 55(x)·(w)·(y) 사용자 결정(메인 세션 전달 — 200초, `remaining_unembedded`·`INVALID_RANGE` 확정, null 보강)을 backend가 반영한 뒤 2종을 다시 기록한다.
 
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+2026-10-04(22차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 56(안양시 클라우드 IP 차단, UNO Q 보드 수집기·Vercel 받기 API, 새 요청). 재승인 뒤 다시 기록한다. 같은 사유로 `anyang-frontend-screens`·`anyang-frontend-tasks`도 뺀다(관리자 "수동 수집" 버튼이 직접 수집 스위치로 410을 받음 — backend 보고). 남은 승인된 설계는 `anyang-cheongan-design-adoption`(19차)이다.
 
 ## Jev 도입 제안
 
@@ -466,3 +480,5 @@ owner: pm
 - [[anyang-jobs-collect-missing-maxduration]]
 - [[서비스-소개]]
 - [[anyang-cheongan-design-adoption]]
+- [[anyang-board-collector]]
+- [[anyang-board-collector-db]]

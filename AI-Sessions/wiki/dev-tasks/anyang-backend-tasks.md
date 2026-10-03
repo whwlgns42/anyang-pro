@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -77,7 +77,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    확정, 실패 처리한 행은 `STALE_RUNNING`), 겹치면 200 `skipped`(임베딩 호출 안 함), 임베딩 연쇄 유지. `/api/admin/collect-runs` POST는 `full`로
    호출하고 겹치면 409. 9번(시크릿 미들웨어)·5-1 의존. 테스트: 라우트 분기, 인증 유지, 겹침 방지, stale 정리.
    기존 `web/test/jobs-collect.test.ts`는 mode 인자·skipped 케이스를 추가해 갱신한다.
-5-3. **서버 분할 백필(신규, 확인 항목 55, 2026-10-04 로컬 스크립트 방식을 대체, user 확정)** —
+5-3. **서버 분할 백필(신규, 확인 항목 55, 2026-10-04 로컬 스크립트 방식을 대체, user 확정; 56으로 운영 경로에서 빠짐 — 구현은 완료된 상태로 두고 `DIRECT_COLLECT_ENABLED` 뒤로 닫는다, 5-8)** —
    [[anyang-backend-api#5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)]] 7번.
    `/api/jobs/collect`에 `mode=backfill&from=N&to=M` 추가: 인증 `x-backfill-secret`↔`BACKFILL_SECRET`
    (`timingSafeEqual`, 비어 있으면 401, `x-scheduler-secret`로는 불허, `quick`·`full` 경로 불변), 범위 `1≤from≤to≤47`·
@@ -95,10 +95,21 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    추천 경로는 유사도 순서 유지·`is_pinned`는 별표 표시용(확정). `GET /api/notices/:id`에 `attachments`·`image_count` 추가. 두 API 200
    응답에 `Cache-Control: no-store`. 선행: database 0021. 테스트: 응답 필드, 정렬, 숨김 404, 헤더. 이 응답 계약이
    확정되면 frontend 설계가 의존한다([[anyang-backend-api#2-1. 추천 공지 피드·상세 (frontend 조율, 2026-09-27)]]).
-5-5. **수집 잡 트리거 등록(backend 작업 아님, 확인 항목 55)** — `collect-quick`·`collect-full` pg_cron·pg_net 확장
+5-5. **수집 잡 트리거 등록(backend 작업 아님, 확인 항목 55; 56으로 대체 — 수집 트리거는 보드 systemd timer이고 `pg_cron` 수집 잡은 등록하지 않는다)** — `collect-quick`·`collect-full` pg_cron·pg_net 확장
    설치와 잡 등록, 실제 URL·`SCHEDULER_SHARED_SECRET` 입력은 database 소관 운영 작업이며 사용자 승인이 필요하다
    ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]). 등록 뒤 실제 POST 1회로 배포 보호(55-e)와 pg_net 타임아웃을
    확인한다. backend는 승인 기록이 없으면 이 단위를 실행하지 않는다.
+5-6. **파서·저장 분리(신규, 확인 항목 56, 동작 불변 리팩터링)** — `web/lib/notice-parser.ts`(순수 파서·상수·`contentHash`·`userAgent`, 신규
+   `isBlockedPage`·`hasDetailContent`)와 `web/lib/notice-store.ts`(`saveNotice`, 항목당 한 트랜잭션)를 만들고 `collector.ts`가 다시 내보낸다.
+   [[anyang-board-collector]] A-1. 5-1 의존. 테스트: 기존 `collector.test.ts`·`jobs-collect.test.ts` 전부 통과 + 함수 동일성, 차단 페이지 픽스처.
+5-7. **받기 API(신규, 확인 항목 56)** — `POST /api/ingest/notices`, `requireCollectorSecret`, `/api/jobs/embed`의 `x-collector-secret` 허용,
+   입력 검증·항목별 결과·`collect_runs` 호출당 1행·200초 임베딩 반복·`report`. [[anyang-board-collector]] C. 5-6 의존. 테스트: 같은 문서 F-1.
+   배포해도 `COLLECTOR_INGEST_SECRET`이 없으면 전부 401이라 무해하다. 키 값은 사용자가 Vercel에 넣는다(승인 대상).
+5-8. **직접 수집 닫기·실패 기록 보강(신규, 확인 항목 56)** — `DIRECT_COLLECT_ENABLED` 스위치(없으면 410 `DIRECT_COLLECT_DISABLED`),
+   `runCollectJob`의 차단 페이지·목록 0건 `failed` 기록. [[anyang-board-collector]] D. 5-6 의존. 관리자 화면 영향은 frontend 설계가 필요하다.
+5-9. **보드 수집기 프로그램·빌드(신규, 확인 항목 56)** — `web/collector/`(main·store·ingest-client), `web/scripts/build-collector.mjs`(esbuild 번들 1개),
+   보드 DB 마이그레이션 `web/collector/db/`(스키마는 database 소유 [[anyang-board-collector-db]]). [[anyang-board-collector]] A. 5-6·5-7 의존, 보드 DB 생성(database)이 선행.
+   **보드 설치·시험·백필은 이 작업 단위에 포함하지 않는다** — 구현 지시서에 단계별 사용자 승인(보드 변경, Supabase 쓰기, 새 환경변수)이 적혀 있을 때만 [[anyang-board-collector]] F-3을 따른다.
 6. **채팅 + RAG** — `/api/chat`(DeepSeek 스트리밍, 검색, 기억 추출·주입). 공용 가림 함수
    (`lib/mask-pii.ts` 등 경로)를 만들어 Gemini 임베딩·DeepSeek 전송·기억 추출 결과
    문장의 Gemini 임베딩까지 세 지점 모두에서 재사용(backend 설계 3절 0번, 2차 재점검 반영 —
@@ -234,3 +245,5 @@ robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13�
 - [[anyang-database-schema]]
 - [[anyang-youth-policy-assistant]]
 - [[anyang-service-scope]]
+- [[anyang-board-collector]]
+- [[anyang-board-collector-db]]

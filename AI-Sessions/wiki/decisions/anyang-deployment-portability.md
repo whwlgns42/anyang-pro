@@ -42,6 +42,8 @@ Vercel Hobby(함수 리전 `icn1` 서울) + Supabase 무료(서울 리전, pgvec
 
 수집 잡 트리거 결정(user, 2026-10-04, "새 글 즉시 반영" 요구): Supabase `pg_cron` + `pg_net`이 수집 API를 호출한다. 가벼운 확인(목록 1페이지, 새 글만 상세)을 10분마다, 정밀 점검(최근 1~2페이지 수정 감지)을 하루 1회(서울 04:00) 돌린다. 10분은 권장 주기라 조정할 수 있다. Vercel Cron은 Hobby가 하루 1회·실행 시각 ±59분이라 쓰지 않는다(원칙 3과도 일치). 세부는 [[anyang-backend-api]]·[[anyang-database-schema]] 설계에서 정한다.
 
+**수집 주체 변경(user, 2026-10-04)**: 안양시 사이트가 클라우드 IP를 차단한다(메인 세션 실측 2026-10-04 — Supabase·Vercel icn1(AWS 서울)에서 목록 GET 시 200 "IP 차단 안내" 페이지, 가정용 회선(개발 PC·UNO Q)은 정상, 차단 기준은 미확인). 그래서 위 pg_cron → Vercel 수집 트리거 결정은 수집에 대해서는 대체된다. 공지 수집은 **UNO Q 보드가 수집 전용으로** 맡는다(앱 서버 아님). 보드 PostgreSQL은 "수집 보관함 + 전송 대기열"(USB 저장)로만 쓰고, 앱의 주 DB는 Supabase 그대로다(앱·추천·임베딩·푸시 불변). 보드는 수집 결과를 Vercel 받기 API로 보낸다. 기존 비밀번호·키·환경변수는 바꾸지 않고, 새 키 추가만 허용한다. `DATABASE_URL`은 로컬에 두지 않는다. 위 표의 "UNO Q 미사용"은 앱 배포에 대해서만 유효하다. 알림 잡 트리거(pg_cron + pg_net)는 그대로다. 보드나 회선이 꺼지면 새 글 반영만 늦어진다. 세부는 [[anyang-database-schema]]·[[anyang-backend-api]] 설계에서 정한다.
+
 ## Links
 
 - [[anyang-youth-policy-assistant]]
@@ -50,3 +52,5 @@ Vercel Hobby(함수 리전 `icn1` 서울) + Supabase 무료(서울 리전, pgvec
 - [[anyang-database-schema]]
 - [[anyang-backend-api]]
 - [[anyang-frontend-screens]]
+- [[anyang-board-collector]]
+- [[anyang-board-collector-db]]

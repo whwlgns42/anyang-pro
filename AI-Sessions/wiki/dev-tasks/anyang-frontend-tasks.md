@@ -1,7 +1,7 @@
 ---
 type: dev-task
-date: 2026-09-27
-status: active
+date: 2026-10-04
+status: draft
 owner: frontend
 ---
 
@@ -189,6 +189,19 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - 화면 확인(실제 실행): `npm run dev`로 `/notices`와 상세를 390px·1200px에서 시안 설명(별표 고정 공지, "이미지" 배지, 날짜, 제목·발췌 각 2줄)과 대조. 고정 공지·이미지·첨부가 있는 글과 없는 글을 모두 본다(수집 전 DB가 비어 있으면 목 응답이나 백필 뒤 데이터가 필요하다). 탭 전환 후 복귀 시 30초 뒤 요청 1건, 30초 안 0건, 갱신 중 깜빡임 없음. 열지 못한 화면이 있으면 못 했다고 보고한다.
 - 커밋: 단위마다 `npm test`·`npm run build` 통과 후 git-manager에 맡긴다. push는 사용자 승인 전 보류.
 
+### 공지 수집 관리 — 보드 수집 이력 표시 (확인 항목 56, 신규, 설계 draft, 구현은 재승인 후)
+
+수집 주체가 보드로 바뀌어([[anyang-board-collector]]) 관리자 "수동 수집" 버튼이 410을 받고 이력에 보드 행이 쌓인다. 설계는 [[anyang-frontend-screens]] 11절 "56 개정"이고 값은 모두 `(미확정)`이며 그 설계 승인으로 확정된다. 이미 구현된 13번(`collect-runs-client.tsx`)에 대한 추가 작업이다. 새 API 없음, backend·database 변경 없음, 사용자 화면(`app/(tabs)/**`) 변경 없음.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| K1 | `describeRun`(실행 방식·상태·건수·오류 코드 문구, 원문 보존)과 `isDirectCollectDisabled(status, body)` 순수 함수 + 단위 테스트. `collect-runs-client.tsx`: 410(`DIRECT_COLLECT_DISABLED`)이면 안내(`hint-text`, `role="status"`)와 버튼 비활성, 이력 행 표시를 `describeRun` 결과로, 이력 위 안내 한 줄 | `web/app/_lib/collect-run-label.ts`(신규), `web/test/frontend-collect-run-label.test.ts`(신규), `web/app/admin/collect-runs/collect-runs-client.tsx` | 재승인 |
+
+- 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, `notices-tab.tsx`, `app/(tabs)/**`. 서버가 주는 값은 바꾸지 않고 화면에서만 변환한다.
+- 테스트 항목과 화면 확인 절차는 [[anyang-frontend-screens]] 테스트 방법의 "공지 수집 관리 — 보드 수집 이력 표시" 항목이 원본이다(여기에 복제하지 않는다). 매핑 대상 코드는 [[anyang-board-collector]] A-4 3번·C-2·C-4에 적힌 것만이고, 그 문서가 코드를 바꾸면 매핑표와 테스트를 같이 고친다.
+- 구현 중 backend가 `error_summary` 형식을 바꾸면(미해결 질문) 설계 변경이다. 구현 단계에서 UI를 만들 때는 `design-taste-frontend` 스킬을 호출하되, 기존 관리자 화면의 클래스(`card`, `hint-text`, `error-text`)를 따른다.
+- 커밋: `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
+
 ## 테스트 방법
 
 1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
@@ -200,3 +213,4 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - [[anyang-backend-api]]
 - [[anyang-youth-policy-assistant]]
 - [[anyang-cheongan-design-adoption]]
+- [[anyang-board-collector]] — 보드 수집기·직접 수집 스위치(K1의 근거)

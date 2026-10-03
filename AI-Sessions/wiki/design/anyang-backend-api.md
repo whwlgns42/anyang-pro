@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -52,6 +52,11 @@ stale N=10분, 겹침 응답, `mode` 기본값, 백필 실행 도구, `COLLECTOR
 구현·운영 확인 항목으로 남은 것은 고정 공지 마크업(55-b), 최종 POST·pg_net 타임아웃(55-e), 첨부 직접 링크(55-i),
 작은 이모지·아이콘 `<img>` 제외 규칙(구현 첫 단계에서 실제 HTML을 보고 정함)이다. 배포 순서는 0021 먼저, 코드 나중이다.
 status는 draft이며 pm이 승인 기록 후 구현 단계에서 active로 바꾼다.
+
+**2026-10-04 개정(확인 항목 56, 재승인 대기)**: 안양시가 클라우드 IP를 막아 공지 수집 주체가 UNO Q 보드로 바뀌었다
+([[anyang-deployment-portability]] "수집 주체 변경"). 보드 수집기·Vercel 받기 API(`POST /api/ingest/notices`)·직접 수집 경로 정리·테스트·배포는
+새 문서 [[anyang-board-collector]]가 원본이다. 이 문서에서는 5-1절(아래 56 개정 단락), 7절, 9절, 12절, 13-1절에 포인터만 단다. 5-1절의 파서·저장 규칙·해시·`image_count`는 그대로 유효하고 보드와
+Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모두 `(미확정)`이며 설계 승인으로 확정된다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -968,6 +973,11 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 
 ### 5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)
 
+> **56 개정(2026-10-04, 재승인 대기)**: 클라우드 IP 차단으로 이 절의 **Vercel 서버 직접 수집(2·4·5·6·7번의 수집 실행·`collect` 라우트 호출·서버 백필)은 운영 경로에서 빠진다**.
+> 1번 파서 규칙과 3번 저장 규칙(`source_url` upsert, 해시 분기, 청크 삭제)은 그대로 유효하며 보드가 파싱하고 받기 API가 같은 저장 규칙을 적용한다
+> ([[anyang-board-collector]] C-4). 직접 수집 라우트는 지우지 않고 환경변수 스위치로 닫으며([[anyang-board-collector]] D), 서버 수집기도
+> 차단 페이지·목록 0건을 `failed`로 기록한다. 7번의 `BACKFILL_SECRET` 서버 백필은 쓰지 않는다. 아래 본문은 스위치를 켠 환경(앱이 가정용 회선으로 이전한 경우)의 설계로 남긴다.
+
 구현 대상은 `web/lib/collector.ts`, `web/app/api/jobs/collect/route.ts`,
 `web/app/api/admin/collect-runs/route.ts`, `web/app/api/jobs/embed/route.ts`(백필 시크릿 허용)다.
 `web/scripts/backfill.ts`는 사용하지 않는다(7번). 스키마는
@@ -1147,6 +1157,9 @@ database에 요청한다).
 | `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 수집 잡이 같은 요청에서 이어서 호출(별도 트리거 없음). 단독 호출은 수동 복구용(`x-backfill-secret`도 허용, 5-1절 7번) |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
 
+- **2026-10-04 개정(확인 항목 56, 재승인 대기)**: 위 표의 `collect` 세 줄은 **운영에서 쓰지 않는다**. 수집 트리거는 보드의 systemd timer
+  (quick 10분·full 서울 04:00, 값 유지)가 맡고 결과는 `POST /api/ingest/notices`로 온다([[anyang-board-collector]] A·C). `pg_cron`은 설치된 적이 없고
+  수집 잡도 등록하지 않는다([[anyang-board-collector-db]] D). UNO Q로 앱을 옮기는 경우에만 위 행이 다시 쓰인다. `/api/jobs/embed`는 `x-collector-secret`도 받는다.
 - **2026-10-04 개정(확인 항목 55)**: 위 표의 collect 두 줄은 기존 "수집 하루 1회(Asia/Seoul 04:00)" 서술을 대체한다.
   두 잡의 pg_cron 등록 SQL은 database 소관이다
   ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]). Vercel Cron은 쓰지 않는다(Hobby는 하루 1회라 즉시 반영
@@ -1269,6 +1282,8 @@ database에 요청한다).
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
 | `COLLECTOR_CONTACT` | 공지 수집기 User-Agent에 넣는 문의 연락처(선택값, 확정, 확인 항목 55-a). 실제 값은 사용자가 Vercel·로컬 `.env.local`에 직접 넣는다. 미설정이면 연락처 없는 UA `anyang-youth-policy-bot/1.0`로 수집한다(5-1절 8번) |
+| `COLLECTOR_INGEST_SECRET` | 보드 → `POST /api/ingest/notices`·`/api/jobs/embed`의 `x-collector-secret` 인증(신규, 확인 항목 56, `(미확정)`). 비어 있으면 받기 API 전체 401. 사용자가 값을 만들어 Vercel과 보드 `collector.env`에 같게 넣는다. 값은 문서에 쓰지 않는다. [[anyang-board-collector]] C-1 |
+| `DIRECT_COLLECT_ENABLED` | 서버 직접 수집(`/api/jobs/collect`, 관리자 수동 수집)을 켜는 스위치(신규, 선택, 확인 항목 56, `(미확정)`). 없으면 꺼짐(410). 운영에서는 추가하지 않는다. [[anyang-board-collector]] D |
 
 ### 10. Vercel 배포 설정
 
@@ -1323,6 +1338,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
    같은 도메인을 그대로 쓰면(원칙 5 — 커스텀 도메인은 배포 시점에 붙여 이후 환경 전환과
    무관하게 유지) 리다이렉트 URI 변경이 불필요하다. 도메인 자체를 바꾸는 경우는 12-1절 절차를
    따른다.
+
+**수집 주체(56, 2026-10-04)**: 앱을 UNO Q로 옮기면 앱이 보드와 같은 가정용 회선이 되어 안양시가 막지 않는다. 그때는 보드 수집기와 받기 API를 쓰는 대신 `DIRECT_COLLECT_ENABLED=true`로
+직접 수집을 켜고 6번의 `cron + curl`을 쓰는 방식으로 돌아갈 수 있다(보드 수집기를 계속 써도 된다). 설계: [[anyang-board-collector]] D.
 
 **UNO Q → Vercel+Supabase**: 역순(1은 UNO Q PostgreSQL에서 `pg_dump`, 3은 Supabase
 `DATABASE_URL`로 `pg_restore`, 4는 `vercel deploy`, 6은 pg_cron+pg_net 잡 재등록).
@@ -1393,6 +1411,8 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | PATCH | `/api/admin/notices/:id/hide` | 공지 숨김. body `{ hidden_reason? }` |
 | PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
 
+- **56 개정(재승인 대기)**: 운영에서 `DIRECT_COLLECT_ENABLED`가 꺼져 있어 `POST /api/admin/collect-runs`는 410 `DIRECT_COLLECT_DISABLED`를 돌려준다.
+  `GET`은 그대로이며 보드 받기 API가 남긴 행이 보인다. 화면 영향은 [[anyang-board-collector]] D (frontend 설계 필요).
 - `POST /api/admin/collect-runs`는 5절 수집기 로직을 `trigger_type='manual'`,
   `triggered_by=<관리자 user_id>`로 `mode=full`(5-1절)로 동기 실행한다(제안). 진행 중인 수집이 있으면 409
   `ALREADY_RUNNING`이다. Vercel Fluid Compute 함수
@@ -1668,6 +1688,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - **수동 수집 실행**: `POST /api/admin/collect-runs` 호출 시 `collect_runs`에
   `trigger_type='manual'`, `triggered_by=<관리자 id>` 행이 생기고 응답이 300초 안에
   오는지(목 서버로 짧게) 확인.
+- **보드 수집기·받기 API(확인 항목 56)**: 테스트 방법은 [[anyang-board-collector]] F-1(받기 API 단위·인증·검증, 차단 페이지 픽스처, 파서 공유, 보드 수집기 목 테스트), 배포·시험은 F-3.
 - **공지 전체 수집·즉시 갱신(5-1절·7절, 확인 항목 55)**: 모두 목 기반 단위 테스트다(실제 사이트·운영 DB를 쓰지 않는다).
   - 실제 사이트 확인(구현 첫 단계, 코드보다 먼저): `curl`로 목록 1페이지와 상세 3개를 받아(요청 간격 2초) 고정 공지
     마크업, 첨부 영역 셀렉터, 본문 `<img>` 구조(작은 이모지·아이콘 제외 규칙 포함), 응답 시간을 확정하고 그 HTML
@@ -1718,6 +1739,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   `api_usage_logs`에 대응하는 `status` 값으로 1행씩 남는지 확인.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
+
+- **보드 수집기·받기 API(확인 항목 56, 신규, 재승인 대기)** — 모든 값 `(미확정)`, 목록과 이유는 [[anyang-board-collector]] "확인이 필요한 항목" 1~8번:
+  파서 공유·번들 복사·`esbuild`, systemd timer, 새 키 `COLLECTOR_INGEST_SECRET`(`BACKFILL_SECRET` 재사용 안 함), 직접 수집 스위치 `DIRECT_COLLECT_ENABLED`, frontend 설계 필요, 배포 보호 확인.
 
 - 수집 대상 게시판(확정 URL)의 `robots.txt` 준수 확인과 실제 HTML 구조 확인 — 이 세션에는
   웹 접근 도구가 없어 구현 착수 전 확인이 필요하다(5절). `Disallow`에 걸리면 설계 변경이
@@ -1838,3 +1862,5 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - [[anyang-preferences-put-missing-mask-pii]]
 - [[anyang-backend-api-mihwakjeong-removal-corruption]]
 - [[anyang-jobs-collect-missing-maxduration]]
+- [[anyang-board-collector]]
+- [[anyang-board-collector-db]]
