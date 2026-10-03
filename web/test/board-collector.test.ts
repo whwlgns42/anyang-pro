@@ -231,6 +231,18 @@ describe("board collector run", () => {
       expect(e.siteReqs()).toHaveLength(0);
     });
 
+    it("a board DB write error is recorded on the board only and not reported to Vercel", async () => {
+      const e = makeEnv({ site: (u) => new Response(u.includes("selectBbsNttList") ? listHtml(ROW(1)) : detailHtml(), { status: 200 }) });
+      const q = e.db.query.getMockImplementation()!;
+      e.db.query.mockImplementation(async (sql: string, p?: unknown[]) => {
+        if (sql.includes("insert into collected_notices")) throw new Error("db down");
+        return q(sql, p);
+      });
+      expect(await run(args("full"), e.deps)).toBe(1);
+      expect(e.finish()).toEqual({ status: "failed", summary: "unexpected" });
+      expect(e.ingestReqs().filter((r) => r.body?.report)).toHaveLength(0);
+    });
+
     it("stored values: unchanged re-collect keeps sync_status via the is-distinct-from upsert", async () => {
       const e = makeEnv({ site: (u) => new Response(u.includes("selectBbsNttList") ? listHtml(ROW(1)) : detailHtml(), { status: 200 }) }, { existing: { [urlFor(1)]: "old" } });
       await run(args("full"), e.deps);
@@ -299,6 +311,13 @@ describe("board collector run", () => {
       const { e } = await sendOne({ ingest: () => json(200, { results: [{ result: "created" }] }) });
       expect(e.find("sync_status = 'synced'")).toHaveLength(0);
       expect(e.find("retry_count = retry_count + 1")).toHaveLength(2);
+    });
+
+    it("a null or non-object result item retries only that item; the batch is not resent forever", async () => {
+      const { code, e } = await sendOne({ ingest: () => json(200, { results: [null, { result: "created", code: 5 }], remaining_unembedded: 0 }) });
+      expect(code).toBe(0);
+      expect(e.find("retry_count = retry_count + 1")[0].params).toEqual(["1", "bad_item", 5]);
+      expect(e.find("sync_status = 'synced'")[0].params).toEqual([["2"]]);
     });
 
     it("quick/full stop after 30 batches; sync has no limit", async () => {

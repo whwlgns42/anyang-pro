@@ -25,6 +25,10 @@ export async function POST(request: Request) {
 
   const startedAt = Date.now();
   try {
+    // 본문을 읽기 전에 선언된 길이로 먼저 거른다(헤더가 없으면 읽은 뒤 검사).
+    if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
+    }
     const text = await request.text();
     if (Buffer.byteLength(text) > MAX_BODY_BYTES) {
       return NextResponse.json({ error: "PAYLOAD_TOO_LARGE" }, { status: 413 });

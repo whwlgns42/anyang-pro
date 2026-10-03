@@ -175,11 +175,14 @@ async function collect(c: Ctx): Promise<void> {
     }
     if (parseFailed > 0) throw new CollectFail("parse_failed");
   } catch (err) {
-    const code = err instanceof CollectFail ? err.code : "fetch_failed";
-    if (!(err instanceof CollectFail)) deps.log("collect: unexpected error");
-    st.failure = code;
-    st.reportCode = code;
-    deps.log(`collect: failed ${code}`);
+    if (err instanceof CollectFail) {
+      st.failure = err.code;
+      st.reportCode = err.code;
+    } else {
+      // 보드 DB 오류 등 사이트 요청 실패가 아닌 것: Vercel에 보고하지 않고 보드 collector_runs에만 남긴다.
+      st.failure = "unexpected";
+    }
+    deps.log(`collect: failed ${st.failure}`);
   }
 }
 
@@ -225,11 +228,13 @@ async function transmit(c: Ctx, ingest: ReturnType<typeof makeIngestClient>): Pr
     const synced: string[] = [];
     for (let i = 0; i < batch.length; i++) {
       const r = results[i];
-      if (r.result === "created" || r.result === "updated" || r.result === "unchanged") synced.push(batch[i].id);
+      // 항목 형식이 어긋나면(null 등) 그 항목만 일시 오류로 다룬다.
+      if (!r || typeof r !== "object") await store.markRetry(db, batch[i].id, "bad_item");
+      else if (r.result === "created" || r.result === "updated" || r.result === "unchanged") synced.push(batch[i].id);
       else if (r.result === "rejected") {
-        await store.markFailed(db, batch[i].id, r.code ?? "rejected");
+        await store.markFailed(db, batch[i].id, typeof r.code === "string" ? r.code : "rejected");
         st.sync_failed_count++;
-      } else await store.markRetry(db, batch[i].id, r.code ?? "error");
+      } else await store.markRetry(db, batch[i].id, typeof r.code === "string" ? r.code : "error");
     }
     await store.markSynced(db, synced);
     st.synced_count += synced.length;

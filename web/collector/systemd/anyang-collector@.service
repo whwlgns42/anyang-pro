@@ -2,6 +2,9 @@
 # 설계: AI-Sessions/wiki/design/anyang-board-collector.md A-2·A-3. backfill은 타이머가 없고 systemd-run으로 수동 실행한다(F-3 7번).
 [Unit]
 Description=Anyang youth notice collector (%i)
+Wants=network-online.target
+After=network-online.target postgresql@17-collector.service
+Requires=postgresql@17-collector.service
 # USB가 마운트되지 않았으면 실행하지 않는다(조용히 건너뜀, journald에 condition failed).
 ConditionPathIsMountPoint=/mnt/usb
 

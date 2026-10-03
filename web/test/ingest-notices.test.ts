@@ -147,6 +147,15 @@ describe("POST /api/ingest/notices", () => {
     });
   });
 
+  describe("content-length", () => {
+    it("413 before reading the body when the declared length is over 4MB", async () => {
+      const r = req({ kind: "quick", items: [item(1)] }, { "x-collector-secret": "cs", "content-length": String(4 * 1024 * 1024 + 1) });
+      const spy = vi.spyOn(r, "text");
+      expect((await POST(r)).status).toBe(413);
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("item validation: only that item is rejected, the rest are processed", () => {
     const cases: [string, Record<string, unknown>, string][] = [
       ["other domain", { source_url: "https://evil.example/youth/selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=1" }, "INVALID_URL"],
