@@ -303,6 +303,8 @@ owner: pm
 53. **후속(2026-10-03, 52 구현·검수에서 나옴, 차단 아님)**:
     - (a) **push 여부(사용자 결정 필요)**: 로컬이 원격보다 5개 이상 앞섬(52 커밋 포함). 45·51(c) 보류 유지인지.
     - (b) 채팅 입력에 한글 조합 중 Enter 처리(`isComposing`)가 없어 중복 전송 가능(frontend 발견, 기존 동작). 47(c) 버그 목록과 함께 처리할지.
+      - **해결(2026-10-03, user 결정 "지금 수정", 메인 세션 전달)**: frontend `8d4de22` — `web/app/_lib/composer-key.ts` `shouldSubmitOnKey`(Enter·Shift 아님·`isComposing` 아님·`keyCode` 229 아님), `ui/chat.tsx` Composer 연결, 테스트 4건(npm test 244개·build 통과). 설계 변경 없음. code-review 치명·주요·경미 없음, 다른 Enter 전송 패턴 없음. 실제 한글 IME 수동 확인은 못 함(Chrome·Safari 사람 확인 권장).
+      - 참고(경미, 설계 잠금 대상): [[anyang-frontend-screens]]는 채팅 키 처리 위치를 `chat-client.tsx`로 적지만 실제는 `ui/chat.tsx`의 Composer. 다음 frontend 설계 수정 때 정리.
     - (c) 경미(code-review): ① `memory-client.tsx` 버튼이 전역 `button` 규칙을 인라인 유틸리티로 덮음 — 설계 4절 4번 문장("옛 클래스를 쓰지 않는다")과 어긋남. 전역 `button` 규칙을 지울 때 함께 정리. ② `admin/admin-nav.tsx`가 인라인 style과 `.bottom-nav` 클래스를 상단 탭으로 씀(동작 정상). ③ 탭 강제 종료로 `pagehide`가 안 오면 5초 안에 지운 기억이 남음(데이터 손실 아님, 설계 범위 안). ④ `layout.tsx` 글꼴 `subsets: ["latin"]` — 한글은 포함되나 preload 안 돼 첫 렌더 글꼴 깜빡임 가능(브라우저 미확인).
     - (d) 실제 로그인 상태 390/768/1200 화면 확인은 사람이 해야 한다(`DATABASE_URL` 없는 환경).
 
