@@ -1,7 +1,16 @@
-/* ponytail: 최소 공통 스타일. 디자인 시스템·CSS 프레임워크 도입은 이번 요청 범위 밖(YAGNI).
-   design-taste-frontend 적용 (2026-09-28): 공공성·신뢰 우선 유틸리티 PWA로 읽어
-   VARIANCE 3 / MOTION 2 / DENSITY 4로 낮게 잡았다 — 마케팅 랜딩이 아니라 채팅·목록 중심
-   실무 화면이라 절제된 톤, 단일 액센트, 낮은 모션을 기본으로 한다. */
+/* 청안(cheongan) 디자인 적용 (확인 항목 52). 토큰은 design-system/ 원본 그대로.
+   옛 의미 토큰(--accent, --bg 등)은 아래 :root에서 청안 토큰을 다시 가리킨다.
+   옛 클래스 규칙은 @layer components 안에 둬서 Tailwind 유틸리티(utilities 레이어)가 이긴다. */
+@import "tailwindcss";
+@import "../design-system/tailwind.css";
+@import "../design-system/tokens.css" layer(base);
+
+@theme {
+  --breakpoint-desktop: 75rem; /* 1200px */
+  --container-column: 45rem; /* 콘텐츠 열 최대 폭 720px */
+  --container-admin: 65rem; /* 관리자 1040px */
+}
+
 :root {
   color-scheme: light;
 
@@ -17,51 +26,58 @@
   --zinc-900: #18181b;
 
   /* 시맨틱 토큰 — 컴포넌트는 이 이름만 참조한다 */
-  --fg: var(--zinc-900);
-  --muted: var(--zinc-500);
-  --bg: #ffffff;
-  --surface: var(--zinc-50);
-  --border: var(--zinc-200);
-  --border-strong: var(--zinc-300);
+  --fg: var(--color-ink);
+  --muted: var(--color-ink-3);
+  --bg: var(--color-paper);
+  --surface: var(--color-surface);
+  --border: var(--color-rule);
+  --line-strong: var(--color-field);
 
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-active: #1e40af;
-  --accent-fg: #ffffff;
-  --accent-soft: #eff6ff;
-  --accent-soft-border: #bfdbfe;
+  --accent: var(--color-accent);
+  --accent-hover: var(--color-accent-press);
+  --accent-active: var(--color-accent-press);
+  --accent-fg: var(--color-on-accent);
+  --accent-soft: var(--color-surface);
+  --accent-soft-border: var(--color-rule);
 
-  --danger: #dc2626;
-  --danger-hover: #b91c1c;
-  --danger-soft: #fef2f2;
+  --danger: var(--color-danger);
+  --danger-hover: var(--color-danger);
+  --danger-soft: var(--color-surface);
 
-  --warning-bg: #fff7ed;
-  --warning-border: #fdba74;
+  --warning-bg: var(--color-surface);
+  --warning-border: var(--color-rule);
 
   /* 모양 일관성 — 카드·입력·버튼은 전부 이 반경만 쓴다 (SHAPE CONSISTENCY LOCK) */
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: var(--radius-control);
+  --legacy-radius-sm: 6px;
 
-  --shadow-card: 0 1px 2px rgba(24, 24, 27, 0.05);
-  --shadow-card-hover: 0 6px 20px -8px rgba(37, 99, 235, 0.25);
+  --shadow-card: none;
+  --shadow-card-hover: none;
 
   --motion-fast: 120ms ease;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.55;
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    word-break: keep-all;
+    text-wrap: pretty;
+  }
+
+  /* 포커스 가시성 (a11y) — 모든 상호작용 요소 공통 */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--fg);
-  background: var(--surface);
-  -webkit-font-smoothing: antialiased;
-}
-
+@layer components {
 a {
   color: var(--accent);
 }
@@ -73,16 +89,6 @@ a {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
-}
-
-/* 포커스 가시성 (a11y) — 모든 상호작용 요소 공통 */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .app-shell {
@@ -106,6 +112,7 @@ textarea:focus-visible {
 }
 
 h1 {
+  font-family: var(--font-display);
   font-size: 1.375rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -115,6 +122,30 @@ h1 {
 
 .page > h1 {
   margin-bottom: 16px;
+}
+
+/* 프리플라이트가 지운 제목·문단·목록 기본 모양을 옛 화면(.page, .auth-shell) 안에서만 되살린다.
+   새 컴포넌트는 유틸리티만 쓰므로 영향 없음. C10에서 쓰이지 않으면 정리한다. */
+:where(.page, .auth-shell) h2 {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.25rem 0 0.5rem;
+}
+
+:where(.page, .auth-shell) p {
+  margin: 0.75rem 0;
+}
+
+:where(.page) :is(ul, ol) {
+  list-style: revert;
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+
+:where(.page) li {
+  margin: 0.25rem 0;
 }
 
 .field {
@@ -139,7 +170,7 @@ h1 {
 .field select,
 .field textarea {
   padding: 11px 12px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   font-size: 1rem;
   background: var(--bg);
@@ -213,7 +244,7 @@ button:disabled {
 button.secondary {
   background: var(--bg);
   color: var(--accent);
-  border-color: var(--border-strong);
+  border-color: var(--line-strong);
 }
 
 button.secondary:hover:not(:disabled) {
@@ -442,7 +473,7 @@ a.card:hover {
 .chat-input-row textarea {
   flex: 1;
   padding: 11px 12px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   resize: none;
   font-size: 1rem;
@@ -458,7 +489,7 @@ a.card:hover {
 
 .banner {
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--legacy-radius-sm);
   background: var(--warning-bg);
   border: 1px solid var(--warning-border);
   margin-bottom: 12px;
@@ -537,7 +568,7 @@ a.card:hover {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--legacy-radius-sm);
   background: var(--accent);
   color: var(--accent-fg);
   font-weight: 700;
@@ -635,4 +666,5 @@ a.card:hover {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
 }

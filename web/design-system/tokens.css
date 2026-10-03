@@ -1,0 +1,167 @@
+/* 자동 생성 파일이에요. 직접 고치지 말고 tokens.json을 고친 뒤 `node build-tokens.mjs`를 실행하세요. */
+/* 글꼴 불러오기는 README.md 참고 */
+
+:root {
+  --color-paper: #F5F3ED; /* 배경 */
+  --color-surface: #FCFBF8; /* 카드·입력창 면 */
+  --color-rule: #DAD5C9; /* 구분선, 카드 테두리 */
+  --color-field: #938D80; /* 입력창 테두리 (surface 대비 3.2:1) */
+  --color-ink: #17191E; /* 본문·제목 (paper 대비 15.8:1) */
+  --color-ink-2: #454A54; /* 발췌·설명 (paper 대비 8.0:1) */
+  --color-ink-3: #676C76; /* 날짜·메타, 안 고른 탭 (paper 대비 4.7:1, 글자색 하한) */
+  --color-accent: #1F4A7C; /* 행동·선택·근거 번호·내 말풍선 (paper 대비 8.1:1) */
+  --color-accent-press: #163A63; /* 기본 버튼 누름 */
+  --color-on-accent: #FFFFFF; /* accent 위 글자 (9.0:1) */
+  --color-danger: #A33A2B; /* 탈퇴·삭제 (paper 대비 5.9:1) */
+  --color-switch-off: #8C8679; /* 꺼진 스위치 트랙 (surface 대비 3.5:1) */
+  --color-disabled: #E4E0D6; /* 비활성 버튼 배경 */
+
+  --font-display: Hahmlet, AppleMyungjo, serif; /* 제목 */
+  --font-sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; /* 본문 */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace; /* 날짜·숫자 */
+
+  --text-display: 28px; /* 탭 화면 제목 */
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.01em;
+  --text-display-sm: 24px; /* 공지 상세 제목 */
+  --text-display-sm--line-height: 34px;
+  --text-display-sm--font-weight: 600;
+  --text-display-sm--letter-spacing: -0.01em;
+  --text-heading: 19px; /* 안내 상자 제목 (예: iPhone 홈 화면 추가 안내) */
+  --text-heading--line-height: 28px;
+  --text-heading--font-weight: 600;
+  --text-heading--letter-spacing: 0;
+  --text-title: 16px; /* 공지 제목, 설정 항목 */
+  --text-title--line-height: 24px;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: 0;
+  --text-body: 15px; /* 답변·본문 */
+  --text-body--line-height: 25px;
+  --text-body--font-weight: 400;
+  --text-body--letter-spacing: 0;
+  --text-body-sm: 14px; /* 발췌, 설명 */
+  --text-body-sm--line-height: 21px;
+  --text-body-sm--font-weight: 400;
+  --text-body-sm--letter-spacing: 0;
+  --text-label: 13px; /* 카드 머리, 소제목 */
+  --text-label--line-height: 18px;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: 0;
+  --text-meta: 12px; /* 날짜, 조건 줄 */
+  --text-meta--line-height: 16px;
+  --text-meta--font-weight: 400;
+  --text-meta--letter-spacing: 0;
+  --text-tab: 11px; /* 탭 바 글자 (현재 탭은 600) */
+  --text-tab--line-height: 14px;
+  --text-tab--font-weight: 500;
+  --text-tab--letter-spacing: 0;
+
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+
+  --size-touch: 44px; /* 최소 터치 영역 */
+  --size-gutter: 20px; /* 화면 좌우 여백 */
+  --size-control: 48px; /* 입력창·보내기 버튼 높이 */
+  --size-button-lg: 52px; /* 하단 고정 기본 버튼 높이 */
+
+  --radius-badge: 4px; /* 본문 이미지 표시 */
+  --radius-card: 6px; /* 근거 카드, 이미지 안내 상자 */
+  --radius-control: 12px; /* 입력창, 버튼, 설정 묶음 */
+  --radius-bubble: 18px; /* 내 말풍선 */
+  --radius-bubble-tail: 4px; /* 내 말풍선 오른쪽 아래 모서리 */
+  --radius-pill: 9999px; /* 스위치, 보내기 버튼 */
+
+  --border-hairline: 1px; /* 구분선, 카드 테두리 */
+  --border-strong: 2px; /* 목록 시작선 (ink) */
+
+  --duration-fast: 150ms; /* 등장, 상태 변화 */
+  --duration-base: 200ms; /* 화면 전환 */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1); /* 기본 감속 곡선. prefers-reduced-motion이면 끄기 */
+}
+
+/* 글자 스타일: class="type-body" 처럼 써요 */
+.type-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  font-weight: var(--text-display--font-weight);
+  letter-spacing: var(--text-display--letter-spacing);
+}
+
+.type-display-sm {
+  font-family: var(--font-display);
+  font-size: var(--text-display-sm);
+  line-height: var(--text-display-sm--line-height);
+  font-weight: var(--text-display-sm--font-weight);
+  letter-spacing: var(--text-display-sm--letter-spacing);
+}
+
+.type-heading {
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  line-height: var(--text-heading--line-height);
+  font-weight: var(--text-heading--font-weight);
+  letter-spacing: var(--text-heading--letter-spacing);
+}
+
+.type-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--text-title--font-weight);
+  letter-spacing: var(--text-title--letter-spacing);
+}
+
+.type-body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--text-body--font-weight);
+  letter-spacing: var(--text-body--letter-spacing);
+}
+
+.type-body-sm {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  font-weight: var(--text-body-sm--font-weight);
+  letter-spacing: var(--text-body-sm--letter-spacing);
+}
+
+.type-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  font-weight: var(--text-label--font-weight);
+  letter-spacing: var(--text-label--letter-spacing);
+}
+
+.type-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: var(--text-meta--font-weight);
+  letter-spacing: var(--text-meta--letter-spacing);
+}
+
+.type-tab {
+  font-family: var(--font-sans);
+  font-size: var(--text-tab);
+  line-height: var(--text-tab--line-height);
+  font-weight: var(--text-tab--font-weight);
+  letter-spacing: var(--text-tab--letter-spacing);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}

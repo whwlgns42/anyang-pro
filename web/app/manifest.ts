@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "안양비서",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#2563eb",
+    background_color: "#F5F3ED",
+    theme_color: "#F5F3ED",
     icons: [],
   };
 }
