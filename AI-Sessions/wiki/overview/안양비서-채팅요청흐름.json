@@ -5,7 +5,7 @@
     "title": "안양 비서 채팅 요청 흐름",
     "viewBox": [
       1080,
-      590
+      618
     ],
     "column_fit": "spread",
     "quality_profile": "showcase"
@@ -56,17 +56,17 @@
     },
     {
       "from": 208,
-      "to": 284,
-      "label": "근거 검색"
+      "to": 314,
+      "label": "근거 · 기억 검색"
     },
     {
-      "from": 290,
-      "to": 368,
+      "from": 320,
+      "to": 398,
       "label": "스트리밍 응답"
     },
     {
-      "from": 374,
-      "to": 452,
+      "from": 404,
+      "to": 482,
       "label": "응답 후 처리 after()"
     }
   ],
@@ -95,17 +95,24 @@
       "variant": "emphasis"
     },
     {
-      "id": "search",
+      "id": "memory",
       "from": "api",
       "to": "db",
       "y": 244,
+      "label": "기억 조회 (최근 5 + 유사 5, 최대 10)"
+    },
+    {
+      "id": "search",
+      "from": "api",
+      "to": "db",
+      "y": 272,
       "label": "선호 벡터 결합 · top-5 검색"
     },
     {
       "id": "chunks",
       "from": "db",
       "to": "api",
-      "y": 272,
+      "y": 300,
       "label": "관련 공고 청크",
       "variant": "return"
     },
@@ -113,15 +120,15 @@
       "id": "llm",
       "from": "api",
       "to": "deepseek",
-      "y": 300,
-      "label": "대화 + 근거로 스트리밍 요청",
+      "y": 328,
+      "label": "대화 + 근거 + 기억(시스템 프롬프트)",
       "variant": "emphasis"
     },
     {
       "id": "sse",
       "from": "api",
       "to": "web",
-      "y": 328,
+      "y": 356,
       "label": "citations 이벤트 + 토큰 스트림",
       "variant": "return"
     },
@@ -129,7 +136,7 @@
       "id": "render",
       "from": "web",
       "to": "user",
-      "y": 356,
+      "y": 384,
       "label": "답변 · 출처 표시",
       "variant": "return"
     },
@@ -137,24 +144,24 @@
       "id": "save-answer",
       "from": "api",
       "to": "db",
-      "y": 384,
-      "label": "답변 저장",
+      "y": 412,
+      "label": "답변 저장 (오류 시 받은 부분까지)",
       "variant": "dashed"
     },
     {
-      "id": "summarize",
+      "id": "extract",
       "from": "api",
       "to": "deepseek",
-      "y": 412,
-      "label": "선호 요약 (6개마다)",
+      "y": 440,
+      "label": "선호 추출 (매 답변, 게이트 없음)",
       "variant": "dashed"
     },
     {
       "id": "save-pref",
       "from": "api",
       "to": "db",
-      "y": 440,
-      "label": "선호 임베딩 → user_preferences",
+      "y": 468,
+      "label": "거리 0.08 미만 갱신 · 아니면 추가",
       "variant": "dashed"
     }
   ],
@@ -162,13 +169,13 @@
     {
       "participant": "web",
       "from": 160,
-      "to": 362,
+      "to": 390,
       "type": "frontend"
     },
     {
       "participant": "api",
       "from": 160,
-      "to": 446,
+      "to": 474,
       "type": "backend"
     },
     {
@@ -186,23 +193,24 @@
     {
       "participant": "db",
       "from": 239,
-      "to": 278,
+      "to": 306,
       "type": "database"
     },
     {
       "participant": "deepseek",
-      "from": 295,
-      "to": 334,
+      "from": 323,
+      "to": 362,
       "type": "external"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "근거 검색 (RAG)",
+      "title": "근거 검색 · 기억 주입",
       "items": [
         "질문·선호 벡터로 notice_chunks top-5 검색",
-        "PII 마스킹 후 Gemini 임베딩"
+        "PII 마스킹 후 Gemini 임베딩",
+        "기억 최근 5 + 유사 5(최대 10)를 시스템 프롬프트에 주입"
       ]
     },
     {
@@ -218,7 +226,8 @@
       "title": "응답 후 처리",
       "items": [
         "after()로 응답 뒤 저장 완료 보장",
-        "6개마다 선호 요약 적재 (주기 미확정)"
+        "매 답변마다 선호 추출, 기존 기억과 거리 0.08 미만이면 갱신",
+        "스트림 오류 시 받은 부분까지 저장"
       ]
     }
   ]
