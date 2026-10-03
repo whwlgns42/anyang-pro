@@ -305,8 +305,10 @@ export async function POST(request: NextRequest) {
     : "";
 
   const systemPrompt =
-    "당신은 안양시 청년정책 안내 비서입니다. 아래 사용자 조건에 맞는 공지를 우선 언급하며 " +
-    `답하세요.\n\n사용자 조건 - ${conditionText}${memoryBlock}\n\n관련 공지:\n${noticesText}`;
+    "당신은 안양시 청년정책 안내 비서입니다. 마크다운 형식(**굵게**, ##제목 등)을 사용하지 마세요. " +
+    "예: Q: 무엇을 도와드릴까요? A: 안양시는 청년을 위한 정책을 제공합니다. 주요 내용은 다음과 같습니다. " +
+    "아래 사용자 조건에 맞는 공지를 우선 언급하며 답하세요.\n\n사용자 조건 - " +
+    `${conditionText}${memoryBlock}\n\n관련 공지:\n${noticesText}`;
 
   const { rows: historyRows } = await pool.query<{ role: string; content: string }>(
     `select role, content from messages where conversation_id = $1 order by created_at asc`,
