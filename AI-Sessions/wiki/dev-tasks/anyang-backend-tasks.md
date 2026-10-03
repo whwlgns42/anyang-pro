@@ -77,10 +77,19 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    확정, 실패 처리한 행은 `STALE_RUNNING`), 겹치면 200 `skipped`(임베딩 호출 안 함), 임베딩 연쇄 유지. `/api/admin/collect-runs` POST는 `full`로
    호출하고 겹치면 409. 9번(시크릿 미들웨어)·5-1 의존. 테스트: 라우트 분기, 인증 유지, 겹침 방지, stale 정리.
    기존 `web/test/jobs-collect.test.ts`는 mode 인자·skipped 케이스를 추가해 갱신한다.
-5-3. **백필 스크립트(신규, 확인 항목 55)** — `web/scripts/backfill.ts`(5-1절 7번). `--pages A-B`(기본 1-47),
-   `runCollectJob` backfill + `runEmbedJob` 루프. 실행은 `npx tsx`(devDependency 추가 안 함, 확정). 5-1·5-2 의존.
-   테스트: 인자 파싱·루프 종료 단위 테스트. **실제 실행은 운영 DB에 쓰므로 사용자 승인 뒤**: `--pages 1-2` 시험 실행
-   → 같은 명령 재실행(중복 없음 확인) → 전체 1-47 → `count(*)`·임베딩 청크·`collect_runs` 확인.
+5-3. **서버 분할 백필(신규, 확인 항목 55, 2026-10-04 로컬 스크립트 방식을 대체, user 확정)** —
+   [[anyang-backend-api#5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)]] 7번.
+   `/api/jobs/collect`에 `mode=backfill&from=N&to=M` 추가: 인증 `x-backfill-secret`↔`BACKFILL_SECRET`
+   (`timingSafeEqual`, 비어 있으면 401, `x-scheduler-secret`로는 불허, `quick`·`full` 경로 불변), 범위 `1≤from≤to≤47`·
+   `to-from+1≤5` 위반 400, `skipExisting=true` 고정, 기존 advisory lock 겹침 방지, 수집 뒤 같은 요청에서
+   `runEmbedJob`을 시간 예산(250초 `(미확정)`)까지 반복, 응답 `collected_count`·`remaining_unembedded`(필드명 `(미확정)`).
+   `/api/jobs/embed`도 `x-backfill-secret` 허용(`BACKFILL_SECRET` 비면 불허). 환경변수 `BACKFILL_SECRET`(9절)은 사용자가
+   Vercel에 넣고 백필이 끝나면 지운다(코드 변경 없음). `web/scripts/backfill.ts`는 쓰지 않는다 — 파일은 남기고
+   "사용 안 함(DATABASE_URL 로컬 미보관)"으로만 표시한다(구현 시 파일 상단 주석 한 줄). 5-1·5-2 의존. 테스트:
+   [[anyang-backend-api#테스트 방법]]의 백필 항목 — 인증 4분기(시크릿 비어 있음/틀림/맞음/scheduler 시크릿으로 backfill 시도),
+   범위 검증 400, 겹침(200 `skipped`), 시간 예산 중단·대기열 소진 종료, embed 라우트 `x-backfill-secret`.
+   **실제 호출은 운영 DB에 쓰므로 사용자 승인 뒤**: `from=1&to=2` 시험 → 같은 호출 재실행(중복 없음) → 1~5 … 46~47 순서로
+   10회 → `count(*)`=462·`remaining_unembedded` 0·`collect_runs` 확인 → 사용자가 `BACKFILL_SECRET` 삭제 뒤 401 확인.
 5-4. **조회 API 확장(신규, 확인 항목 55)** — `GET /api/notices/recommended`에 `is_pinned`·`image_count` 추가, 선호가
    없을 때의 "최근 공지" 정렬을 `is_pinned desc, published_at desc nulls last, id desc`로 변경(확정),
    추천 경로는 유사도 순서 유지·`is_pinned`는 별표 표시용(확정). `GET /api/notices/:id`에 `attachments`·`image_count` 추가. 두 API 200

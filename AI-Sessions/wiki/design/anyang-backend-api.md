@@ -47,6 +47,8 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 결정(2026-10-04, user)으로 구조, cron 식, 첨부 링크만 저장, Realtime 없음, 백필 로컬 스크립트에 더해
 글 주소(`source_url`) 기준 전부 저장(해시 충돌 건너뛰기 제거), "최근 공지" 정렬, `image_count` 정의,
 stale N=10분, 겹침 응답, `mode` 기본값, 백필 실행 도구, `COLLECTOR_CONTACT`가 확정됐다("제안대로 승인").
+**백필 방식 변경(2026-10-04, user)**: 로컬 스크립트가 아니라 서버 분할 호출로 바꿨다(5-1절 7번, 인증 7절,
+환경변수 9절 `BACKFILL_SECRET`). 위 "백필 로컬 스크립트" 확정은 이 변경으로 대체된다.
 구현·운영 확인 항목으로 남은 것은 고정 공지 마크업(55-b), 최종 POST·pg_net 타임아웃(55-e), 첨부 직접 링크(55-i),
 작은 이모지·아이콘 `<img>` 제외 규칙(구현 첫 단계에서 실제 HTML을 보고 정함)이다. 배포 순서는 0021 먼저, 코드 나중이다.
 status는 draft이며 pm이 승인 기록 후 구현 단계에서 active로 바꾼다.
@@ -967,7 +969,8 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 ### 5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)
 
 구현 대상은 `web/lib/collector.ts`, `web/app/api/jobs/collect/route.ts`,
-`web/app/api/admin/collect-runs/route.ts`, `web/scripts/backfill.ts`(신규)다. 스키마는
+`web/app/api/admin/collect-runs/route.ts`, `web/app/api/jobs/embed/route.ts`(백필 시크릿 허용)다.
+`web/scripts/backfill.ts`는 사용하지 않는다(7번). 스키마는
 [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]]의 0021을 따른다.
 
 **1. 파서 반환 타입 (구조 확정 / 고정 공지 판정 규칙은 구현 첫 단계 확인)**
@@ -1007,7 +1010,7 @@ opts = { mode: "quick" | "full" | "backfill", fromPage?, toPage?, skipExisting? 
 |---|---|---|---|
 | `quick` | 1페이지만 | 목록에서 읽은 `source_url` 중 DB에 없는 것만 | 10분마다 새 글 확인 |
 | `full` | 1~2페이지 | 목록의 전부 | 하루 1회 본문 수정 감지 |
-| `backfill` | `fromPage`~`toPage` | `skipExisting`이 true면 DB에 있는 `source_url`은 건너뜀 | 로컬 일회성 전체 수집 |
+| `backfill` | `fromPage`~`toPage`(한 호출 최대 5페이지) | `skipExisting`이 true면 DB에 있는 `source_url`은 건너뜀 | 일회성 전체 수집을 서버에서 분할 호출(7번) |
 
 - 목록 URL은 기존 `BOARD_URL`에 `&pageIndex=<n>`을 붙인다(n은 1부터). `backfill`에서 빈 목록 페이지를 만나면
   남은 페이지를 요청하지 않고 끝낸다(게시글 수가 줄었을 때 불필요한 요청 방지).
@@ -1019,8 +1022,9 @@ opts = { mode: "quick" | "full" | "backfill", fromPage?, toPage?, skipExisting? 
   실행마다 한 번 확인하고 `Crawl-delay`가 있으면 그 값을 쓴다(기존 로직 유지). 10분마다 `quick`이 새 글 0건이면
   요청은 robots 1건 + 목록 1건뿐이다.
 - 걸리는 시간(추정, 근거: 요청 간격 2초 × 요청 수, 응답 시간은 제외): `quick` 새 글 0건 약 2초, 새 글 N건
-  약 2×N초 / `full` 약 2×(2+20)=44초 / 백필 약 2×(47+462)=17분. 함수 한도 300초(10절) 안은 `quick`·`full`뿐이고
-  백필은 로컬에서만 돌린다. 응답 시간은 실제 측정 전이라 모른다. 구현 첫 단계에서 잰다.
+  약 2×N초 / `full` 약 2×(2+20)=44초 / 백필 전체 약 2×(47+462)=17분, 한 호출(5페이지, 상세 최대 50건)은 수집만
+  약 2×(5+50)=110초. 함수 한도 300초(10절) 안에 들도록 백필은 한 호출 5페이지로 나누고 임베딩은 남은 시간까지만
+  돌린다(7번). 응답 시간은 실제 측정 전이라 모른다. 구현 첫 단계에서 잰다.
 
 **3. 저장 규칙 (확정, user, 55-j)**
 
@@ -1058,13 +1062,13 @@ database에 요청한다).
   `DATABASE_URL`이 트랜잭션 풀러(6543)라 세션이 문장마다 바뀔 수 있어 세션 락은 믿을 수 없다. 트랜잭션 락은 "검사 +
   insert" 구간만 직렬화하고, 실행 중임은 `running` 행이 알린다. 고정 키 값은 구현에서 정하는 상수 하나다.
 - 건너뛴 호출은 `collect_runs`에 행을 남기지 않는다(10분마다 쌓이는 이력 방지).
-- 알려진 한계: 백필은 로컬에서 17분쯤 걸려(`collect_runs` 행 1개) N분이 지나면 stale로 정리되어 그 사이 `quick`이
-  함께 돌 수 있다. `source_url` upsert라 중복 저장은 없다. 백필 동안 cron을 막으려는 목적이 아니므로 허용한다.
+- 백필(7번)도 이 절차를 그대로 거친다. 호출 하나가 300초 이내라 stale 정리(N=10분)에 걸리지 않는다. 백필 호출이
+  `quick`과 겹치면 한쪽이 `ALREADY_RUNNING`으로 건너뛴다(백필 쪽 응답은 6번의 200 `skipped`, 같은 범위를 다시 호출한다).
 
 **5. 임베딩 연쇄 (기존 유지)**
 
 `/api/jobs/collect` 라우트가 수집이 성공하면 같은 요청에서 `runEmbedJob()`을 1회 호출한다(7절). `quick`·`full`
-모두 동일하다. 새 글 0건이어도 호출하며(대기열 조회 1건), 이전에 실패해 남은 공지를 복구한다. 임베딩 실패는 수집을
+모두 동일하다(`backfill`은 7번의 시간 예산 반복). 새 글 0건이어도 호출하며(대기열 조회 1건), 이전에 실패해 남은 공지를 복구한다. 임베딩 실패는 수집을
 실패시키지 않는다(기존). 새 글이 많으면 한 번에 `EMBED_BATCH_SIZE`(15)건씩이라 다음 10분 주기에 마저 처리된다.
 
 **6. 라우트 계약 (확정)**
@@ -1074,7 +1078,9 @@ database에 요청한다).
 | `POST /api/jobs/collect?mode=quick` 또는 `mode=full` | 헤더 `x-scheduler-secret`(기존 그대로) | 200 `{ mode, collected_count }` |
 | 같은 라우트(겹침) | 같음 | 200 `{ mode, skipped: true, reason: "ALREADY_RUNNING" }` (임베딩 호출 안 함) |
 | 같은 라우트(잘못된 mode) | 같음 | 400 `{ error: "INVALID_MODE" }` |
-| 같은 라우트(인증 실패) | 헤더 없음/불일치 | 401(빈 body, 기존). mode 검사보다 먼저 |
+| 같은 라우트(인증 실패) | 헤더 없음/불일치 | 401(빈 body, 기존). mode 검사보다 먼저. `mode=backfill`의 인증은 7번 |
+| `POST /api/jobs/collect?mode=backfill&from=N&to=M` | 헤더 `x-backfill-secret` | 200 `{ mode: "backfill", collected_count, remaining_unembedded }`(필드명 `remaining_unembedded` `(미확정)`). 겹침은 위 `skipped` 응답과 같음 |
+| 같은 라우트(백필 범위 위반) | `from`·`to` 누락·비정수, `1 ≤ from ≤ to ≤ 47` 위반, `to-from+1 > 5` | 400 `{ error: "INVALID_RANGE" }`(코드명 `(미확정)`). 인증·mode 검사 뒤 |
 | 같은 라우트(robots 거부/수집 실패) | 같음 | 409 `ROBOTS_DISALLOWED` / 500 `COLLECT_FAILED`(기존) |
 
 - `mode` 쿼리가 없으면 `full`로 처리한다(기존 템플릿 호출과의 호환). 겹침을 200으로 돌려주는 이유: pg_net 호출
@@ -1083,17 +1089,31 @@ database에 요청한다).
   409 `{ error: "ALREADY_RUNNING" }`을 돌려준다.
 - `maxDuration = 300`은 두 라우트 모두 유지한다.
 
-**7. 백필 스크립트 (확정: 로컬 일회성, 관리자 라우트·함수 분할 방식 쓰지 않음)**
+**7. 백필 — 서버 분할 호출 (확정, user, 2026-10-04. 로컬 스크립트 방식을 대체)**
 
-- 파일: `web/scripts/backfill.ts`. Vercel 함수가 아니라 로컬에서 실행한다. `.env.local`의 `DATABASE_URL`과
-  `GEMINI_API_KEY`를 쓴다(값은 문서·코드에 쓰지 않는다). 실행 도구 `tsx`는 `web/package.json`에 없고 추가하지 않는다
-  (확정): `npx tsx --env-file=.env.local scripts/backfill.ts [--pages 1-2]`로 실행한다(devDependency 추가 안 함).
-- 동작: `--pages A-B`(기본 `1-47`) → `runCollectJob("manual", null, { mode: "backfill", fromPage: A, toPage: B,
-  skipExisting: true })` → `runEmbedJob()`을 `embedded_chunks === 0`이 될 때까지 반복(한 번에 15건) → 결과 출력 →
-  `pool.end()`. 끊기면 같은 명령을 다시 돌린다(`skipExisting`과 "청크 없는 공지" 임베딩 대기열 때문에 이어서 진행).
-- `--pages 1-2`는 시험 실행이다(20건 이하). 먼저 시험 실행으로 파서와 임베딩을 확인한 뒤 전체를 돌린다.
-- 겹침 방지(4번)를 그대로 거친다. `ALREADY_RUNNING`이면 메시지를 출력하고 종료 코드 1로 끝난다.
-- 운영 DB에 쓰는 실행이므로 실제 실행(시험 포함)은 사용자 승인 뒤에만 한다. 이 설계 단계에서는 실행하지 않았다.
+사유: 로컬에 운영 `DATABASE_URL`을 두지 않는다. 스크립트 방식은 `DATABASE_URL`이 없어 멈췄다. 파일
+`web/scripts/backfill.ts`는 지우지 않고 남기되 **사용 안 함(DATABASE_URL 로컬 미보관)**이다. 설계·절차는 이 번호 아래만 따른다.
+
+- 호출: `POST /api/jobs/collect?mode=backfill&from=N&to=M`.
+  - 인증(확정): 헤더 `x-backfill-secret`을 환경변수 `BACKFILL_SECRET`과 `crypto.timingSafeEqual`로 비교한다(길이가
+    다르면 비교 전에 불일치 처리, 기존 `x-scheduler-secret` 비교와 같은 방식). `BACKFILL_SECRET`이 비어 있거나 없으면
+    backfill 모드가 비활성이라 어떤 헤더로도 401이다. `mode=backfill`은 `x-scheduler-secret`으로 허용하지 않는다(그 시크릿이
+    맞아도 401). 401은 빈 body다(기존과 같음, 403 구분 없음). `quick`·`full`은 기존대로 `x-scheduler-secret`만 받으며
+    `x-backfill-secret`은 받지 않는다.
+  - 범위(확정): `1 ≤ from ≤ to ≤ 47`, `to-from+1 ≤ 5`. 위반은 400(6번 표). 호출은 `skipExisting=true`로 고정이다.
+  - 겹침 방지: 4번 그대로(advisory lock + `running` 행).
+- 수집 뒤 임베딩(확정): 같은 요청에서 수집이 끝나면 `runEmbedJob()`을 대기열이 빌 때(`embedded_chunks === 0`)까지
+  또는 시간 예산에 닿을 때까지 반복한다(한 번에 15건). 시간 예산은 요청 시작부터 250초 경과 시 다음 반복을 시작하지 않는다
+  (`maxDuration` 300초 기준, 값 250초는 `(미확정)` — user 예시값이며 구현 상수로 둔다). 임베딩 실패는 수집을 실패시키지 않고
+  반복만 멈춘다(5번과 같음). 응답: `collected_count`(수집 건수, 3번 기준)와 남은 미임베딩 건수(`remaining_unembedded`,
+  임베딩 대기열 = 청크 없는 공지 수. 응답 필드명은 `(미확정)`).
+- `POST /api/jobs/embed`도 `x-backfill-secret`을 허용한다(확정). `x-scheduler-secret` 또는 `x-backfill-secret` 중 하나가
+  맞으면 통과하되, `BACKFILL_SECRET`이 비어 있으면 후자는 불허다. 응답·동작은 기존과 같다(1회 15건).
+- 호출 순서(운영 절차): 1~5, 6~10, …, 41~45, 46~47 총 10회. 각 응답의 `remaining_unembedded`가 0이 될 때까지, 필요하면
+  `embed`를 추가로 호출해 비운다. 끊기거나 `skipped`면 같은 범위를 다시 호출한다(`skipExisting`과 임베딩 대기열 때문에
+  이어서 진행). 시험 호출은 `from=1&to=2` 같은 작은 범위로 먼저 한다.
+- 종료: 백필이 끝나면 사용자가 Vercel에서 `BACKFILL_SECRET`을 지워 backfill 모드를 비활성화한다(코드 변경 없음).
+- 운영 DB에 쓰는 호출이므로 실제 실행(시험 포함)은 사용자 승인 뒤에만 한다. 시크릿 값은 문서·로그에 남기지 않는다.
 
 **8. 구현·운영 확인 항목 (이 절 관련)**
 
@@ -1104,6 +1124,7 @@ database에 요청한다).
   USER_AGENT는 연락처 부분 없이 `anyang-youth-policy-bot/1.0`만 보내고 수집은 계속한다(연락처를 지어내지 않고
   `TODO-문의이메일` 문구도 보내지 않는다).
 - 462건 전부 저장: `count(*)`=462가 백필 검증 기준이다(3번). 어긋나면 파서·목록 페이지 수를 점검한다.
+  백필 호출 응답의 `collected_count` 합계로는 검증하지 않는다(재호출·중복 범위가 있을 수 있음). DB `count(*)`로 본다.
 
 ### 6. 임베딩 파이프라인
 
@@ -1122,7 +1143,8 @@ database에 요청한다).
 |---|---|---|
 | `POST /api/jobs/collect?mode=quick` | 공지 수집기 가벼운 확인(5-1절): 목록 1페이지, DB에 없는 글만 상세, 이어서 임베딩 | 10분마다 `*/10 * * * *`(확정, user, 2026-10-04. 주기 조정(55-f)은 운영 후 필요하면 별도 요청) |
 | `POST /api/jobs/collect?mode=full` | 공지 수집기 정밀 점검(5-1절): 1~2페이지 전부 상세, 본문 수정 감지, 이어서 임베딩 | 하루 1회 `0 19 * * *` UTC = 서울 04:00(확정, user, 2026-10-04) |
-| `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 수집 잡이 같은 요청에서 이어서 호출(별도 트리거 없음). 단독 호출은 수동 복구용 |
+| `POST /api/jobs/collect?mode=backfill&from=N&to=M` | 일회성 전체 수집 분할 호출(5-1절 7번): 한 호출 최대 5페이지, 이어서 시간 예산까지 임베딩 반복. 인증은 `x-backfill-secret` | 트리거 없음. 사용자가 백필 때만 수동 호출(cron 등록 안 함) |
+| `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 수집 잡이 같은 요청에서 이어서 호출(별도 트리거 없음). 단독 호출은 수동 복구용(`x-backfill-secret`도 허용, 5-1절 7번) |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
 
 - **2026-10-04 개정(확인 항목 55)**: 위 표의 collect 두 줄은 기존 "수집 하루 1회(Asia/Seoul 04:00)" 서술을 대체한다.
@@ -1145,6 +1167,9 @@ database에 요청한다).
 - **공유 시크릿 인증(제안)**: 요청 헤더 `x-scheduler-secret`을 환경변수
   `SCHEDULER_SHARED_SECRET` 값과 상수 시간 비교(`crypto.timingSafeEqual`, 미확정 구현
   방식). 불일치 시 401. 값은 문서에 남기지 않는다(dev-common 규칙 9).
+- **백필 시크릿 인증(확정, user, 2026-10-04)**: `mode=backfill`과 `/api/jobs/embed`는 추가로 헤더 `x-backfill-secret` ↔
+  `BACKFILL_SECRET`(같은 상수 시간 비교)을 받는다. 비어 있으면 불허, `mode=backfill`에 `x-scheduler-secret`은 불허.
+  상세는 5-1절 7번.
 - **알림 시각 정밀도(제안)** — pg_cron 트리거 주기 5분 전제
   ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]): pg_cron은 지정한 크론
   표현식 그대로(예: `*/5 * * * *`) 정확히 실행되므로(Vercel Cron처럼 1시간 창 안 임의
@@ -1238,6 +1263,7 @@ database에 요청한다).
 | `DEEPSEEK_API_KEY` | DeepSeek API |
 | `GEMINI_API_KEY` | Gemini 임베딩 API |
 | `SCHEDULER_SHARED_SECRET` | pg_net/cron → 앱 API 호출 인증 |
+| `BACKFILL_SECRET` | 일회성 백필 호출(`mode=backfill`, `/api/jobs/embed`)의 `x-backfill-secret` 인증(확정, 확인 항목 55). 백필 때만 Vercel에 넣고 끝나면 지워 비활성화한다(비어 있으면 backfill 모드 불가). 값은 문서에 쓰지 않는다 |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 클라이언트(서비스워커/`PushManager.subscribe`)가 구독 생성에 쓰는 공개키. `VAPID_PUBLIC_KEY`와 같은 값이며 `NEXT_PUBLIC_` 접두사로 브라우저에 노출된다(확정, 확인 항목 31) |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
@@ -1668,12 +1694,24 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
     경우 고정 공지가 일반 공지보다 앞에 오며 같은 그룹 안에서는 `published_at` 내림차순(null은 맨 뒤, 같으면 `id`
     내림차순), 추천(벡터) 경로는 유사도 순서가 바뀌지 않는지. `GET /api/notices/:id` 응답에 `attachments`(없으면 `[]`)·`image_count`가 있고 숨김 공지는 여전히 404. 두 API
     200 응답에 `Cache-Control: no-store`.
-  - 백필 스크립트: `--pages` 인자 파싱(`1-2`, 기본 `1-47`, 잘못된 값 거부)을 단위 테스트한다. 임베딩 루프는 목으로
-    `embedded_chunks`가 0이 되면 끝나는지 확인한다.
-  - 수동 확인(운영 DB에 쓰므로 사용자 승인 뒤에만): `backfill.ts --pages 1-2`로 20건 이하만 먼저 돌려 파서·임베딩을
-    확인, 같은 명령을 다시 돌려 중복 삽입과 상세 요청이 없는지, 이어서 전체 1~47을 돌린 뒤 `select count(*) from
-    notices`가 462인지 확인(0021 적용 뒤)하고 모든 공지에 임베딩 청크가 있는지, `collect_runs`에 실패가
-    없는지. `mode=quick`을 시크릿 헤더로 수동 호출해 새 글 0건일 때 요청이 robots 1 + 목록 1건으로 끝나는지.
+  - 백필 라우트 인증(`mode=backfill`, 수집 호출 없음 확인 포함) 4분기: (1) `BACKFILL_SECRET` 비어 있음/없음 → 어떤
+    헤더로도 401, (2) `x-backfill-secret` 틀림·헤더 없음 → 401, (3) 맞음 → 200, (4) `x-scheduler-secret`만 맞고
+    `mode=backfill` → 401. `quick`·`full`에 `x-backfill-secret`만 보내면 401(기존 `x-scheduler-secret` 경로 테스트 유지).
+  - 백필 범위 검증: `from`·`to` 누락·비정수·`from<1`·`to>47`·`from>to`·`to-from+1=6` → 400 `INVALID_RANGE`(수집 호출 없음),
+    경계 `1~5`·`46~47`·`from=to`는 통과. 인증 실패가 범위 오류보다 먼저(401).
+  - 백필 겹침: 진행 중 행이 있으면 200 `skipped`(`ALREADY_RUNNING`), `runEmbedJob` 호출 없음.
+  - 백필 시간 예산: 가짜 타이머/시계로 `runEmbedJob`이 계속 처리 건수를 돌려줄 때 250초 경과 뒤 더 호출하지 않고 끝나는지,
+    대기열이 비면(`embedded_chunks === 0`) 예산 전에 끝나는지, 임베딩이 던져도 200이고 `collected_count`가 유지되는지.
+    응답에 `collected_count`와 `remaining_unembedded`가 있는지.
+  - `/api/jobs/embed` 인증: `x-scheduler-secret` 맞음 200(기존), `x-backfill-secret` 맞음 200, `BACKFILL_SECRET` 비어
+    있을 때 `x-backfill-secret`은 401, 둘 다 틀림/없음 401.
+  - `web/scripts/backfill.ts`는 사용하지 않으므로 새 테스트를 만들지 않는다(기존 `--pages` 파싱 테스트가 있으면 파일과
+    함께 남기고 갱신하지 않는다).
+  - 수동 확인(운영 DB에 쓰므로 사용자 승인 뒤에만, 사용자가 `BACKFILL_SECRET`을 Vercel에 넣은 뒤): `mode=backfill&from=1&to=2`로
+    20건 이하만 먼저 호출해 파서·임베딩을 확인, 같은 호출을 다시 해 중복 삽입과 상세 요청이 없는지, 이어서 1~5, 6~10 …
+    46~47을 차례로 호출한 뒤 `select count(*) from notices`가 462인지 확인(0021 적용 뒤)하고 모든 공지에 임베딩 청크가
+    있는지(`remaining_unembedded` 0), `collect_runs`에 실패가 없는지. 끝나면 사용자가 `BACKFILL_SECRET`을 지운 뒤
+    `mode=backfill` 호출이 401인지 확인한다. `mode=quick`을 시크릿 헤더로 수동 호출해 새 글 0건일 때 요청이 robots 1 + 목록 1건으로 끝나는지.
     "최신 글 1건을 지우고 다시 호출하면 그 글만 들어온다"는 확인은 운영 DB 삭제를 포함하므로 별도 사용자 승인 대상이다.
     배포 뒤 `cron.job_run_details`로 10분 주기 실행과 성공 여부를 본다(database 소관 확인).
 - **api_usage_logs 기록**: DeepSeek·Gemini 호출을 목으로 성공/429/오류 각각 재현해
@@ -1767,11 +1805,14 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 - **공지 전체 수집·즉시 갱신(5-1절·7절·2-1절, 확인 항목 55, 사용자 확정 반영, 승인 기록 대기)** — 확정(사용자 결정
   2026-10-04, user, "제안대로 승인"): 구조(모드 quick/full/백필, 라우트 `?mode=`, 인증 유지), cron 식, 링크만 저장,
-  Realtime 없음, 백필 로컬 스크립트(`npx tsx`, devDependency 추가 안 함), `no-store`와 응답 필드 추가, 글 주소 기준
+  Realtime 없음, `no-store`와 응답 필드 추가, 글 주소 기준
   전부 저장(해시 충돌 건너뛰기·`skippedDuplicateCount` 제거, 0021 먼저·코드 나중), "최근 공지"만
   `is_pinned desc, published_at desc nulls last, id desc`(추천은 유사도 순서 유지·별표만), `image_count`=본문 `<img>` +
   이미지 확장자 첨부, stale N=10분 + failed 정리, `pg_try_advisory_xact_lock` 겹침 방지(200 `skipped` / 관리자 409),
   `mode` 생략은 `full`·잘못된 값 400 `INVALID_MODE`, `collect_runs.mode` 컬럼 없음, `COLLECTOR_CONTACT` 환경변수.
+  백필은 서버 분할 호출(2026-10-04 변경, user): `mode=backfill&from&to`, `x-backfill-secret`↔`BACKFILL_SECRET`(비면 비활성),
+  한 호출 최대 5페이지, 수집 뒤 시간 예산까지 임베딩 반복, `/api/jobs/embed`도 백필 시크릿 허용. 미확정으로 남은 것:
+  시간 예산 250초 상수, 응답 필드명 `remaining_unembedded`, 범위 위반 코드명 `INVALID_RANGE`.
   구현·운영 확인 항목으로 남김:
   - 55-b 고정 공지 마크업 — 구현 첫 단계에서 실제 HTML로 판정 규칙을 확정한 뒤 결과 확인. 같은 시점에 작은
     이모지·아이콘 `<img>` 제외 규칙도 정한다(`image_count` 정의 중 이 부분만 구현 단계 확정).

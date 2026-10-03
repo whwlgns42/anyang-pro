@@ -357,6 +357,13 @@ owner: pm
     - (t) 운영 순서(backend·database): ① 0021 운영 적용(적용 직전 `notices_content_hash_key` 이름 확인, 적용 후 컬럼 3개·제약 제거·0019 점검 SQL 2개 0행) → ② 이 코드 배포(0021 전에 배포하면 수집·조회 쿼리가 새 컬럼 때문에 실패) → ③ 백필(`npx tsx`로 `--pages 1-2` 시험 후 1~47) → ④ pg_cron·pg_net 설치·잡 등록(URL·`SCHEDULER_SHARED_SECRET`, 40) → ⑤ 최종 POST·`full` 타임아웃 확인(55-e·m). `COLLECTOR_CONTACT` 값은 사용자가 Vercel에 직접 입력. 0021 down은 백필 뒤엔 중복 해시로 실패·값 손실 → 사용자 승인 필요. 전부 사용자 승인 대상, 미실행.
     - **결정(2026-10-04, user, 메인 세션 전달)**: (s) 승인 — `div.p-photo` img 제외, backend가 5-1절 반영 후 19차 재기록. (r) 배지 문구를 "이미지"로 바꾼다 — frontend 설계·코드·테스트 수정(그래서 `anyang-frontend-screens`·`anyang-frontend-tasks`·`anyang-cheongan-design-adoption`을 승인된 설계에서 뺐다가 반영 후 재기록). 운영 작업 승인: 0 결정 반영 커밋 → ① 0021 운영 적용 → ② push·배포 확인 → ③ 백필(1-2 시험 후 1~47, count 462·청크 확인, `COLLECTOR_CONTACT` 비어도 됨) → ④ pg_cron·pg_net 설치·잡 등록 준비(시크릿 값은 문서·로그·보고에 남기지 않음, 사용자 입력 직전까지). 각 단계 실패 시 멈춤. ⑤는 메인 세션.
     - **운영 작업 진행(2026-10-04)**: 0 결정 반영 — backend-api 5-1절, frontend `0c66ed0`(칩 "이미지", `notices-refetch.ts` 공백 수정, test 276·build 통과), 문서 `e770734`, 승인된 설계 19차. ① 0021 운영 적용 완료(MCP apply_migration 단일 트랜잭션 + `schema_migrations` 기록; 적용 후 컬럼 3개 NOT NULL·기본값 일치, unique는 `notices_source_url_key`만, 0019 점검 SQL 2개 0행, notices 0·collect_runs 0건; `get_advisors`는 도구 없어 미실행 — 메인 세션). ② push `86350a7..e770734`(16커밋, 원격 일치), 자동 배포 아님 확인 → backend가 53(a) 방식 `vercel deploy --prod` 실행, Ready, 운영 별칭 `web-beta-smoky-16.vercel.app` 갱신, `/login` 200, 수집 라우트 시크릿 없이 401, 10분간 error 로그 없음(새 코드 반영은 시크릿 없이는 응답으로 구별 불가). ③ **백필 1단계에서 멈춤**: `web/.env.local`에 `DATABASE_URL`이 없다(GEMINI_API_KEY는 있음). 운영 DB 접속·쓰기 없음. 사용자가 운영 Supabase 연결 문자열(트랜잭션 pooler 6543)을 `web/.env.local`의 `DATABASE_URL`로 넣은 뒤 pm 재호출 → `npx tsx --env-file=.env.local scripts/backfill.ts --pages 1-2`부터. ④ pg_cron·pg_net 준비는 지시대로 ③ 실패로 진행하지 않음(37의 같은 원인과 연결).
+    - **백필 방식 변경(2026-10-04, user, 메인 세션 전달)**: 사용자는 `DATABASE_URL`을 로컬에 넣지 않는다. Vercel의 `DATABASE_URL`·`SCHEDULER_SHARED_SECRET`은 Sensitive라 읽을 수 없고, "기존 값은 절대 변경 금지". 선택: 백필 전용 키 추가 — 메인 세션이 `BACKFILL_SECRET`을 Vercel production(sensitive)과 `web/.env.local`에 추가(값 미기록, 기존 환경변수 변경 없음). 로컬 `scripts/backfill.ts`는 쓰지 않는다(파일은 둔다). 승인된 설계 값(별도 재승인 불필요): ① `POST /api/jobs/collect?mode=backfill&from=N&to=M`, 인증은 `x-backfill-secret` ↔ `BACKFILL_SECRET` timingSafeEqual, 비어 있으면 backfill 비활성(401), `x-scheduler-secret` 경로(quick/full)는 그대로, backfill은 `x-scheduler-secret`으로 불허 ② 한 호출 최대 5페이지(1 ≤ from ≤ to ≤ 47, to−from+1 ≤ 5, 위반 400), skipExisting=true, 기존 advisory lock 겹침 방지 ③ 수집 뒤 같은 요청에서 임베딩을 남은 시간(예: 250초 경과 시 중단)까지 반복, 응답에 `collected_count`와 남은 미임베딩 건수. `/api/jobs/embed`도 `x-backfill-secret` 허용(비어 있으면 불허) ④ 백필이 끝나면 사용자가 원할 때 Vercel에서 `BACKFILL_SECRET`을 지워 비활성화(코드 변경 없음). 배포 뒤 실제 백필 호출은 메인 세션이 한다. 4단계 pg_cron은 보류. 그래서 `anyang-backend-api`·`anyang-backend-tasks`를 승인된 설계에서 뺐다(20차 전 단계).
+    - (v) **사용자 확인 필요**: `SCHEDULER_SHARED_SECRET` 값을 아무도 모른다(Vercel Sensitive, 2026-09-28 생성값 미보관 — 40). pg_cron 잡이 `x-scheduler-secret`을 보내려면 같은 값을 Supabase Vault에 넣어야 한다. 기존 값 변경은 사용자 지시로 금지라 pm은 변경을 제안하지 않는다. 사용자가 값을 확보할 방법을 정해야 한다.
+    - 백필 설계 반영(2026-10-04, backend): backend-api 5-1절 7번 "서버 분할 호출"(호출 순서 1~5 … 46~47의 10회), 7절 스케줄러 표, 9절 `BACKFILL_SECRET`(값 없음), 테스트 방법(인증 4분기·범위 400·겹침·시간 예산·embed 인증), backend-tasks 5-3. 따라 나온 확정: 401/403 구분 없이 401, backfill에 scheduler 시크릿은 맞아도 401, quick/full은 `x-backfill-secret` 불허, 검사 순서 인증→mode→범위, 임베딩 실패 시 수집은 성공 유지·반복 중단.
+    - (w) **사용자 확인 필요(차단 아님, 제안값 그대로 구현)**: backend 제안 `(미확정)` 3건 — 시간 예산 상수 250초(사용자 예시값), 응답 필드명 `remaining_unembedded`, 범위 위반 400 코드 `INVALID_RANGE`. 20차 승인 범위 밖, 확정되면 `(미확정)` 표시만 지운다.
+    - **백필 구현(2026-10-04)**: backend `e9d1805`(collect backfill 모드·embed 라우트 `x-backfill-secret`·`countUnembedded`, test 297·build 통과). push·배포 안 함. code-review: 치명 없음, 보안 경계(빈 시크릿, 길이 다른 값, 시크릿 분리, 인증 순서, 로그) 문제 없음, 범위 검증 문제 없음.
+    - (x) **사용자 결정 필요(2026-10-04, code-review 주요 — 설계 변경 필요)**: 임베딩 반복은 시작 시각이 250초 미만이면 `runEmbedJob`(최대 15건, Gemini 순차 호출, fetch 타임아웃 없음, 재시도 백오프 최대 7초/호출)을 한 번 더 시작한다. 249초에 시작한 마지막 호출이 `maxDuration` 300초를 넘기면 함수가 강제 종료되고, 청크 단위 insert가 공지 도중에 끊긴다. 그 공지는 "청크 있음"으로 취급돼 나머지 청크가 다시 임베딩되지 않는다(기존 취약성, 백필이 만날 확률을 높임). 선택지: (1) 예산을 낮춘다(예: 200초) — 값 변경만, 가장 단순 (2) `runEmbedJob`을 공지 단위로 시간 예산에 연동 — 코드·설계 변경이 더 큼. pm 권장 (1). 정상 응답 속도면 수십 초 안에 끝나므로 위험은 Gemini 지연·429 때다. 함께: 수집 단계 시간(5페이지 × 10건 × 2초 ≈ 100초+, 목록 1페이지 항목 수 실측 필요)은 `from=1&to=2` 시험 호출로 실측 권장. 그래서 `anyang-backend-api`를 승인된 설계에서 뺐다(20차 이후). push·배포는 이 결정 뒤로 미뤘다.
+    - (y) 경미(code-review): `web/lib/scheduler-auth.ts:3-4` 낡은 주석(구현 수정, backend). `remaining_unembedded`가 건수 조회 실패 시 null — 설계 6번 표에 null 경우 한 줄 보강 필요(설계 변경, (x)와 함께).
     - (u) 경미(문서·서식, 차단 아님): [[anyang-database-schema]] 1439행이 advisory lock·`collect_runs.mode`를 아직 "미확정(55)"으로 적는다(사용자가 확정, backend-api에는 반영). `web/app/_lib/notices-refetch.ts:23` `type Doc =Pick` 공백 누락. 다음 수정 때 정리.
     - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
 
@@ -393,16 +400,22 @@ owner: pm
 2026-10-04(17차): 확인 항목 55 사용자 결정·승인(메인 세션 전달 — (j) `source_url`만·unique 해제, (k)·(d) 최근 공지만 고정 위로, (c)·(p) image_count 합산, 나머지 제안값 전부, "제안대로 승인")을 database → backend → frontend가 반영한 뒤 6종을 기록한다. 55-b(고정 공지 마크업)·이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정하는 것으로 승인됐다. 55-i(첨부 직접 링크)와 (r)(배지 문구)는 승인 범위 밖 미결이다.
 
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(18차): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(s) code-review "설계 변경 필요"(image_count에서 `div.p-photo` img 제외 규칙이 설계에 없음). 사용자 확인 후 재기록한다. 같은 날 18차로 `anyang-frontend-screens`·`anyang-frontend-tasks`·`anyang-cheongan-design-adoption`도 뺀다 — 사유: 55(r) 배지 문구 "본문 이미지" → "이미지"(user 결정). 반영 후 19차로 재기록한다.
 
 2026-10-04(19차): 55(s)·(r) 사용자 결정(메인 세션 전달)을 backend(5-1절 p-photo·smiley 제외 규칙, 실측 셀렉터)와 frontend(칩 문구 "이미지", `0c66ed0`)가 반영한 뒤 4종을 다시 기록한다. 55-b(고정 공지 실측)·55-i(첨부 직접 링크)는 미확인 그대로다.
 
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-cheongan-design-adoption]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(19차 이어서): `anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 55 백필 방식 변경(서버 분할 실행, `BACKFILL_SECRET`, user 결정). backend 설계 반영 후 20차로 재기록한다.
+
+2026-10-04(20차): 백필 방식 변경(user, 메인 세션 전달 — "사용자가 승인한 설계 값, 별도 재승인 불필요")을 backend가 반영한 뒤 2종을 다시 기록한다. 승인 범위는 전달된 값 1~4와 그로부터 직접 따라 나온 값이다. 55(w) 제안값 3건(250초, `remaining_unembedded`, `INVALID_RANGE`)은 `(미확정)` 그대로 승인 범위 밖이다.
+
+- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(20차 이어서): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(x) code-review "설계 변경 필요"(백필 임베딩 시간 예산 250초가 maxDuration 300 안에서 안전하지 않음). 사용자 결정 후 재기록한다.
 
 ## Jev 도입 제안
 
