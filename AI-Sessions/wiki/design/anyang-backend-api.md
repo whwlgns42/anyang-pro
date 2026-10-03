@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -640,6 +640,47 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   클라이언트가 직접 취소한 답변도 중간까지 저장되는 것을 사용자가 수용했다(확인 항목
   43-b, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 43).
 
+### 3-3-3. Jev 게이트 — `extractPreferences` 앞단 (신규, 2026-10-03, 확인 항목 46, 재승인 대기)
+
+토큰 비용 절감이 목적이다. 3절 5번·3-3-1절의 기억 추출이 매 답변마다 DeepSeek를 부르는데
+대부분은 새 사실이 없는 빈 배열로 끝난다고 추정한다(실제 비율은 `api_usage_logs`로 확인
+필요, 근거 없음). 그 호출 앞에 Jev(TypeSafe System One) 판정 1회를 둔다. 아래 값은 모두
+제안이다.
+
+- **위치(코드 확인, 2026-10-03)**: `web/app/api/chat/route.ts`의
+  `extractAndStorePreference`(85행) 안에서 `extractPreferences(conversationText,
+  knownFacts)` 호출(96행) 직전. 호출 경로는 `consumeAndStore`가 답변 저장 직후
+  `extractAndStorePreference`를 부르는 174행이다. 줄 번호는 현재 코드 기준이고 구현 때
+  달라질 수 있다.
+- **판단**: Jev Noul — "사용자 메시지에 본인에 관한 사실(선호·상황·이름·호칭)이 있는가".
+  확률이 임계값 미만이면 `extractPreferences`(DeepSeek 호출)와 그 뒤 저장 루프를 건너뛴다.
+  임계값 이상이면 기존대로 실행한다.
+- **임계값**: 0.2(미확정). 거짓 음성(사실이 있는데 건너뜀)이 기억 누락으로 이어지므로
+  낮게 잡은 제안이다. 확정은 `TYPESAFE_API_KEY` 준비 후 대표 입력 3종(인사·이름·선호)
+  측정으로 할지 사용자가 정한다(확인 항목 46-b).
+- **실패 시(fail-open)**: Jev 호출 오류, 타임아웃, `TYPESAFE_API_KEY` 미설정, 응답 형식
+  이상이면 게이트를 통과한 것으로 보고 기존대로 추출을 실행한다. 게이트 때문에 채팅이나
+  기억 저장이 새로 실패하지 않는다. 타임아웃 2초(미확정, 2026-09-28 하네스 실측 약 0.6초에
+  여유를 둔 값, 응답 이후 백그라운드 처리라 사용자 대기에는 영향 없음).
+- **전송 범위**: 사용자 메시지 한 건만, `maskPii` 적용 후([[anyang-ai-models-data-transfer]]
+  식별정보 비전송 원칙 유지). AI 답변은 보내지 않는다. 기존 기억 요약을 함께 보낼지는
+  미확정(확인 항목 46-c) — 기본안은 보내지 않는다. 사용자 메시지가 TypeSafe(미국 호스팅)로
+  새로 나가므로 [[anyang-ai-models-data-transfer]]·처리방침 갱신 여부는 사용자 결정
+  (확인 항목 46-a)이며 이 문서에서 정하지 않는다.
+- **TypeSafe 호출(출처: [[anyang-youth-policy-assistant]] `## Jev 도입 제안` 2026-09-28
+  기록, 메인 세션 확인)**: 미국 호스팅, 입력으로 모델 학습 안 함. JS SDK
+  `@typesafe-ai/sdk` 또는 HTTP `POST https://api.typesafe.ai/v1/systemone`(Bearer),
+  모델 `jev-latest`. 둘 중 무엇을 쓸지는 구현 단계에서 SDK 문서로 확인해 정한다(미확정,
+  새 의존성 추가를 피하려면 HTTP). 키는 서버 환경변수 `TYPESAFE_API_KEY`로만 받고
+  클라이언트·문서·로그에 남기지 않는다(9절 환경변수 목록에 구현 때 추가, 선택값 —
+  없으면 게이트 꺼짐).
+- **로그**: 게이트 판정 건수·건너뜀 건수를 확인할 수 있어야 임계값을 조정한다. 기존
+  `api_usage_logs` 래퍼(작업 15)에 provider를 추가할지는 database 스키마 영향이 있어 이번
+  설계에서 정하지 않고 확인 항목으로 남긴다(미확정, 스키마 변경 없이 `console` 로그만으로
+  시작하는 것을 제안).
+- **스키마·화면 변경**: 없음(database·frontend 호출 불필요). 단 46-a에서 처리방침 문구
+  변경이 결정되면 frontend 설계가 따로 필요하다.
+
 ### 4. Gemini 임베딩 호출
 
 - 모델 `gemini-embedding-001`, `output_dimensionality=768`. 모델이 기본 3072차원이며
@@ -1095,6 +1136,13 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   읽기 도중 예외를 던지는 목 스트림(델타 일부 전달 후 reject)으로 호출됐을 때 그때까지
   모은 `assistantText`로 `messages`에 role=assistant 행이 INSERT되는지 확인. 델타를 하나도
   받기 전에 예외가 나면(빈 `assistantText`) 행이 INSERT되지 않는지 확인.
+- **Jev 게이트(3-3-3절, 확인 항목 46)**: Jev 클라이언트를 목으로 대체한 단위 테스트.
+  (1) 확률이 임계값 이상이면 `extractPreferences`가 호출되는지(통과). (2) 임계값 미만이면
+  호출되지 않고 저장 쿼리도 실행되지 않는지(차단). (3) Jev가 예외·타임아웃·잘못된 응답을
+  내거나 `TYPESAFE_API_KEY`가 없으면 `extractPreferences`가 호출되는지(fail-open, 채팅
+  요청은 실패하지 않음). (4) Jev 목이 받은 입력에 `maskPii` 적용 후 사용자 메시지만 있고
+  AI 답변·`email`/`name`/`user_id`가 없는지 캡처로 확인. 실제 TypeSafe 호출은 하지 않는다.
+  키가 준비되면 대표 입력 3종(인사·이름·선호)을 수동 1회 측정해 임계값 확정 자료로 쓴다.
 - **대화 히스토리**: `GET /api/conversations`가 `updated_at desc` 순으로 오는지 확인.
   새 대화 생성 시 `title`이 첫 메시지 앞부분으로 채워지는지 확인.
 - **채팅**: DeepSeek API를 목(mock)으로 대체한 통합 테스트로 스트리밍 응답 조립 확인.
@@ -1224,6 +1272,9 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   43-b): 포함한다 — 3-3-2절 참고.
 - **부분 저장의 개인정보 영향(3-3-2절)** — 해결(2026-09-29, user, 확인 항목 43-b):
   클라이언트가 직접 취소한 답변도 중간까지 저장되는 것을 사용자가 수용했다.
+- **Jev 게이트(3-3-3절, 확인 항목 46)** — 모두 제안(미확정): 임계값 0.2, 타임아웃 2초,
+  SDK 대 HTTP, 사용자 메시지만 전송(기억 요약 포함 여부 46-c), 게이트 로그 방식. 사용자
+  메시지의 TypeSafe 전송에 따른 데이터 전송 결정 문서·처리방침 갱신은 사용자 결정(46-a).
 
 ## Links
 

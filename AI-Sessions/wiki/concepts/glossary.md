@@ -32,6 +32,7 @@ owner: shared
 | 알림 시각 | notify-time | 사용자가 새 공지 알림을 받기로 정한 하루 중 시각 |
 | 대화 | conversation | 사용자와 AI 비서 사이의 채팅 한 묶음. 개별 발화는 메시지(message) |
 | 푸시 구독 | push-subscription | 사용자 기기의 Web Push 구독 정보 |
+| Jev 게이트 | jev-gate | 비싼 LLM 호출(기억 추출) 앞에서 Jev가 "호출할 가치가 있는가"를 확률로 판정해 낮으면 호출을 건너뛰는 앞단 검사. [[anyang-backend-api]] 3-3-3절 |
 | 수집 잡 | collect-job | 게시판에서 새 공지를 가져와 저장·임베딩하는 예약 작업 |
 | 알림 잡 | notify-job | 알림 시각이 된 사용자에게 매칭된 새 공지를 푸시하는 예약 작업 |
 | 재학/재직 여부 | enrollment_status | 프로필 항목 중 하나. 사용자가 재학 중인지, 재직 중인지, 둘 다 아닌지를 나타낸다 |

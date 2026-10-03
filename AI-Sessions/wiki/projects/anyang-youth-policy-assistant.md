@@ -186,6 +186,15 @@ owner: pm
       - `anyang-database-schema`는 draft 단계에서도 frontmatter `status: active`로 남아 있었다(database가 스키마 변경이 없어 그대로 둠). 이번 승인으로 active가 맞는 상태가 되어 따로 고치지 않는다. database는 스키마 변경이 없어 구현 단계에서 호출하지 않는다.
 44. **사용자 결정 필요(2026-09-29, 43 구현 중 frontend 제기)**: 포트 3100에 dev 서버(node PID 6148)가 떠 있어 frontend가 `npm run build`를 실행하지 않고 멈췄다. 미커밋 5개 파일(`web/app/(tabs)/settings/memory/memory-client.tsx`, `web/app/privacy-policy/page.tsx`, `web/test/consent-privacy-wording.test.ts`, frontend-screens·frontend-tasks 설계 문서). 선택지: (a) 사용자·메인 세션이 dev 서버를 멈춘 뒤 pm 재호출 → frontend build·커밋, (b) 메인 세션이 build를 직접 확인. 참고: backend는 같은 시각대에 build를 실행해 통과했다고 보고했다(dev 서버와 동시 실행 여부는 모름).
 45. **사용자 결정 필요(2026-09-29, backend·git-manager 보고)**: 원격 대비 로컬 커밋이 5개를 넘었다(236d410 시점 6개, 이번 문서 커밋으로 더 늘어남). push 여부 확인 필요. 승인 전 push 금지.
+46. **설계 변경(2026-10-03, 새 요청 — Jev 도입 제안: `extractPreferences` 앞단 게이트)**: 메인 세션 요청. 토큰 비용 절감을 위해 `/api/chat`의 `extractPreferences`(매 답변 실행, 43) 직전에 Jev Noul 게이트를 둔다. "사용자 메시지에 본인 사실(선호·상황·이름·호칭)이 있는가" 확률이 임계값 미만이면 DeepSeek 추출을 건너뛴다. Jev 실패·키 없음은 기존대로 추출(fail-open). LLM 호출 6가지 중 대체 가능한 것은 이것 하나(메인 세션 Explore 조사). 2026-09-28 Jev 제안(27·33) 취소와는 별개 요청.
+    - 진행: `anyang-backend-api`·`anyang-backend-tasks`를 승인된 설계에서 뺐다(11차). backend만 설계 draft(database·frontend 변경 없음). 재승인 뒤 backend만 구현.
+    - 미해결 질문:
+      - (a) 사용자 메시지가 TypeSafe(미국)로 새로 전송된다. [[anyang-ai-models-data-transfer]]와 `/privacy-policy` 갱신이 필요한지, 필요하면 이번 재승인에 함께 넣을지(넣으면 frontend 설계도 필요) 따로 할지.
+      - (b) 임계값 제안 0.2(미확정)를 그대로 확정할지, `TYPESAFE_API_KEY` 준비 후 대표 입력 3종(인사·이름·선호) 측정 뒤 정할지.
+      - (c) Jev 입력에 사용자 메시지만 보낼지, 기존 기억 요약도 함께 보낼지(정확도 향상 가능, 입력·전송 범위 증가).
+      - (d) 게이트 판정 로그를 `console`로만 남길지, `api_usage_logs`에 남길지(후자는 database 설계 필요).
+      - (e) backend가 [[anyang-backend-tasks]] 6-1에 "46-a 해결 후 착수" 선행 조건을 넣었다. 유지할지.
+    - 설계 draft 완료(2026-10-03, backend): [[anyang-backend-api]] 3-3-3절 "Jev 게이트"·테스트 방법, [[anyang-backend-tasks]] 6-1, glossary "Jev 게이트" 용어 추가. 제안값(미확정): 임계값 0.2, 타임아웃 2초, fail-open(오류·타임아웃·키 없음·응답 이상), 전송은 `maskPii` 후 사용자 메시지 1건만, 호출은 HTTP(새 의존성 회피). 위치 `web/app/api/chat/route.ts` `extractAndStorePreference`(85행) 안 `extractPreferences`(96행) 직전. 재승인 대기.
 
 ## 승인된 설계
 
@@ -207,10 +216,9 @@ owner: pm
 - [[anyang-frontend-screens]] — 승인일 2026-09-29, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-09-29, 승인자 user
 
-2026-09-29(10차 이어서): backend가 43-b 부분 답변 저장을 backend-api 3-3-2절·테스트 방법과 backend-tasks 6번에 반영했다. 같은 승인(43 재승인)으로 두 문서를 기록한다.
+2026-09-29(10차 이어서): backend가 43-b 부분 답변 저장을 backend-api 3-3-2절·테스트 방법과 backend-tasks 6번에 반영했다. 같은 승인(43 재승인)으로 두 문서를 기록했다.
 
-- [[anyang-backend-api]] — 승인일 2026-09-29, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-09-29, 승인자 user
+2026-10-03(11차): `anyang-backend-api`와 `anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 46(Jev 게이트 도입, 새 요청). 재승인 뒤 다시 기록한다.
 
 ## Jev 도입 제안
 
@@ -224,6 +232,16 @@ owner: pm
 - 속도: 현재 판정 없음(최신순/알림 없음) → Jev 약 0.6초/요청 (추정, 근거: 2026-09-28 메인 세션 하네스 실측 16문항 1.2초·단일 1.4초 중 SDK 로딩 제외). 서버 키로는 측정 불가(TYPESAFE_API_KEY 없음)
 - 토큰: 측정 불가 (근거 없음 — 키 준비 후 대표 입력 1회 측정)
 - 주의: 오판 시 대상 아닌 공지 알림 또는 누락. 캐시(notice_profile_matches)로 호출 수 = 새 공지 × 서로 다른 조건 조합 수. 외부 전송은 조건 조합과 공지 제목·본문뿐(식별정보·출생연도 원값 없음, [[anyang-ai-models-data-transfer]])
+```
+
+2026-10-03 (확인 항목 46, 메인 세션 제안, 재승인 대기):
+
+```text
+- 위치: /api/chat의 extractPreferences 직전 ([[anyang-backend-api]] 3-3절 근처 Jev 게이트 절)
+- 판단: Noul — 사용자 메시지에 본인 사실(선호·상황·이름·호칭)이 있는가
+- 속도: 현재 답변마다 DeepSeek 추출 호출 → Jev 약 0.6초 (추정, 근거: 2026-09-28 메인 세션 하네스 실측)
+- 토큰: 현재 0.4~1k/회 × 매 답변(대부분 빈 배열로 추정, 실제 비율은 api_usage_logs 확인 필요) → Jev 측정 불가 (근거 없음 — TYPESAFE_API_KEY 준비 후 대표 입력 3종 측정)
+- 주의: 오판(거짓 음성) 시 기억 누락. 사용자 메시지가 TypeSafe(미국)로 새로 전송됨 — 처리방침 반영 여부 사용자 확인(46-a)
 ```
 
 ## Links

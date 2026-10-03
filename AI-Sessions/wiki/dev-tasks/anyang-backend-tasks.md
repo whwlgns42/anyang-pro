@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -83,6 +83,14 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    저장하지 않음, 기존 `if (assistantText)` 조건 유지). 잘린 답변 표시는 두지 않는다. 3번
    의존. 테스트: 3-3절·3-3-1절·3-3-2절·3절 5번의 테스트 방법([[anyang-backend-api#테스트
    방법]]) 참고.
+6-1. **Jev 게이트(신규, 확인 항목 46, backend 설계 3-3-3절, 재승인 대기)** —
+   `extractAndStorePreference`의 `extractPreferences` 호출 직전에 Jev Noul 판정 1회를
+   둔다. 확률 < 임계값(0.2, 미확정)이면 추출·저장을 건너뛴다. Jev 오류·타임아웃(2초,
+   미확정)·`TYPESAFE_API_KEY` 없음이면 기존대로 추출(fail-open). 전송은 `maskPii` 적용한
+   사용자 메시지만. 판정 함수는 `web/lib/`에 작게 분리해 목으로 바꿀 수 있게 한다. 키는
+   서버 환경변수만(9절 환경변수 목록 갱신). 6번 의존. 확정 전 선행 조건: 확인 항목
+   46-a(전송 결정 문서·처리방침 갱신 여부)가 해결돼야 착수한다. 테스트: 통과/차단/
+   fail-open/전송 범위 단위 테스트([[anyang-backend-api#테스트 방법]] "Jev 게이트").
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
