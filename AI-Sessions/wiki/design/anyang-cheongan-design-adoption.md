@@ -5,164 +5,203 @@ status: draft
 owner: frontend
 ---
 
-# 안양 청년정책 비서 — 청안(cheongan) 디자인 적용 조사·설계
+# 안양 청년정책 비서 — 청안(cheongan) 디자인 웹 적용 설계
 
 ## Summary
 
-팀원이 만든 `C:\Users\whwlg\Downloads\cheongan\`(design-system: Tailwind v4 + W3C 토큰, react-prototype: React 19 + Vite
-해시 라우터)을 현재 `web/`(Next.js 16 + 순수 CSS)에 적용할 수 있는지 다시 확인하고, 실제로 적용할 때 필요한 작업을
-정리한 draft다. 코드·설정·패키지는 건드리지 않았다. 이 문서의 모든 값은 사용자 승인 전이라 `(미확정)`이다.
+팀원 디자인 소스 `C:\Users\whwlg\Downloads\cheongan\`(design-system: Tailwind v4 + W3C 토큰, react-prototype: React 19 + Vite
+해시 라우터)를 `web/`(Next.js 16.3.6 + React 19, PWA)에 **반응형 웹**으로 적용하는 설계 draft다(확인 항목 52). 코드·설치·파일 복사는
+하지 않았다. 설계 단계 문서이며 구현은 사용자 재승인 뒤에 시작한다.
 
-- 기술적으로는 적용할 수 있다. 버전이 맞고(React 19, Next 16 + Tailwind v4 PostCSS 공식 안내 있음), README에 옮기는 4단계 안내가 있다.
-- 기존 `globals.css`는 레이어 밖(unlayered) 순수 CSS라 Tailwind를 추가해도 프리플라이트가 기존 화면을 크게 깨뜨리지는 않는다(코드 근거, 브라우저 확인은 못 함). 반대로 Tailwind 유틸리티가 `globals.css`의 전역 요소 규칙(`button`, `h1`, `a`, `fieldset`)에 져서 안 먹는 문제가 생긴다. 점진 이행에는 이 규칙들을 정리해야 한다.
-- 청안 화면 6개 중 `/chat`, `/notices`, `/notices/[id]`는 기존 라우트와 1:1이고 기존 API로 충분하다. 나머지에는 기존 승인 설계를 바꿔야 하는 부분이 있다: 하단 탭 3개에서 4개로, "내 정보" 합쳐진 화면, 공지 본문 이미지 수(`image_count`) 부재, 받는 기기 목록 API 부재.
-- 따라서 이 문서는 "적용 가능 여부와 작업 목록" draft이고, 구현은 승인된 설계가 바뀐 뒤(재승인)에 시작한다.
+- 사용자 확정(2026-10-03, 메인 세션 전달): 웹(PWA)만(Expo·React Native 앱 없음), 청안 `tokens.json`·`tokens.css`·`tailwind.css`는 그대로 가져와 쓰고 컴포넌트는 새로 작성, 반응형 모바일 390 / 태블릿 768 / 데스크톱 1200(데스크톱은 사이드바).
+- 그 밖의 값은 모두 `(미확정)` 제안이다. 권장안은 프로젝트 문서 확인 항목 52 (c)에 있고, 이 문서는 그것을 구체화했다.
+- 핵심 설계: 토큰은 `web/design-system/`에 원본 그대로 두고, `globals.css`는 `@layer components`로 옮겨 Tailwind 유틸리티가 이기게 하며, 옛 의미 토큰(`--accent`, `--bg` 등)을 청안 토큰으로 다시 가리켜 시안 없는 화면도 한 번에 같은 팔레트가 되게 한다. 화면은 단위별로 이행한다.
+- API 변경 없음: `image_count` 배지와 알림 "받는 기기" 목록은 뺐고 기존 API만 쓴다. backend·database 설계 변경이 필요하지 않다고 판단했다.
+
+화면별 스펙은 [[anyang-frontend-screens]]의 "청안 디자인 적용 화면 스펙" 절, 작업 순서·파일·테스트는 [[anyang-frontend-tasks]]의 "청안 디자인 적용" 절에 있다. 이 문서는 토큰·공존·글꼴·반응형·공통 컴포넌트만 다룬다.
 
 ## Context
 
-- 요청: [[anyang-youth-policy-assistant]] 확인 항목 49. frontend 구현은 확인 항목 47 때문에 보류 상태이며, 팀원 소스를 채택하면 web+app 설계를 다시 시작한다.
-- 기존 승인 설계: [[anyang-frontend-screens]], [[anyang-frontend-tasks]]. 이 문서는 그것들을 고치지 않는다. 필요한 변경은 아래에서 "설계 변경 필요"로만 표시한다.
-- API 계약: [[anyang-backend-api]]. 이번 단계에서 backend는 호출하지 않았다. 신규 API 필요 여부는 표시만 한다.
+- 요청 이력: 확인 항목 49(적용 가능성 조사, 보류 후 2026-10-03 해제) → 52(적용 요청, 결정 일부). 49의 조사 결과 중 이 설계에 필요한 사실만 아래에 남겼다.
+- 49 해제 이후 달라진 것: 청안 폴더에 `Icon.tsx`(직접 그린 선 아이콘 15개, 외부 라이브러리 없음)·`tokens.json`·`build-tokens.mjs`가 있다는 것을 확인했다. 「청안 화면 기능 정의서 v0」는 없어서 프로토타입 코드만 근거로 한다.
+- 49에서 "설계 변경 필요"로 표시했던 `image_count`와 구독 조회 GET API는 이번에 해당 UI를 빼므로 필요 없다. 탭 3개 → 4개는 [[anyang-frontend-screens]]에서 직접 바꾼다.
+- API 계약: [[anyang-backend-api]] (읽기만 했다. 호출·수정 없음).
 
 ## Details
 
-### 1. 재확인 결과
+### 1. 확정 값과 제안 값
 
-#### 1-1. 버전과 의존성
-
-| 항목 | web (현재) | cheongan react-prototype | 비고 |
-|---|---|---|---|
-| React / react-dom | 19.3.0 | ^19.3.0 | 동일 계열 |
-| 빌드 도구 | Next.js 16.3.6 (Turbopack, `output: "standalone"`) | Vite ^8.3.2 + `@vitejs/plugin-react` | 번들러가 달라 Vite 플러그인(`@tailwindcss/vite`)은 못 쓴다 |
-| TypeScript | 5.9.3 | ^7.0.2 | web 쪽을 올릴 필요는 없다. 복사한 컴포넌트가 5.9에서 컴파일되는지는 확인 못 함 |
-| Tailwind | 없음 | tailwindcss ^4.3.3 (설치본 4.3.3) | web에는 `tailwindcss`, `@tailwindcss/postcss` 추가 필요 |
-| 라우터 | App Router | 직접 만든 해시 라우터(`lib/route.ts`) | App Router로 교체 |
-| 테스트 | vitest 5.0.2 (`npm test` = `vitest run`, 로직 위주) | 없음 | 아래 6절 |
-| Node | web 요구 버전은 `package.json`에 명시 없음 | 20.19 이상 또는 22.12 이상 | `build-tokens.mjs`는 Node 18+ (확인: design-system README) |
-
-web `package.json` 기준으로 Tailwind·PostCSS 관련 의존성은 현재 0개다.
-
-#### 1-2. README "Next.js로 옮길 때" 4단계
-
-1. `src/components`를 복사하고 `app/globals.css`에 `@import "tailwindcss";`와 `design-system/tailwind.css`를 import.
-2. 상태를 쓰는 파일(`Chat.tsx`, `Controls.tsx`, `lib/interests.tsx`, `screens/*`) 맨 위에 `"use client";`.
-3. 해시 라우터를 App Router 경로(`/chat`, `/notices`, `/notices/[id]`, `/alerts`, `/me`)로 교체하고 `<a href>`는 `next/link`로.
-4. `data/` 샘플을 API 호출로 교체. 필드는 팀원의 「청안 화면 기능 정의서 v0」 "데이터" 열에 있다(이 문서는 받은 폴더에 없어 확인 못 함).
-
-이 안내는 "컴포넌트 복사 + 경로 교체"가 전부다. 아래 항목은 이 안내가 다루지 않는 것들이다: web의 기존 CSS와의 충돌, 폰트 로딩, 기존 라우트와 이름이 다른 점(`/alerts`, `/me`), 인증·동의·온보딩 가드, 실제 API 연결, 프로토타입 전용 요소(390x844 틀·사이드바) 제거.
-
-#### 1-3. 못 읽은 것 (확인 못 함)
-
-- `Icon.tsx`, `lib/format.ts`, `samples/` JSON, `tokens.json`, `build-tokens.mjs`는 열어 보지 않았다. 아이콘 15개의 출처·라이선스는 확인 못 함.
-- 「청안 화면 기능 정의서 v0」는 받은 폴더에서 확인하지 못했다.
-
-### 2. Tailwind v4 도입 영향
-
-#### 2-1. 필요한 패키지와 설정 (공식 문서 확인됨)
-
-Next 16.3.6 번들 문서(`01-app/01-getting-started/11-css.md`)와 cheongan에 설치된 tailwindcss 4.3.3 기준:
-
-- 패키지 추가: `tailwindcss`, `@tailwindcss/postcss` (devDependencies 위치는 문서 기준)
-- `web/postcss.config.mjs` 신규: `@tailwindcss/postcss` 플러그인 1개
-- CSS 진입점에 `@import "tailwindcss";` (프로토타입은 `src/index.css`에서 `@import "tailwindcss"; @import "../../design-system/tailwind.css";`)
-- Turbopack은 PostCSS 설정을 지원한다. 대신 프로토타입이 쓰는 `@tailwindcss/vite`는 쓰지 않는다.
-- design-system 폴더를 `web/` 밖에서 import하는 것이 Turbopack에서 되는지는 확인 못 함. 안전한 안은 `web/` 안으로 복사하는 것이다(원본 `tokens.json` -> 생성물 `tokens.css`, `tailwind.css`, `tokens.ts` 구조 유지 여부는 3절 선택지에서 정한다).
-
-#### 2-2. 프리플라이트(리셋)가 기존 `globals.css`에 미치는 영향
-
-근거: cheongan에 설치된 `tailwindcss/index.css` 4.3.3은 `@layer theme, base, components, utilities;`를 선언하고 프리플라이트를 `base` 레이어에 넣는다. 반면 `web/app/globals.css`(638줄)는 레이어 없이 쓰였다. CSS 캐스케이드에서 레이어 밖 규칙은 레이어 안 규칙보다 항상 이긴다(우선순위 점수와 무관). 아래는 이 규칙에 따른 코드 근거 추론이며, 브라우저 실행으로는 확인 못 함.
-
-프리플라이트가 바꾸는 것(설치본 `preflight.css`에서 읽음): `*{margin:0;padding:0;border:0 solid}`, 제목 `font-size/font-weight: inherit`, `a{color:inherit;text-decoration:inherit}`, `ol/ul{list-style:none}`, `img/svg{display:block}`, 폼 컨트롤 `font:inherit; border-radius:0; background-color:transparent`, `textarea{resize:vertical}`, `[hidden]{display:none !important}`, `html{line-height:1.5}`.
-
-| 영향 | 내용 | 정도 |
+| 항목 | 값 | 상태 |
 |---|---|---|
-| 기존 규칙이 이기는 경우 | `globals.css`가 직접 지정한 `button`, `h1`, `a`, `fieldset`, `.card`, `.field` 등의 속성은 프리플라이트를 이긴다 | 화면이 깨질 가능성은 낮다 |
-| 프리플라이트만 적용되는 경우 | `globals.css`가 지정하지 않은 속성(예: 제목의 기본 굵기·크기, 목록 점, `img` 표시 방식, `<table>` 테두리)은 프리플라이트 값으로 바뀐다 | 관리자 화면 `<table>` 4곳과 `privacy-policy` 같은 본문 화면은 눈으로 확인이 필요하다 (확인 못 함) |
-| 유틸리티가 지는 경우 | Tailwind 유틸리티(`layer(utilities)`)는 레이어 밖 `globals.css`에 진다. 같은 요소에 `className="bg-paper"`를 줘도 `globals.css`의 `button { ... }`가 같은 속성을 지정하면 유틸리티가 무시된다 | 점진 이행의 핵심 위험. 복사한 컴포넌트가 `button`, `h1`, `a`를 쓰므로 반드시 부딪친다 |
+| 적용 범위 | 웹(PWA)만 | 확정 |
+| 토큰 파일 | `tokens.json`·`tokens.css`·`tailwind.css` 그대로 사용 | 확정 |
+| 컴포넌트 | 청안 코드를 참고해 새로 작성 | 확정 |
+| 반응형 | 390 / 768 / 1200, 데스크톱은 사이드바 | 확정 |
+| 공존안 | D(`globals.css`를 `@layer components`로) 후 B(화면 단위 이행) | `(미확정)` |
+| 글꼴 | 토큰대로 Hahmlet·IBM Plex Sans KR·IBM Plex Mono, `next/font/google` | `(미확정)` |
+| 탭 | 4개(대화·공지·알림·내 정보). 순서는 10절 3번 | `(미확정)` |
+| 시안 없는 화면 | 토큰·공통 컴포넌트만, 관리자는 가독성·일관성만 | `(미확정)` |
+| 되돌리기 | 클라이언트에서 삭제 요청을 5초 늦춤 | `(미확정)` |
+| 토큰 위치 | `web/design-system/` | `(미확정)` |
+| 반응형 세부(태블릿 레이아웃, 사이드바 항목, 콘텐츠 최대폭) | 6절 | `(미확정)` |
 
-`globals.css` 전역 요소 규칙(검색으로 확인된 것): `button`, `h1`, `a`, `fieldset`. 이 규칙들이 유틸리티를 덮는지 컴포넌트별로 확인이 필요하다.
+### 2. 재확인한 사실 (코드·설치본 근거)
 
-#### 2-3. 토큰 이름 충돌
+- 버전: web은 React 19.3.0·Next 16.3.6(Turbopack, `output: "standalone"`), TypeScript 5.9.3, vitest 5.0.2. 청안 프로토타입은 React ^19.3.0, Tailwind ^4.3.3, Vite. web에는 Tailwind·PostCSS 의존성이 없고 `postcss.config.*`도 없다.
+- 프로토타입이 쓰는 `@tailwindcss/vite`는 못 쓴다. Next에서는 `tailwindcss`와 `@tailwindcss/postcss`를 추가하고 `postcss.config.mjs`에 플러그인 1개를 둔다(Next 번들 문서 `01-app/01-getting-started/11-css.md` 기준).
+- 청안 `tailwind.css`는 `@theme`(색·글꼴·글자 크기·모서리·간격 이름)과 `@utility type-*` 9개, `:root`의 `--space-*`·`--border-*`·`--duration-*`를 담는다. `tokens.css`는 같은 값을 `:root` 변수와 `.type-*` 클래스로 담은 일반 CSS다. 둘의 값은 `tokens.json`에서 생성된다(`node build-tokens.mjs`).
+- Tailwind v4의 `@theme` 변수는 쓰이지 않으면 출력되지 않는다는 동작을 알고 있으나 이 저장소에서 확인하지 못했다(설치 전이라). 옛 CSS가 `var(--color-ink)`를 쓰려면 변수가 항상 있어야 하므로 3-2절에서 `tokens.css`도 함께 불러온다. 빌드 산출 CSS에서 확인해야 한다(작업 C2).
+- 프리플라이트(설치본 4.3.3 기준)는 `base` 레이어에 있고 `globals.css`는 레이어 밖이라 항상 이긴다. 그래서 Tailwind 유틸리티가 `globals.css`의 `button`·`h1`·`a`·`fieldset` 같은 전역 요소 규칙에 진다. 이 추론은 브라우저로는 확인하지 못했다.
 
-| 이름 | web `globals.css` | cheongan 토큰 | 판정 |
-|---|---|---|---|
-| `--border-strong` | `var(--zinc-300)` (색) | `2px` (두께) | 같은 이름, 다른 종류. 한쪽을 바꿔야 한다. 같은 `:root`에 둘 다 두면 나중에 선언된 쪽이 이긴다 |
-| `--radius-sm` | `6px` | Tailwind 기본 테마에도 `--radius-sm`이 있다(값 다름, 설치본 `theme.css`) | `@theme`에서 덮어쓰는 방식과 `globals.css` 값 중 어느 것이 이기는지는 레이어 규칙상 `globals.css`(`:root`는 레이어 밖)로 추론되나 확인 못 함 |
-| 팔레트 | `--accent #2563eb` + zinc 계열 | `--color-accent #1F4A7C` + paper/ink 따뜻한 팔레트 | 이름은 달라 충돌하지 않지만 팔레트가 둘이 되어 한 화면에 색 체계가 섞인다 |
-| 본문 글꼴 | `system-ui` | Hahmlet(제목), IBM Plex Sans KR(본문), IBM Plex Mono(메타) | 글꼴 확정이 필요하다 |
-| 다크 모드 | `globals.css`에 `prefers-color-scheme`·`dark` 규칙이 없고 [[anyang-frontend-screens]]에도 다크 모드 언급이 없다(검색 확인) | 청안 토큰에도 없음 | 충돌 없음. 다크 모드는 양쪽 모두 범위 밖이다 |
+### 3. 토큰 통합
 
-#### 2-4. 공존 선택지
+#### 3-1. 위치와 가져오는 방법
 
-| 안 | 내용 | 장점 | 단점 |
-|---|---|---|---|
-| A. 전면 교체 | `globals.css`를 지우고 Tailwind + 토큰으로 모든 화면을 다시 만든다 | 색·글꼴 체계가 하나. 충돌이 사라진다 | `page.tsx` 19개(관리자 포함)의 화면을 한 번에 손대야 한다. `consent-form`, `privacy-policy`의 문구 테스트가 걸린 파일까지 건드린다 |
-| B. 점진 이행 | `globals.css`를 유지하고 Tailwind를 추가한다. 새 화면부터 유틸리티를 쓴다 | 화면 단위로 나눠 커밋·확인할 수 있다 | 2-2의 "유틸리티가 지는 경우"를 해결해야 한다(전역 요소 규칙 삭제 또는 `globals.css`를 레이어 안으로 이동). 팔레트가 한동안 둘이다 |
-| C. 프리플라이트 끄기 | `theme`와 `utilities`만 가져오고 프리플라이트는 import하지 않는다 | 기존 화면의 리셋 의존이 그대로다 | 설치본에 `theme.css`, `preflight.css`, `utilities.css`가 따로 있는 것은 확인했으나, 공식 문서가 이 방식을 안내하는지 확인 못 함. 청안 컴포넌트는 프리플라이트 리셋을 전제로 만들어졌을 가능성이 있다(확인 못 함) |
-| D. 레이어 분리 | 기존 CSS를 `@layer components` 안으로 옮겨 유틸리티가 이기게 한다 | 유틸리티가 항상 기존 클래스를 이긴다. 원본 클래스명 유지 | `globals.css` 한 번의 구조 변경이 필요하다. 기존 규칙이 프리플라이트(`base`)보다 약해지는 쪽이 아니고 강한 쪽(`components` > `base`)이라 화면 변화는 작다고 추론되나 확인 못 함 |
+- 청안 `design-system/` 폴더를 **수정 없이** `web/design-system/`로 복사한다 `(미확정)`. 이유는 (1) `web/` 밖 폴더를 import하는 것이 Turbopack에서 되는지 확인하지 못했고, (2) README의 `@import "../design-system/tailwind.css"` 경로가 `web/app/globals.css`에서 그대로 맞기 때문이다.
+- 복사 대상: `tokens.json`(원본), `tokens.css`, `tailwind.css`, `build-tokens.mjs`, `tokens.ts`, `README.md`. `tokens.ts`는 앱이 없어 쓰이지 않지만 `build-tokens.mjs`가 만들어 내는 파일이라 같이 둔다(빼면 재생성 때 파일이 다시 생긴다).
+- 값을 바꿀 때는 청안 README의 규칙대로 `tokens.json`만 고치고 `node build-tokens.mjs`로 다시 만든다. 생성 파일을 손으로 고치지 않는다. 청안 쪽 원본이 바뀌면 같은 폴더를 다시 복사한다.
+- 컴포넌트는 복사하지 않는다. `react-prototype/src`는 참고만 한다.
 
-제안(미확정): 적용 순서로 D를 먼저 하고(전체 `globals.css`를 `@layer components`로 이동, 충돌 토큰 이름 정리) 그 위에서 B처럼 화면 단위로 청안 컴포넌트를 들이고, 마지막에 사용처가 사라진 클래스를 지운다. 이유는 화면 단위 커밋과 단계별 `npm run build` 검증이 가능하기 때문이다. 단, 이 제안은 사용자 확정이 필요하다 `(미확정)`.
+#### 3-2. 가져오는 순서와 설정
 
-### 3. 화면 매핑
+`web/app/globals.css` 맨 위(구현 작업 C2):
 
-#### 3-1. 청안 화면과 기존 라우트
+```css
+@import "tailwindcss";
+@import "../design-system/tailwind.css";
+@import "../design-system/tokens.css" layer(base);
+```
 
-| 청안 화면 | 기존 안양 비서 라우트 | 필요한 API | 기존 API로 충분한가 | 비고 |
+- 셋째 줄은 `@theme` 미출력 변수 문제를 막고 옛 CSS(`var(--color-*)`)가 항상 값을 얻게 하려는 것이다. `tokens.css`가 `.type-*` 클래스를 레이어 밖에 정의하면 `text-body font-medium`처럼 유틸리티로 굵기를 바꾸는 청안 README 방식이 깨지므로 `layer(base)`에 넣는다. 이 `layer()` import가 Turbopack에서 되는지, `@theme` 변수가 실제로 안 나오는지는 구현 시 산출 CSS로 확인한다. 안 되면 대안은 옛 CSS의 변수 참조를 `tailwind.css`가 쓰는 변수로만 제한하고 필요한 값만 `globals.css` 안 `@theme static`에 다시 적는 것이다.
+- `web/postcss.config.mjs` 신규: `@tailwindcss/postcss` 플러그인 하나.
+- `package.json`: `tailwindcss`, `@tailwindcss/postcss` 추가(Next 문서의 위치 안내를 따름). 설치는 사용자 승인된 구현 단계에서 한다.
+- 청안 색 말고 다른 색을 막는 `--color-*: initial;`은 켜지 않는다 `(미확정)`. 옛 CSS가 한동안 `--zinc-*`를 쓰기 때문이다. 옛 CSS 정리(작업 C10) 뒤에 켤지 판단한다.
+
+#### 3-3. 이름 충돌과 옛 토큰 다시 가리키기
+
+| 충돌 | 처리 |
+|---|---|
+| `--border-strong`: 옛 `globals.css`는 색(`zinc-300`), 청안은 `2px` | 옛 이름을 `--line-strong`으로 바꾼다. 사용처는 `globals.css` 안 3곳뿐이고 tsx에서는 쓰지 않는다(검색 확인) |
+| `--radius-sm`: 옛 `6px`, Tailwind 기본 테마에도 같은 이름 | 옛 이름을 `--legacy-radius-sm`으로 바꾼다(사용처 `globals.css` 2곳) |
+| 팔레트 두 벌 | 옛 의미 토큰을 청안 토큰으로 다시 가리킨다(아래 표). 옛 zinc 팔레트 변수는 쓰이지 않게 되면 정리 단계에서 지운다 |
+
+옛 의미 토큰 → 청안 토큰(`(미확정)`, 시안 없는 화면 전체의 모습이 바뀐다):
+
+| 옛 | 새 값 | 비고 |
+|---|---|---|
+| `--bg` | `var(--color-paper)` | |
+| `--surface` | `var(--color-surface)` | 옛 body 배경은 `--surface`였으나 청안 body는 paper. body 규칙은 `--bg`를 쓰게 고친다 |
+| `--fg` | `var(--color-ink)` | |
+| `--muted` | `var(--color-ink-3)` | 글자색 하한 4.7:1을 지키는 값 |
+| `--border` | `var(--color-rule)` | |
+| `--line-strong` (옛 `--border-strong`) | `var(--color-field)` | 입력 테두리 |
+| `--accent`, `--accent-hover`, `--accent-active`, `--accent-fg` | `--color-accent`, `--color-accent-press`, `--color-accent-press`, `--color-on-accent` | |
+| `--accent-soft`, `--accent-soft-border` | `--color-surface`, `--color-rule` | 청안 규칙: 색 면 채우기 없음 |
+| `--danger`, `--danger-hover`, `--danger-soft` | `--color-danger`, `--color-danger`, `--color-surface` | |
+| `--warning-bg`, `--warning-border` | `--color-surface`, `--color-rule` | |
+| `--radius` | `var(--radius-control)` (12px) | 옛 10px |
+| `--shadow-card`, `--shadow-card-hover` | `none` | 청안 규칙: 그림자 카드 없음 |
+
+옛 `body`의 `font-family`·`font-size`는 `var(--font-sans)`·`var(--text-body)`로, 옛 `h1`은 `font-family: var(--font-display)`로 바꾼다(`@layer base`의 body 규칙으로 옮김).
+
+### 4. 공존안 D 후 B 구체화
+
+1. `globals.css`의 `:root` 변수 선언은 레이어 밖에 둔다(변수는 레이어와 무관하게 이긴다).
+2. 나머지 규칙(요소 규칙 `body`·`a`·`h1`·`button`·`fieldset`, `.card`·`.field`·`.bottom-nav`·`.auth-*` 등)은 모두 `@layer components { ... }` 안으로 옮긴다. 선택자·선언은 바꾸지 않는다. `* { box-sizing }`은 프리플라이트가 같은 일을 하므로 지운다.
+3. 결과: 유틸리티(`utilities` 레이어)가 항상 옛 클래스를 이기고, 옛 규칙은 프리플라이트(`base`)보다 강하다. 이 순서는 `@layer theme, base, components, utilities;`(Tailwind가 선언)에 따른 추론이다. 브라우저 확인은 작업 C2에서 한다.
+4. 새로 만드는 청안 컴포넌트와 이행한 화면은 **유틸리티만** 쓰고 옛 클래스(`.card`, `.field`, `button.secondary` 등)를 쓰지 않는다. 옛 클래스는 이행하지 않은 화면(로그인·동의·온보딩·정지·관리자 등)만 쓴다.
+5. 이행이 끝나 쓰이지 않는 옛 클래스는 마지막 작업(C10)에서 지운다. 삭제는 사용자 승인 후에 한다.
+
+A안(전면 교체)은 화면 19개를 한 번에 건드려야 하고, C안(프리플라이트 끄기)은 청안 컴포넌트가 리셋을 전제로 만들어졌을 수 있어 채택하지 않는다. 이유는 49와 같다.
+
+### 5. 글꼴
+
+- 로딩: `next/font/google`로 Hahmlet, IBM Plex Sans KR, IBM Plex Mono를 `web/app/layout.tsx`에서 불러온다 `(미확정)`. 청안 README 안내대로 `variable`을 `--font-display`, `--font-sans`, `--font-mono`로 주고 `<html>`에 className으로 붙인다. 청안 토큰의 같은 이름 변수를 덮어쓰는 방식이라 별도 매핑 코드가 없다.
+- 알려진 한계: `next/font`가 만드는 변수 값에는 토큰이 적어 둔 시스템 대체 글꼴(`AppleMyungjo, serif` 등)이 빠진다. `next/font`가 크기 보정된 대체 글꼴을 자동으로 붙이므로 큰 문제는 아닐 것으로 보나 확인하지 못했다. 문제가 되면 `globals.css`에서 `--font-display: var(--font-hahmlet), AppleMyungjo, serif;`처럼 별도 변수 이름을 쓰는 방식으로 바꾼다(값이 토큰 파일과 두 곳에 생기는 단점).
+- 굵기: Hahmlet 500·600, IBM Plex Sans KR 400·500·600, IBM Plex Mono 400·500(청안 README의 Google Fonts 링크와 같은 범위).
+- 확인하지 못한 것: Google Fonts의 IBM Plex Sans KR·Hahmlet에 `next/font`의 한국어 `subsets` 값이 있는지, 용량이 얼마인지, 빌드 환경에서 폰트를 내려받을 수 있는지. 구현 시 첫 빌드로 확인하고, 안 되면 사용자에게 보고한다(자체 호스팅 파일 추가는 설계 변경이다).
+- 본문 글꼴을 Pretendard로 바꿀지는 청안 정의서의 미확정 항목이라 이번에는 IBM Plex Sans KR로 둔다 `(미확정)`.
+- `word-break: keep-all`과 `text-wrap: pretty`(청안 `index.css`의 base 규칙)는 `globals.css`의 `@layer base`에 넣는다. `:focus-visible` 2px accent 윤곽선도 같이 넣는다(옛 `:focus-visible` 규칙과 같은 취지라 하나로 합친다).
+- `viewport`: `themeColor`는 `#F5F3ED`(paper)로, `viewportFit: "cover"`를 추가한다 `(미확정)`. 청안 화면이 `env(safe-area-inset-*)`를 쓰므로 필요하다. `viewportFit` 키 이름은 구현 시 번들 문서(`node_modules/next/dist/docs`)로 확인한다. `manifest.ts`의 `theme_color`·`background_color`도 같은 값으로 맞춘다. manifest 아이콘(47(c)④)은 이번 범위 밖이다.
+
+### 6. 반응형
+
+기준은 청안 시안 390px이다. 브레이크포인트는 Tailwind v4 기본 `md`(768px = 48rem)가 태블릿과 같아 그대로 쓰고, 데스크톱은 `globals.css`의 `@theme`에 `--breakpoint-desktop: 75rem;`(1200px)을 추가한다 `(미확정)` — 유틸리티 이름은 `desktop:`. `sm`·`lg`·`xl`은 쓰지 않는다.
+
+| 구간 | 폭 | 내비 | 콘텐츠 | 근거 |
 |---|---|---|---|---|
-| 01 대화 (`#/chat`) | `/chat` | `POST /api/chat`(SSE, `event: citations`), `/api/conversations` | 충분 | `chat-client.tsx`를 `Chat.tsx`, `SourceList.tsx` 기반으로 교체. 인용 카드 필드는 `{id,title,source_url,posted_at}`. 청안의 `context`(나이대·상태 기준 표시)는 `GET /api/profile`로 만들 수 있음(서버가 보내는 값 아님) |
-| 02 공지 목록 (`#/notices`) | `/notices` | `GET /api/notices/recommended`, 관심사 개수는 `GET /api/preferences` | 충분 | 추천 응답은 `{id,title,excerpt,posted_at}`. "관심사 N개" 표시용으로 preferences 조회 필요. 관심사 0개일 때 "최근 공지"로 바뀌는 동작은 현재 추천 API의 0개 처리와 맞는지 확인 못 함 |
-| 03 공지 상세 (`#/notices/452591`) | `/notices/[id]` | `GET /api/notices/:id` | 일부 부족 | 이미지 배지·안내(`ImageBadge`, `ImageNote`)는 본문 이미지 수가 필요한데 응답에 `image_count`가 없다. 확인 항목 24(OCR 보류)와 연결된다. **설계 변경 필요**(backend, database) |
-| 04 알림 / 05 알림 홈 화면 추가 전 | `/settings/notifications` (경로명이 다르다: 청안은 `/alerts`) | `GET/PUT /api/notify-settings`, `POST/DELETE /api/push/subscribe` | 일부 부족 | 스위치·받을 시각은 충분. "받는 기기" 목록은 구독 조회 API(GET)가 없다(push API는 POST/DELETE뿐). **설계 변경 필요**(backend). iOS "홈 화면 추가 전" 상태는 클라이언트의 display-mode 검사로 만들고, 현재 코드에는 그 검사가 없다(`manifest.ts`만 있음). 받을 시각 시트는 프로토타입에도 없어 `<input type="time">`을 유지 `(미확정)` |
-| 06 내 정보 (`#/me`) | `/settings/memory` + `/settings/account` + 프로필 + `/conversations` + `/privacy-policy` + 로그아웃 + 탈퇴 | `GET/PUT /api/profile`, `/api/preferences` (GET/PUT/DELETE), `DELETE /api/account`, `signOut` | 충분(API 기준) | 한 화면에 합친 새 구성이다. 화면 구조가 승인 설계와 다르다. **설계 변경 필요**(frontend 설계 [[anyang-frontend-screens]]의 하단 탭 3개(채팅, 공지 피드, 설정) -> 4개) |
+| 모바일 | 390 기준, 360~767 유동 | 하단 탭 바(4개) | 화면 폭 전체, 좌우 `px-gutter`(20px) | 시안 |
+| 태블릿 `(미확정)` | 768~1199 | 하단 탭 바 유지 | 가운데 정렬, 최대 폭 720px, 좌우 `px-gutter` | 탭이 4개뿐이라 하단 바로 충분하다. 시안에 없는 구간이라 별도 레이아웃을 새로 만들지 않고 모바일의 중앙 정렬 확장으로 한다 |
+| 데스크톱 | 1200 이상 | 왼쪽 사이드바(폭 240px), 하단 탭 바 숨김 | 사이드바 오른쪽 영역 안에서 가운데 정렬, 최대 폭 720px `(미확정)` | 요청 |
 
-#### 3-2. 한쪽에만 있는 화면
+- 콘텐츠 최대 폭 720px은 `globals.css`의 `@theme`에 `--container-column: 45rem;`으로 두고 `max-w-column`으로 쓴다. 관리자 화면은 표가 많아 `--container-admin: 65rem;`(1040px)을 따로 둔다 `(미확정)`.
+- 사이드바 구성 `(미확정)`: 맨 위 "청안"(제목 글꼴) → 내비 항목 4개(아이콘 + 라벨, 높이 44px 이상, 현재 항목 accent·semibold·`aria-current="page"`) → 구분선은 `rule`. 항목은 하단 탭과 같은 배열 하나에서 만든다. 관리자 링크는 두지 않는다(관리자 판정은 서버 응답이라 화면 쪽에서 숨기고 보이는 분기를 만들지 않는다). 그 밖의 메뉴(대화 기록, 처리방침, 로그아웃, 탈퇴)는 내 정보 화면에 있다.
+- 공지 상세는 모바일·태블릿에서 하단 탭 바를 숨긴다(시안 03). 데스크톱에서는 사이드바가 계속 보인다.
+- 화면 틀은 시안과 같이 `h-dvh` 세로 flex, 본문 영역 `overflow-y-auto`, 하단에 탭 바다 `(미확정)`. 문서 전체 스크롤 방식과의 차이(iOS 주소창 접힘 등)는 구현 시 화면에서 확인한다.
+- 이분할(목록 + 상세 동시 표시) 같은 데스크톱 전용 화면 구성은 만들지 않는다. 시안이 없고 라우팅(병렬 라우트)이 필요해 범위를 키운다.
+- 로그인 화면의 `auth-*` 반응형(1024px 두 칸)은 그대로 둔다. 브레이크포인트가 1024와 1200으로 다르지만 이번 요청은 로그인 시안이 없는 화면에 대해 토큰만 입히는 범위다 `(미확정)`.
 
-| 쪽 | 화면·요소 | 처리 |
+### 7. 공통 컴포넌트와 재사용 계획
+
+위치: `web/app/_components/ui/`(신규), 내비는 `web/app/_components/app-nav.tsx`(신규). 청안 코드는 참고만 하고 새로 쓴다. 파일 수를 줄이려고 청안처럼 관련된 것을 한 파일에 둔다. 클래스는 청안과 같이 토큰 유틸리티(`bg-accent`, `h-touch`, `rounded-control`, `type-*`)를 쓴다.
+
+| 컴포넌트 | 파일 | 청안 참고 | 쓰는 화면 | 안양 쪽 변경점 |
+|---|---|---|---|---|
+| `Icon`, `IconButton` | `ui/icon.tsx` | `Icon.tsx` (15개: chat·notices·bell·person·history·plus·send·chevron-right/left·external·image·phone·share·pencil·trash) | 전부 | 모양은 청안과 같게 그린다. `image`·`phone`은 이번에 쓰이지 않으므로 만들지 않는다 `(미확정)` — 13개 |
+| `Button`, `buttonClass` | `ui/controls.tsx` | `Controls.tsx` | 이행한 화면, 탈퇴 다이얼로그, 원문 보기 | `Link`에 같은 모양을 입히려고 `buttonClass`를 내보낸다 |
+| `Switch` | `ui/controls.tsx` | 같음 | 알림 | 접근성 속성(`role="switch"`, `aria-labelledby`·`describedby`) 유지 |
+| `SettingsGroup` | `ui/controls.tsx` | 같음 | 알림, 내 정보 | |
+| `Toast` | `ui/controls.tsx` | 같음 | 내 정보(되돌리기), 알림·메모리 오류 안내 | `position: absolute`는 `fixed`로 바꿔 사이드바 레이아웃에서도 콘텐츠 열 아래에 뜨게 한다 |
+| `ScreenHeader` | `ui/screen.tsx` | `Screen.tsx` | 탭 화면 | 청안 `Screen`(틀 + 탭 바)은 `AppShell`로 나눈다 |
+| `AppShell` | `app/(tabs)/layout.tsx`가 사용 | `Screen.tsx` + 프로토타입 `App.tsx`의 틀 | (tabs) 전체 | 휴대폰 틀(390×844)·화면 바로가기 사이드바는 가져오지 않는다. 사이드바는 6절의 새 요소다 |
+| `TabBar`, `Sidebar` | `app-nav.tsx` | `TabBar.tsx` | (tabs) 전체 | `<a href>`를 `next/link`로, 현재 탭 판정을 `usePathname()`으로. 항목 배열 하나를 둘이 공유 |
+| `MessageBubble`, `AnswerBlock`, `Composer` | `ui/chat.tsx` | `Chat.tsx` | `/chat` | 입력 키 처리 등 현재 `chat-client.tsx`의 동작은 유지하고 외형만 바꾼다. `Cite`는 만들지 않는다(8절) |
+| `SourceList` | `ui/chat.tsx` | `SourceList.tsx` | `/chat` | 필드 `{id, title, posted_at}`. 링크는 `/notices/[id]` |
+| `NoticeRow` | `ui/notice-row.tsx` | `NoticeRow.tsx` | `/notices` | `ImageBadge`·`ImageNote`는 만들지 않는다 |
+| 입력·선택 | 옛 `.field` 유지 | (청안에 입력 컴포넌트 없음, `Composer` 입력과 `EditInterest` 텍스트 영역만 있음) | 로그인·동의·온보딩 | 이번에 새 컴포넌트를 만들지 않는다. 옛 클래스가 토큰 다시 가리키기로 같은 모습을 얻는다 |
+| 사이드바, `AppShell` | 위 | — | — | **청안에 없어 새로 추가하는 것** |
+| 확인 다이얼로그(`<dialog>`) | `ui/controls.tsx`의 `ConfirmDialog` | `MemoryScreen.tsx`의 탈퇴 `<dialog>` | 계정 탈퇴 | 관리자 화면의 `window.confirm`(`admin/_lib/confirm.ts`)은 그대로 둔다 |
+
+재사용: 같은 컴포넌트를 여러 화면이 쓰는 곳은 `Button`·`Icon`·`SettingsGroup`·목록 행 패턴이다. 목록 행 패턴(제목 + 보조 줄 + 날짜, 아래 `rule` 선)은 `NoticeRow`와 `/conversations` 행이 같은 클래스 구성을 쓴다(컴포넌트로 합치지 않고 클래스만 맞춘다, 쓰는 곳이 둘뿐이라 `(미확정)`).
+
+### 8. 청안에서 가져오지 않는 것과 바꾼 것
+
+| 청안 요소 | 처리 | 이유 |
 |---|---|---|
-| 안양 비서에만 있음 | `/login`, `/consent`, `/onboarding`, `/suspended`, `/conversations`(청안은 기록 아이콘 버튼만 있음), `/privacy-policy` 본문, `/admin/*` 4개 | 청안 디자인이 없다. 토큰·공통 컴포넌트만 입히는 범위인지, 별도 시안을 받아야 하는지 `(미확정)` |
-| 청안에만 있음 | 4개 탭(공지, 대화, 알림, 내 정보), 관심사 삭제 후 5초 되돌리기(Toast), 홈 화면 추가 안내, 휴대폰 틀·사이드바(프로토타입 전용) | 4개 탭과 되돌리기는 설계 변경. 되돌리기에 필요한 API(삭제 취소)는 없다. 클라이언트에서 삭제를 5초 뒤로 미루는 방식이면 API 변경 없이 가능하나 확정 필요 `(미확정)`. 틀·사이드바는 가져오지 않는다 |
+| 본문 이미지 배지(`ImageBadge`)·이미지 안내(`ImageNote`) | 뺀다 `(미확정)` | 공지 응답에 `image_count`가 없다([[anyang-backend-api]]). backend·database 설계 변경이 필요해 이번에는 하지 않는다 |
+| 알림 "받는 기기" 목록 | 뺀다 `(미확정)` | 구독 조회 GET API가 없다. 같은 이유 |
+| 답변 속 인용 번호 `<Cite n>` | 만들지 않는다 | 답변은 DeepSeek 스트림 일반 텍스트이고 인용 번호 규약이 없다. 번호를 넣으려면 backend 프롬프트 계약이 바뀌므로 이번에 하지 않는다. 근거 카드의 번호(1, 2, 3)는 표시한다 |
+| 알림 "받을 시각" 시각 선택 시트 | 네이티브 `<input type="time">`을 유지 | 시안에도 시트가 없고 기존 승인 설계가 네이티브 입력이다 |
+| 프로필 "수정" 버튼 | 뺀다 `(미확정)` | 시안에서도 동작이 없다. 프로필 수정은 기존 승인 설계에 없는 새 기능이다(API는 `PUT /api/profile`로 있음) |
+| 휴대폰 틀 390×844, 프로토타입 바로가기 사이드바 | 가져오지 않는다 | 프로토타입 전용 요소 |
+| 프로토타입 `data/` 샘플 | 가져오지 않는다 | 실제 API로 대체 |
+| 청안 "AI에는 …이름과 이메일은 보내지 않아요" 문장 | 쓰지 않는다 `(미확정)` | 확인 항목 43에서 이름·호칭 기억·전송이 예외로 허용되어 "이름은 보내지 않는다"가 사실과 다르다. 화면 스펙의 문구 규칙 참고 |
 
-### 4. 확인 항목 47과의 관계
+### 9. 테스트 방법 요약
 
-- 47(b) 기억 화면 진입 경로: 청안 "내 정보" 탭이 `/settings/memory`로 가는 길을 자연스럽게 만들어 이 적용에서 함께 해결된다. 단 하단 탭 4개 구성은 승인 설계 변경이다.
-- 47(c) 프론트 버그 ①~⑤: ①②③은 이 적용이 어차피 다시 쓰는 파일(`chat-client.tsx`, `notices-list.tsx`, `notice-detail.tsx`)이라 함께 처리하는 것이 효율적이다. ④(manifest 아이콘)와 ⑤(가입 동의 마스크 안내)는 청안 적용과 무관하게 독립적으로 처리할 수 있다. 아이콘 자산은 청안 폴더에도 없다.
+상세는 [[anyang-frontend-tasks]]. 요약:
 
-### 5. 작업 목록 (실행하지 않음, 순서)
+- `npm test`: 로직만 검사한다. className 변경은 걸리지 않으므로 `consent-privacy-wording.test.ts`가 읽는 세 파일(`app/consent/consent-form.tsx`, `app/privacy-policy/page.tsx`, `app/(tabs)/settings/memory/memory-client.tsx`)의 경로와 고정 문구가 유지되는지 확인한다.
+- 새 로직(탭 판정, iOS 홈 화면 추가 전 판정, 5초 지연 삭제)에는 vitest 테스트를 추가한다.
+- `npm run build` 후 산출 CSS에서 청안 토큰 변수와 `desktop:` 브레이크포인트 유틸리티가 나오는지 확인한다.
+- 화면은 실제로 실행해 390 / 768 / 1200 폭에서 주요 흐름을 확인한다. 로그인·DB가 필요한 화면을 못 열었으면 못 했다고 보고한다.
 
-| 순서 | 작업 | 수정·추가 파일 | 비고 |
-|---|---|---|---|
-| 0 | 사용자 확인: 공존 안(2-4), 글꼴, 탭 4개, 한쪽에만 있는 화면의 범위 | 이 문서 | 승인 후 `(미확정)` 제거 |
-| 0-1 | 설계 변경 반영: 승인 설계의 하단 탭, 설정 화면 구조 | [[anyang-frontend-screens]], [[anyang-frontend-tasks]] | pm이 "승인된 설계"에서 빼고 재승인 |
-| 0-2 | backend 조율: `image_count` 추가 여부, 구독 조회 GET API | [[anyang-backend-api]] (backend 소유) | 필요 없으면 해당 UI를 빼는 안도 있음 `(미확정)` |
-| 1 | Tailwind 설치 | `web/package.json`, `web/package-lock.json`, `web/postcss.config.mjs`(신규) | 사용자 승인 후. 파일 추가 |
-| 2 | 토큰 복사·충돌 정리 | `web/app/_styles/`(신규 위치 `(미확정)`)에 청안 `tailwind.css`, `tokens.css`; `web/app/globals.css`의 `--border-strong` 이름 변경 | 원본 `build-tokens.mjs`, `tokens.json`을 가져올지 `(미확정)` |
-| 3 | `globals.css` 레이어 이동 + `@import "tailwindcss"` | `web/app/globals.css`, `web/app/layout.tsx` | 이 단계 직후 모든 기존 화면 수동 확인 |
-| 4 | 폰트 로딩 | `web/app/layout.tsx` (`next/font/google` 사용 시 `variable` 이름을 토큰 `--font-*`에 맞춤). 한국어 서브셋 지원 여부는 확인 못 함 | 공식 문서는 자체 호스팅·빌드 시 다운로드를 설명한다 |
-| 5 | 공통 컴포넌트 복사 + `"use client"` | `web/app/_components/`에 `Icon`, `Screen`, `Controls`, `Chat`, `SourceList`, `NoticeRow`, `TabBar` | 프로토타입 전용 틀·사이드바 제외 |
-| 6 | 탭 구조 교체 | `web/app/_components/bottom-nav.tsx`, `web/app/(tabs)/layout.tsx` | 설계 변경 승인 후 |
-| 7 | 화면 단위 이행, 단위마다 빌드·확인·커밋: `/notices` -> `/notices/[id]` -> `/chat` -> `/settings/notifications` -> 내 정보 | 각 `*-client.tsx`, `notices-list.tsx`, `notice-detail.tsx` 등 | 47(c) ①②③ 포함 |
-| 8 | 기존 CSS 정리 | `web/app/globals.css` | 사용처가 사라진 클래스만 삭제(삭제는 사용자 승인) |
+### 10. 미확정 값과 열린 질문
 
-### 6. 테스트 방법
-
-- `npm test`(`vitest run`)는 로직 테스트 위주이고 컴포넌트 렌더 테스트가 없다. className 변경은 테스트로 걸리지 않는다. 그래서 각 단계 후 `npm run build` + 수동 화면 확인(실행해서 주요 흐름 확인)이 필요하다. 구현 단계에서 확인하지 못했으면 못 했다고 보고한다.
-- 문구 테스트: `web/test/consent-privacy-wording.test.ts`가 `app/consent/consent-form.tsx`, `app/privacy-policy/page.tsx`, `app/(tabs)/settings/memory/memory-client.tsx`를 파일 경로로 읽어 금지 문자열과 고정 문구(예: "이름이나 호칭 같은 사실을 기억해", "AI가 기억하는 내 정보")를 검사한다. 파일을 이동·이름 변경하면 테스트가 깨지므로, 이 파일들의 이동·분리 시 테스트 경로를 같이 고친다(문구 자체는 바꾸지 않는다). 내 정보 화면으로 합칠 때 고정 문구가 `memory-client.tsx`에 남아 있어야 하는지 새 파일로 옮기는지 `(미확정)`.
-- 추가 테스트 후보: 청안 `ageBand`는 `19~24세` 형식(web `lib/age-band.ts`는 `19~24`)이라 라벨이 다르다. 화면 표시용이면 별도 함수로 두고 web 쪽 AI 전달용 라벨은 바꾸지 않는다(안양 백엔드 계약에 닿으므로 변경 금지). 단위 테스트는 표시용 함수를 만들 때 추가한다 `(미확정)`.
-- 접근성: 청안은 터치 영역 44px(`h-touch`), 스위치 `aria-labelledby`를 쓴다. 복사 후에도 유지되는지 수동 확인.
-
-### 7. 미확정 값과 열린 질문
-
-1. 공존 안(2-4 A/B/C/D) `(미확정)`.
-2. 본문 글꼴(IBM Plex Sans KR, Pretendard 등)과 로딩 방식 `(미확정)`.
-3. 하단 탭 3개 -> 4개 `(미확정)`, 한쪽에만 있는 화면(로그인·동의·온보딩·관리자 등)에 청안 디자인을 입힐 범위 `(미확정)`.
-4. `image_count`, 구독 조회 GET API 필요 여부 `(미확정)`, 설계 변경 필요(backend).
-5. 되돌리기 Toast의 구현 방식(클라이언트 지연 삭제) `(미확정)`.
-6. 토큰 폴더 위치와 `build-tokens.mjs` 포함 여부 `(미확정)`.
-7. 확인 못 함: 브라우저에서의 프리플라이트·레이어 우선순위 실제 동작, `web/` 밖 폴더 import, `next/font`의 한국어 서브셋, 청안 컴포넌트의 TS 5.9 컴파일, 프리플라이트 단독 비활성화의 공식 문법.
+1. 공존안 D 후 B `(미확정)`.
+2. 글꼴 3종·`next/font/google` 로딩, 본문을 Plex Sans KR로 두는 것 `(미확정)`.
+3. 하단 탭 4개와 순서. 프로젝트 문서 확인 항목 52 (c)는 "공지·대화·알림·내 정보"로 적었으나 청안 프로토타입 `TabBar.tsx`의 순서는 대화·공지·알림·내 정보다. 이 설계는 프로토타입 순서를 제안한다([[anyang-frontend-screens]]의 "공통 틀" 참고). 기본 진입 화면은 지금처럼 `/chat`이다 `(미확정)`.
+4. 시안 없는 화면의 처리 범위(토큰 다시 가리키기로 모습이 바뀜) `(미확정)`.
+5. 되돌리기 5초 지연 삭제 `(미확정)`.
+6. 토큰 위치 `web/design-system/`, 포함 파일 6개 `(미확정)`.
+7. 반응형 세부: `--breakpoint-desktop`, 태블릿 레이아웃, 사이드바 구성, 콘텐츠 최대 폭 720px·관리자 1040px, `viewportFit: "cover"`, `themeColor` `(미확정)`.
+8. `image_count` 배지·"받는 기기" 목록을 뺀다는 결정 `(미확정)`. 넣으려면 backend(필요 시 database) 설계부터 해야 한다.
+9. 확인하지 못한 것: 브라우저에서의 레이어 우선순위·프리플라이트 실제 동작, `tokens.css`를 `layer(base)`로 import하는 문법의 Turbopack 동작과 `@theme` 변수 미출력 여부, `next/font`의 한국어 서브셋·용량, `next/font` 변수가 토큰 시스템 대체 글꼴을 가리는 영향, 청안 아이콘 path 그대로 쓰는 것의 문제 여부(팀 자체 제작 자산이라 라이선스 문제는 없을 것으로 보나 확인하지 못함), 「청안 화면 기능 정의서 v0」(없음).
 
 ## Links
 
-- [[anyang-youth-policy-assistant]] — 프로젝트 문서, 확인 항목 47, 49
-- [[anyang-frontend-screens]] — 승인된 화면 설계(이 문서가 고치지 않음, 변경 필요 시 재승인)
-- [[anyang-frontend-tasks]] — 승인된 작업 문서
-- [[anyang-backend-api]] — API 계약(신규 API 필요 여부만 표시, 호출하지 않음)
+- [[anyang-youth-policy-assistant]] — 프로젝트 문서, 확인 항목 47·49·52
+- [[anyang-frontend-screens]] — 화면별 스펙(이 문서가 갱신하는 짝 문서)
+- [[anyang-frontend-tasks]] — 구현 작업 단위·순서·테스트
+- [[anyang-backend-api]] — API 계약(읽기만 함, 변경 없음)
+- [[glossary]] — 용어

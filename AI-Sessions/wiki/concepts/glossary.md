@@ -43,6 +43,8 @@ owner: shared
 | 계정 정지 | account-suspension | 관리자가 사용자 계정의 로그인·서비스 이용을 막은 상태. 계정 삭제와 다르다 |
 | 외부 API 사용 기록 | api-usage-log | DeepSeek·Gemini 같은 외부 AI API 호출 한 건의 기록(제공자, 작업 종류, 시각, 결과, 토큰 수). 관리자 화면의 "외부 API 사용량" 집계 근거 데이터다 |
 | 동의 항목 | consent-type | 가입 시 개인정보 동의를 받는 개별 항목 구분. "수집·이용"(collection_use)과 "국외 이전"(overseas_transfer)을 각각 별도로 받는다([[anyang-service-scope]], user, 2026-09-27) |
+| 청안 토큰 | cheongan-tokens | 팀원 디자인 소스(`design-system`)의 색·글꼴·간격·모서리 값. 원본은 `tokens.json`이고 `tokens.css`·`tailwind.css`는 거기서 생성된다. 웹에서는 `web/design-system/`에 수정 없이 두고 쓴다([[anyang-cheongan-design-adoption]]) |
+| 내 정보 화면 | my-info-screen | 하단 탭·사이드바의 네 번째 항목(`/settings`). 안에 "AI가 기억하는 내 정보" 구역(기억 조회·수정·삭제), 프로필 읽기 전용 구역, 대화 기록·처리방침·로그아웃·탈퇴 링크가 있다. 확정 전 설계(draft) |
 
 ### 미확정 용어
 

@@ -42,7 +42,6 @@
 
 ## Conversations
 
-- [[2026-10-03_anyang-mcp-blocked-handoff]] — 안양 비서: Supabase MCP 연결 끊김(CONNECT_TIMEOUT)으로 확인 항목 48(모순 선호 정정) 구현 중 0020 마이그레이션 적용 못 함. 재시작 후 이어갈 일 정리
 - [[2026-09-28_anyang-first-build-paused]] — 안양 비서 1차 구현 후 중단: 결정 22·23·OCR·taste-skill, 다음 할 일(23번부터), 수집기 셀렉터, 준비 항목
 - [[2026-09-27_anyang-implementation-paused]] — (superseded, archive 이동 대상) 안양 비서 구현 중단 인수인계. 2026-09-28 재개·완료, 프로젝트 문서로 통합
 - [[2026-09-27_anyang-design-approval-wait]] — (superseded, archive 이동 대상) 안양 비서 설계 승인 대기 인수인계

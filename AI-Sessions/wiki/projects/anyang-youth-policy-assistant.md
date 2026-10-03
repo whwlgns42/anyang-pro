@@ -283,6 +283,20 @@ owner: pm
     - (e) 「청안 화면 기능 정의서 v0」(화면별 데이터 필드) — 팀원에게 받아 `AI-Sessions/raw/`에 둘지, 없이 프로토타입 코드만 근거로 할지.
     - (f) 참고(요청 문구와 규칙 차이): 설계 문서 위치는 요청의 `wiki/projects/`가 아니라 규칙대로 `wiki/design/`·`wiki/dev-tasks/`를 쓴다. 커밋은 기능 단위로 git-manager가 하고 push는 45·51(c)대로 사용자 승인 전 보류.
     - 답을 받으면: [[anyang-frontend-screens]]·[[anyang-frontend-tasks]]를 승인된 설계에서 빼고(14차), (c)에서 API 추가를 고르면 backend 문서도 뺀다. 설계는 필요한 에이전트만 database → backend → frontend 순으로 한 번에 하나씩, [[anyang-cheongan-design-adoption]]을 갱신하거나 frontend-screens에 반영 → 사용자 재승인 → 구현(taste-skill `design-taste-frontend`) → code-review.
+    - **결정(2026-10-03, 메인 세션 전달)**: (a) ① 웹(PWA)만, Expo 별도 앱 없음. (b) 청안 `tokens.json`·`tokens.css`·`tailwind.css`를 그대로 가져와 쓴다(컴포넌트는 새로 작성). 추가 요청: 390폭 시안 기반 반응형 — 모바일(390)·태블릿(768)·데스크톱(1200), 데스크톱은 사이드바.
+    - 답 없음: (c) 49 미확정값, (d) 함께 처리 범위, (e) 기능 정의서. pm 판단: (c)는 위 권장안을 frontend draft에 `(미확정)` 제안으로 넣어 설계 승인 때 확정받는다. API 추가 없는 안이라 backend·database 설계 호출 없음. (d)는 이번 draft 범위에서 뺀다(답 오면 추가). (e)는 프로토타입 코드만 근거로 한다.
+    - 요청 문구와 다르게 처리한 것: 요청은 새 문서 frontend-design·frontend-screens·frontend-components를 만들라고 했지만, 중복 금지 규칙으로 기존 [[anyang-frontend-screens]]·[[anyang-frontend-tasks]]·[[anyang-cheongan-design-adoption]]을 갱신한다. 요청의 "Next.js 13"은 실제 16이다.
+    - 진행: frontend-screens·frontend-tasks를 승인된 설계에서 뺐다(14차). frontend 설계 draft → 사용자 재승인 → 구현.
+    - **설계 draft 완료(2026-10-03, frontend)**: [[anyang-cheongan-design-adoption]](토큰 `web/design-system/`에 그대로 복사, `globals.css` `@layer components`, 옛 의미 토큰을 청안 토큰으로 재지정, `@tailwindcss/postcss`, 글꼴, 브레이크포인트, 공통 컴포넌트·`AppShell`·사이드바), [[anyang-frontend-screens]](청안 적용 화면 스펙 절, 탭 4개, 내 정보 `/settings` 신규, 시안 없는 화면 처리표), [[anyang-frontend-tasks]](작업 C1~C10, 테스트 방법 390/768/1200 확인). 설계 변경 필요 없음(기존 API만). backend·database 호출 없음.
+    - **재승인 때 확인할 것(전부 제안, `(미확정)`)**: 위 (c) 권장안 전부 + 탭 순서, `/settings/memory` → `/settings` 리다이렉트, 옛 토큰 재지정표(시안 없는 화면 모습이 바뀜), `viewportFit`·`themeColor`, 데스크톱 1200·태블릿 레이아웃·사이드바 구성·최대 폭 720px(관리자 1040px), 5초 지연 삭제(화면 이탈 시 즉시 전송), 계정 탈퇴 `<dialog>`, 프로필 수정 버튼·공지 상세 출처 줄 제외, 404·알림 규칙 문구, 알림 안내 상자 "청안" 표기, 채팅 조건 줄 항목.
+    - frontend 미해결 질문:
+      - (g) 탭 순서: 52(c) 권장안은 공지·대화·알림·내 정보, 청안 `TabBar.tsx`는 대화·공지·알림·내 정보. draft는 프로토타입 순서.
+      - (h) 시안 문구 "이름과 이메일은 보내지 않아요"는 43(이름 기억·전송 허용)과 어긋나 뺐다.
+      - (i) 채팅 조건 줄: 시안은 나이대·재학재직 2개, 실제 AI에는 나이대·성별·직군·재학재직 4개가 간다. 몇 개를 보일지.
+      - (j) 47(c)① 채팅 스트림 실패 표시: `chat-client.tsx`를 다시 쓰면서 고치지 않고 둘지(draft는 error prop만 두고 연결 안 함). 위 (d) 답과 함께 정한다.
+      - (k) 구현 때 확인할 것: `tokens.css` `layer(base)` import, `next/font` 한국어 서브셋, 브라우저 레이어 우선순위.
+      - (l) 삭제 승인: C10에서 옛 클래스와 `app/_components/bottom-nav.tsx` 삭제.
+    - 역링크 필요: [[anyang-backend-api]] ← [[anyang-cheongan-design-adoption]] (backend 소유, 다음 backend 설계 수정 때).
 
 ## 승인된 설계
 
@@ -300,9 +314,6 @@ owner: pm
 
 2026-09-29(10차): 확인 항목 43 사용자 재승인(설계 draft 커밋 893918a). 3종을 먼저 다시 기록한다. `anyang-backend-api`와 `anyang-backend-tasks`는 43-b(부분 답변 저장) 단락을 backend가 추가한 뒤 같은 승인으로 기록한다.
 
-- [[anyang-frontend-screens]] — 승인일 2026-09-29, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-09-29, 승인자 user
-
 2026-09-29(10차 이어서): backend가 43-b 부분 답변 저장을 backend-api 3-3-2절·테스트 방법과 backend-tasks 6번에 반영했다. 같은 승인(43 재승인)으로 두 문서를 기록했다.
 
 2026-10-03(11차): `anyang-backend-api`와 `anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 46(Jev 게이트 도입, 새 요청). 재승인 뒤 다시 기록한다.
@@ -314,6 +325,8 @@ owner: pm
 - [[anyang-database-schema]] — 승인일 2026-10-03, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-10-03, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-03, 승인자 user
+
+2026-10-03(14차): `anyang-frontend-screens`와 `anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 52(청안 디자인 웹 적용, 새 요청). 재승인 뒤 다시 기록한다.
 
 ## Jev 도입 제안
 

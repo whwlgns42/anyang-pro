@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -13,6 +13,8 @@ owner: frontend
 독립적으로 테스트·커밋 가능하도록 쪼갰다(dev-common 규칙 4).
 
 ## Context
+
+**2026-10-03 추가(확인 항목 52, draft)**: 청안 디자인 웹 적용 작업 C1~C10을 "청안 디자인 적용" 절에 추가했다([[anyang-cheongan-design-adoption]], [[anyang-frontend-screens]] "청안 디자인 적용 화면 스펙"). 1~15번 작업은 이미 구현된 것으로 그대로 두고, C 단위가 그 화면들의 외형·내비게이션을 바꾼다. 설계 재승인 전에는 구현하지 않는다.
 
 의존: [[anyang-backend-api]]의 인증(동의 포함)·프로필·채팅·공지·알림설정·선호·히스토리·관리자
 엔드포인트가 먼저 구현돼 있어야(또는 목/스텁으로라도) 해당 화면을 붙일 수 있다. 개인정보
@@ -126,13 +128,57 @@ draft 반영에 의존한다.
 가능) → 4 → (5, 6 병렬 가능, 파일 겹치지 않음) → 5-1 → (7, 8 함께) → 9, 10(각각 병렬 가능,
 파일 겹치지 않음) → 11 → 12 → (13, 14, 15 각각 병렬 가능, 파일 겹치지 않음) → 13-1.
 
+### 청안 디자인 적용 (확인 항목 52, 신규, 설계 draft — 구현은 재승인 후)
+
+위 1~15번은 이미 1차 구현이 끝난 작업이다. 아래 C1~C10은 그 위에 청안 디자인을 입히는 새 작업 단위다.
+설계 근거는 [[anyang-cheongan-design-adoption]](토큰·공존·글꼴·반응형·컴포넌트)와
+[[anyang-frontend-screens]]의 "청안 디자인 적용 화면 스펙"이다. 모든 값은 그 설계 승인으로 확정된다.
+구현 중에는 승인된 설계 문서를 고치지 않고, 바꿀 것이 생기면 "설계 변경 필요"로 보고한다.
+구현 단계에서 UI를 만들 때는 `design-taste-frontend` 스킬을 호출한다(스킬 규칙은 dev-common 참고).
+
+범위: 웹(PWA)만. backend·database 변경 없음. 범위 밖: 47(c) 버그 ①~⑤, 48(f-8) 문구 정합성. API 호출·인증 가드·문구 테스트 대상 고정 문구는 바꾸지 않는다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| C1 | Tailwind·토큰 도입: `tailwindcss`·`@tailwindcss/postcss` 설치(사용자 승인된 구현 단계에서), `postcss.config.mjs`, 청안 `design-system/` 폴더를 수정 없이 `web/design-system/`로 복사 | `web/package.json`, `web/package-lock.json`, `web/postcss.config.mjs`(신규), `web/design-system/*`(신규 6개) | 재승인 |
+| C2 | `globals.css` 이행: 맨 위에 `@import` 3줄, 충돌 이름 정리(`--border-strong`→`--line-strong`, `--radius-sm`→`--legacy-radius-sm`), 옛 의미 토큰을 청안 토큰으로 다시 가리키기, 변수 외 규칙 전부 `@layer components`로 이동, `@layer base`(body·keep-all·focus-visible), `@theme`에 `--breakpoint-desktop`·`--container-column`·`--container-admin` 추가 | `web/app/globals.css` | C1 |
+| C3 | 글꼴·뷰포트: `next/font/google` 3종을 `<html>` className으로, `viewport`(`themeColor`, `viewportFit`), `manifest.ts`의 색 | `web/app/layout.tsx`, `web/app/manifest.ts` | C2 |
+| C4 | 공통 틀·컴포넌트: `ui/icon.tsx`, `ui/controls.tsx`, `ui/screen.tsx`, `app-nav.tsx`(하단 탭 + 사이드바), `(tabs)/layout.tsx`를 새 틀로, 탭 판정 함수와 단위 테스트 | `web/app/_components/ui/icon.tsx`·`controls.tsx`·`screen.tsx`(신규), `web/app/_components/app-nav.tsx`(신규), `web/app/_lib/nav-tabs.ts`(신규), `web/test/frontend-nav-tabs.test.ts`(신규), `web/app/(tabs)/layout.tsx` | C3 |
+| C5 | 공지 목록·상세: 화면 스펙 2·3 | `web/app/_components/ui/notice-row.tsx`(신규), `web/app/(tabs)/notices/notices-list.tsx`, `web/app/(tabs)/notices/[id]/notice-detail.tsx`, 날짜 서식·링크 변환 함수 `web/app/_lib/format.ts`(신규) + 테스트 `web/test/frontend-format.test.ts`(신규) | C4 |
+| C6 | 대화: 화면 스펙 1, `/conversations` 행 외형 | `web/app/_components/ui/chat.tsx`(신규), `web/app/(tabs)/chat/chat-client.tsx`, `web/app/(tabs)/conversations/conversations-client.tsx`, 나이대 표시 함수 `web/app/_lib/age-band-label.ts`(신규) + 테스트 `web/test/frontend-age-band-label.test.ts`(신규) | C4, C5의 `format.ts` |
+| C7 | 알림: 화면 스펙 4, iOS 홈 화면 추가 전 판정 함수와 단위 테스트 | `web/app/(tabs)/settings/notifications/notifications-client.tsx`, `web/app/_lib/install-state.ts`(신규), `web/test/frontend-install-state.test.ts`(신규) | C4 |
+| C8 | 내 정보·계정 탈퇴: 화면 스펙 5·6, 5초 지연 삭제 로직과 단위 테스트, `/settings/memory` 리다이렉트 | `web/app/(tabs)/settings/page.tsx`(신규), `web/app/(tabs)/settings/profile-section.tsx`(신규), `web/app/(tabs)/settings/memory/memory-client.tsx`, `web/app/(tabs)/settings/memory/page.tsx`, `web/app/(tabs)/settings/account/account-client.tsx`, `web/app/_lib/delayed-delete.ts`(신규), `web/test/frontend-delayed-delete.test.ts`(신규) | C4, C5의 `format.ts` |
+| C9 | 시안 없는 화면 확인과 보정: 로그인·동의·온보딩·정지·처리방침·관리자 4종을 3폭에서 확인하고 깨진 곳만 `globals.css` 규칙 조정, 관리자 최대 폭·표 가로 스크롤 | `web/app/globals.css`, `web/app/admin/layout.tsx`, `web/app/admin/*/*-client.tsx`(표 감싸기만) | C2~C8 |
+| C10 | 정리(삭제는 사용자 승인): 쓰이지 않는 옛 클래스 삭제, 쓰이지 않는 `app/_components/bottom-nav.tsx` 삭제 | `web/app/globals.css`, `web/app/_components/bottom-nav.tsx` | C9 + 사용자 삭제 승인 |
+
+- 순서: C1 → C2 → C3 → C4 → (C5, C7, C8은 파일이 겹치지 않아 병렬 가능하나 같은 `globals.css`·`ui/*`를 읽으므로 순차를 기본으로 한다) → C6(C5의 날짜 서식 필요) → C9 → C10.
+- 커밋: 단위마다 테스트·빌드를 통과한 뒤 git-manager에게 파일 목록과 함께 맡긴다. C2는 모든 기존 화면에 영향을 주므로 화면 확인(아래)을 끝낸 뒤에만 커밋한다. push는 사용자 승인 전 보류.
+- 새 로직 단위 테스트(vitest, 프레임워크·픽스처 추가 없음): 탭 판정(`/settings/notifications`는 알림, `/settings`·`/settings/account`는 내 정보, `/notices/[id]`는 공지이면서 탭 바 숨김), 날짜 서식(`2026-09-01` → `2026.09.01`, `null` 처리)·링크 변환(http(s)만 링크로, `javascript:` 같은 것은 일반 글자), 나이대 표시 형식(서버 `ageBandLabel`과 별개 함수, 서버 값은 바꾸지 않음), iOS 홈 화면 추가 전 판정(iPhone 브라우저 탭 = true, 홈 화면 앱 = false, 데스크톱 = false, iPadOS Mac 사용자 에이전트 + 터치 지점 수), 지연 삭제(5초 전 되돌리기는 요청 없음, 5초 후 요청, 화면 떠날 때 즉시 요청, 연속 삭제 시 앞 항목 즉시 요청, 실패 시 복구 — 가짜 타이머 사용).
+- 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, 인증 가드(`session-guard.ts`), `consent-form.tsx`·`privacy-policy/page.tsx` 본문(문구). `memory-client.tsx`는 `consent-privacy-wording.test.ts`가 읽는 고정 문구("이름이나 호칭 같은 사실을 기억해")를 유지한다.
+
+#### 청안 적용 테스트 방법
+
+1. **빌드·단위**: 각 단위 끝에 `npm test`(`vitest run`)와 `npm run build`를 실행한다. 둘 다 통과해야 커밋한다. `npm test`에는 `consent-privacy-wording.test.ts`가 포함되어 문구가 유지되는지 걸린다. 이 테스트는 className 변경은 못 잡는다.
+2. **CSS 산출 확인(C1~C3)**: 빌드 후 산출 CSS(`.next/static/css/*.css`)에서 `--color-ink`(청안 토큰이 항상 나오는지), `type-body`·`h-touch` 같은 유틸리티, `desktop` 브레이크포인트 미디어쿼리(`min-width:75rem`)가 있는지 검색한다. 없으면 설계의 `@import`·`layer()` 안(3-2절) 대안으로 돌아가 보고한다.
+3. **화면 확인(실제 실행)**: `npm run dev`로 띄우고 브라우저 개발자 도구의 기기 모드(또는 창 폭 조절)로 아래 3폭에서 확인한다. 폭: 390×844(모바일), 768×1024(태블릿), 1200×800(데스크톱; 1440×900도 한 번). 자동 캡처 도구(Playwright 등)는 설치가 필요하므로 사용자 승인 없이는 설치하지 않는다.
+   - 공통(각 폭): 가로 스크롤 없음, 탭 바/사이드바가 폭에 맞게 나오고 현재 항목이 표시됨, 누를 곳 높이 44px 이상, 키보드 Tab 이동 시 포커스 윤곽선이 보임, 글꼴 3종이 실제로 적용됨(개발자 도구 Network·Computed).
+   - 390: 하단 탭 4개, 공지 상세에서 탭 바가 숨고 "원문 보기" 바가 보임.
+   - 768: 하단 탭 유지, 콘텐츠가 가운데 최대 720px.
+   - 1200: 왼쪽 사이드바 240px, 하단 탭 없음, 콘텐츠 열 가운데.
+   - 흐름(로그인 필요): 채팅 질문 전송 → 근거 카드 → 카드 클릭 시 공지 상세 → "원문 보기" 새 탭, 공지 목록 더 보기, 알림 켜기·끄기·시각 변경·재구독 배너, 내 정보에서 기억 수정·삭제(5초 안 되돌리기, 5초 뒤 서버 삭제, 화면 이동 시 즉시 삭제)·로그아웃·탈퇴 다이얼로그 취소, 대화 기록 이동.
+   - 시안 없는 화면(C2 직후와 C9): `/login`, `/consent`, `/onboarding`, `/suspended`, `/privacy-policy`, 관리자 4종을 같은 3폭에서 확인(로그인 전 화면은 세션 없이 열 수 있음).
+   - 로그인·DB가 필요한 화면을 이 환경에서 열지 못하면(로컬 DB·인증 설정 `web/.env.local`이 쓸 수 있는지 먼저 확인) 열지 못했다고 보고하고, 확인한 화면과 못 한 화면을 구분해 적는다.
+4. **접근성 점검**: 스위치 `aria-checked`·`aria-labelledby`, 현재 탭 `aria-current`, 아이콘 버튼 `aria-label`, `prefers-reduced-motion`에서 전환이 꺼지는지(`globals.css` 기존 규칙 유지).
+5. **회귀**: 기존 vitest 전체(채팅 스트림 파서·api-fetch·푸시 변환 등)가 그대로 통과해야 한다. 푸시 구독 payload(`endpoint`/`p256dh`/`auth`)와 재동의·정지 가드 흐름은 코드를 바꾸지 않았음을 diff로 확인한다.
+
 ## 테스트 방법
 
-각 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
-중복하지 않는다.
+1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
+중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에 있다.
 
 ## Links
 
 - [[anyang-frontend-screens]]
 - [[anyang-backend-api]]
 - [[anyang-youth-policy-assistant]]
+- [[anyang-cheongan-design-adoption]]
