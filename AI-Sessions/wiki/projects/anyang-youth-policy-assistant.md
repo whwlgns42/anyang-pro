@@ -315,6 +315,7 @@ owner: pm
     - (c) 이메일·비밀번호 가입자는 이름이 없다(`users.name` null). 그대로 둘지(대화에서 말하면 기억), 온보딩에 선택 입력란을 둘지. 권장: 그대로.
     - (d) Google 이름이 실명 전체라 호칭으로 어색할 수 있다(예: 성 포함). 그대로 쓸지, 사용자가 "내 정보"에서 고칠 수 있게 할지(화면·API 추가 → frontend·backend 설계). 권장: 이번엔 그대로, 필요하면 대화에서 "○○라고 불러줘"로 바뀌는 기존 기억 우선.
     - (e) 동의 화면·처리방침: 수집 항목은 생년·성별·직군·재학재직([[anyang-frontend-screens]] 7절 `collection_use`). 계정 이름은 이미 저장되지만 고지에 없고, AI 처리 대상이 되면 고지·재동의 필요 여부를 사용자가 정해야 한다(41-b처럼 법적 요건 확인 대상).
+    - 주의(2026-10-04, pm): 승인 기록 없이 `AI-Sessions/wiki/design/anyang-user-name-memory.md`(status active, owner shared)가 생겼고, 다른 pm 세션이 backend 구현을 진행하려 해 보류시켰다. 이 문서는 계정 이름을 DeepSeek에 넣는다고 적어 [[anyang-ai-models-data-transfer]] 43 결정과 충돌하고, "온보딩 이름 필수 입력"으로 요청과도 반대다. draft로 되돌릴지 삭제할지 사용자 결정 필요.
     - 답을 받으면: (a) 허용 + ①이면 database 호출 없음. 결정 문서 갱신 → backend(시스템 프롬프트 주입, backend-api·tasks를 승인된 설계에서 뺌) → (e)에 따라 frontend(처리방침·동의 문구) 설계 → 재승인 → 구현.
     - (b) 채팅 입력에 한글 조합 중 Enter 처리(`isComposing`)가 없어 중복 전송 가능(frontend 발견, 기존 동작). 47(c) 버그 목록과 함께 처리할지.
       - **해결(2026-10-03, user 결정 "지금 수정", 메인 세션 전달)**: frontend `8d4de22` — `web/app/_lib/composer-key.ts` `shouldSubmitOnKey`(Enter·Shift 아님·`isComposing` 아님·`keyCode` 229 아님), `ui/chat.tsx` Composer 연결, 테스트 4건(npm test 244개·build 통과). 설계 변경 없음. code-review 치명·주요·경미 없음, 다른 Enter 전송 패턴 없음. 실제 한글 IME 수동 확인은 못 함(Chrome·Safari 사람 확인 권장).
