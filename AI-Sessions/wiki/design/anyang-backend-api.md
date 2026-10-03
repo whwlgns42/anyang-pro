@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -56,7 +56,7 @@ status는 draft이며 pm이 승인 기록 후 구현 단계에서 active로 바�
 **2026-10-04 개정(확인 항목 56, 재승인 대기)**: 안양시가 클라우드 IP를 막아 공지 수집 주체가 UNO Q 보드로 바뀌었다
 ([[anyang-deployment-portability]] "수집 주체 변경"). 보드 수집기·Vercel 받기 API(`POST /api/ingest/notices`)·직접 수집 경로 정리·테스트·배포는
 새 문서 [[anyang-board-collector]]가 원본이다. 이 문서에서는 5-1절(아래 56 개정 단락), 7절, 9절, 12절, 13-1절에 포인터만 단다. 5-1절의 파서·저장 규칙·해시·`image_count`는 그대로 유효하고 보드와
-Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모두 `(미확정)`이며 설계 승인으로 확정된다.
+Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모두 ``이며 설계 승인으로 확정된다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -1282,8 +1282,8 @@ database에 요청한다).
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
 | `COLLECTOR_CONTACT` | 공지 수집기 User-Agent에 넣는 문의 연락처(선택값, 확정, 확인 항목 55-a). 실제 값은 사용자가 Vercel·로컬 `.env.local`에 직접 넣는다. 미설정이면 연락처 없는 UA `anyang-youth-policy-bot/1.0`로 수집한다(5-1절 8번) |
-| `COLLECTOR_INGEST_SECRET` | 보드 → `POST /api/ingest/notices`·`/api/jobs/embed`의 `x-collector-secret` 인증(신규, 확인 항목 56, `(미확정)`). 비어 있으면 받기 API 전체 401. 사용자가 값을 만들어 Vercel과 보드 `collector.env`에 같게 넣는다. 값은 문서에 쓰지 않는다. [[anyang-board-collector]] C-1 |
-| `DIRECT_COLLECT_ENABLED` | 서버 직접 수집(`/api/jobs/collect`, 관리자 수동 수집)을 켜는 스위치(신규, 선택, 확인 항목 56, `(미확정)`). 없으면 꺼짐(410). 운영에서는 추가하지 않는다. [[anyang-board-collector]] D |
+| `COLLECTOR_INGEST_SECRET` | 보드 → `POST /api/ingest/notices`·`/api/jobs/embed`의 `x-collector-secret` 인증(신규, 확인 항목 56, ``). 비어 있으면 받기 API 전체 401. 사용자가 값을 만들어 Vercel과 보드 `collector.env`에 같게 넣는다. 값은 문서에 쓰지 않는다. [[anyang-board-collector]] C-1 |
+| `DIRECT_COLLECT_ENABLED` | 서버 직접 수집(`/api/jobs/collect`, 관리자 수동 수집)을 켜는 스위치(신규, 선택, 확인 항목 56, ``). 없으면 꺼짐(410). 운영에서는 추가하지 않는다. [[anyang-board-collector]] D |
 
 ### 10. Vercel 배포 설정
 
@@ -1740,7 +1740,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
-- **보드 수집기·받기 API(확인 항목 56, 신규, 재승인 대기)** — 모든 값 `(미확정)`, 목록과 이유는 [[anyang-board-collector]] "확인이 필요한 항목" 1~8번:
+- **보드 수집기·받기 API(확인 항목 56, 신규, 재승인 대기)** — 모든 값 ``, 목록과 이유는 [[anyang-board-collector]] "확인이 필요한 항목" 1~8번:
   파서 공유·번들 복사·`esbuild`, systemd timer, 새 키 `COLLECTOR_INGEST_SECRET`(`BACKFILL_SECRET` 재사용 안 함), 직접 수집 스위치 `DIRECT_COLLECT_ENABLED`, frontend 설계 필요, 배포 보호 확인.
 
 - 수집 대상 게시판(확정 URL)의 `robots.txt` 준수 확인과 실제 HTML 구조 확인 — 이 세션에는

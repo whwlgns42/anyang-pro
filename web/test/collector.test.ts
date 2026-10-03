@@ -13,6 +13,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 const { parseListPage, parseDetailPage, contentHash, runCollectJob } = await import("@/lib/collector");
+const parser = await import("@/lib/notice-parser");
 
 // 실제 게시판(2026-10-04 수집)에서 표 부분만 잘라 저장한 픽스처.
 const fixture = (name: string) => readFileSync(path.join(__dirname, "fixtures", name), "utf-8");
@@ -142,11 +143,16 @@ function setupDb(opts: { existing?: Existing[]; locked?: boolean; runningRow?: b
     if (String(sql).includes("source_url = any")) return { rows: opts.existing ?? [] };
     return { rows: [] };
   });
-  poolMock.client.query.mockImplementation(async (sql: string) => {
+  poolMock.client.query.mockImplementation(async (sql: string, params?: unknown[]) => {
     const text = String(sql);
     if (text.includes("pg_try_advisory_xact_lock")) return { rows: [{ locked: opts.locked ?? true }] };
     if (text.includes("select 1 from collect_runs")) return { rows: opts.runningRow ? [{}] : [] };
     if (text.includes("insert into collect_runs")) return { rows: [{ id: "run-1" }] };
+    // saveNotice의 행 잠금 조회(공지 1건 = 한 트랜잭션, client 사용)
+    if (text.includes("for update")) {
+      const known = (opts.existing ?? []).find((e) => e.source_url === params?.[0]);
+      return { rows: known ? [known] : [] };
+    }
     return { rows: [] };
   });
 }
@@ -166,7 +172,8 @@ function mockFetch(pages: Record<string, string>, detail: (url: string) => strin
 }
 
 const requested = (f: ReturnType<typeof vi.fn>) => f.mock.calls.map(([u]) => String(u));
-const sqlCalls = (needle: string) => poolMock.query.mock.calls.filter(([sql]) => String(sql).includes(needle));
+const sqlCalls = (needle: string) =>
+  [...poolMock.query.mock.calls, ...poolMock.client.query.mock.calls].filter(([sql]) => String(sql).includes(needle));
 
 describe("runCollectJob", () => {
   const originalFetch = global.fetch;
@@ -341,5 +348,44 @@ describe("runCollectJob", () => {
     );
     const result = await runCollectJob("scheduled", null, { mode: "quick" });
     expect(result).toMatchObject({ ok: false, reason: "COLLECT_FAILED" });
+  });
+
+  it("blocked list page: run fails with ip_blocked, nothing saved", async () => {
+    mockFetch({ "1": fixture("blocked-page.html") });
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toEqual({ ok: false, reason: "COLLECT_FAILED", errorSummary: "ip_blocked" });
+    expect(sqlCalls("update collect_runs")[0][1]).toEqual(["run-1", "ip_blocked"]);
+    expect(sqlCalls("insert into notices")).toHaveLength(0);
+  });
+
+  it("blocked detail page: run fails with ip_blocked", async () => {
+    mockFetch({ "1": listHtml(LIST_ROW(1)) }, () => fixture("blocked-page.html"));
+    const result = await runCollectJob("scheduled", null, { mode: "quick" });
+    expect(result).toMatchObject({ ok: false, errorSummary: "ip_blocked" });
+    expect(sqlCalls("insert into notices")).toHaveLength(0);
+  });
+
+  it("empty first list page: run fails with empty_list, not success", async () => {
+    mockFetch({ "1": listHtml() });
+    const result = await runCollectJob("scheduled", null, { mode: "full" });
+    expect(result).toMatchObject({ ok: false, reason: "COLLECT_FAILED", errorSummary: "empty_list" });
+  });
+});
+
+describe("notice-parser", () => {
+  it("collector.ts re-exports the same functions", () => {
+    expect(parseListPage).toBe(parser.parseListPage);
+    expect(parseDetailPage).toBe(parser.parseDetailPage);
+    expect(contentHash).toBe(parser.contentHash);
+  });
+
+  it("isBlockedPage: true for the blocked fixture, false for a real list page", () => {
+    expect(parser.isBlockedPage(fixture("blocked-page.html"))).toBe(true);
+    expect(parser.isBlockedPage(fixture("board-list-page1.html"))).toBe(false);
+  });
+
+  it("hasDetailContent: body cell present (even empty) vs absent", () => {
+    expect(parser.hasDetailContent(detailHtml(""))).toBe(true);
+    expect(parser.hasDetailContent(fixture("blocked-page.html"))).toBe(false);
   });
 });

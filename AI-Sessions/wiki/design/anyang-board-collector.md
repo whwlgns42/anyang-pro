@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-10-04
-status: draft
+status: active
 owner: backend
 ---
 
@@ -14,7 +14,7 @@ owner: backend
 A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스트·배포·롤백이다. 보드 DB(B)는 database 소유 문서
 [[anyang-board-collector-db]]가 원본이고, 파서 규칙·해시·`image_count`는 [[anyang-backend-api]] 5절·5-1절이 원본이다.
 
-핵심 결정(모두 제안, `(미확정)`, 설계 승인으로 확정):
+핵심 결정(모두 제안, ``, 설계 승인으로 확정):
 
 - 파서는 `web/lib/notice-parser.ts` 한 곳으로 분리해 Vercel(`web/`)과 보드가 같은 코드를 쓴다. 보드 수집기 소스는
   `web/collector/`에 두고 번들러로 **파일 1개(`anyang-collector.mjs`)**로 묶어 보드에 복사한다. 보드에서 `npm install`·Docker 없음.
@@ -52,7 +52,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 | `web/collector/db/` | 보드 DB 마이그레이션 `0001_init.{up,down}.sql`. database 문서가 `collector/db/`로 적었으므로 경로 확정은 그쪽 수정 필요(미해결 질문 2). |
 | `web/scripts/build-collector.mjs` (신규) | `esbuild`로 `web/collector/main.ts` → `web/dist-collector/anyang-collector.mjs`(node20, ESM, cheerio·pg 포함, `pg-native`는 external). `dist-collector/`는 커밋하지 않는다(.gitignore). |
 
-- 새 devDependency는 `esbuild` 하나 `(미확정)`. `vite`가 `rolldown`을 끌고 오지만 직접 쓰지 않는다(전이 의존에 기대면 vite 업데이트 때 깨진다).
+- 새 devDependency는 `esbuild` 하나 ``. `vite`가 `rolldown`을 끌고 오지만 직접 쓰지 않는다(전이 의존에 기대면 vite 업데이트 때 깨진다).
   cheerio·pg는 `web/package.json`에 이미 있는 같은 버전을 쓴다 — 파서 동작이 Vercel과 보드에서 같다.
 - 보드에 필요한 것은 Node 20(있음)과 이 파일 1개뿐이다. 보드의 Node가 바뀌어도 번들은 target만 맞으면 된다.
 - 이전 가능성 원칙([[anyang-deployment-portability]]): Docker 미사용, 표준 PostgreSQL(`pg` 드라이버, 소켓), Vercel 전용 기능 없음 — 지킨다.
@@ -73,14 +73,14 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 
 | 유닛 | 내용 |
 |---|---|
-| `anyang-collector@.service` | `Type=oneshot`, `User=arduino`, `ExecStart=/usr/bin/node /home/arduino/anyang-collector/anyang-collector.mjs %i`, `EnvironmentFile=/etc/anyang-collector/collector.env`, `ConditionPathIsMountPoint=/mnt/usb`, `TimeoutStartSec=900`, `Nice=10`, `MemoryMax=300M`, `CPUQuota=50%`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ProtectHome=read-only`. 값 `(미확정)`(자원 값은 보드 실측 전 가정). |
+| `anyang-collector@.service` | `Type=oneshot`, `User=arduino`, `ExecStart=/usr/bin/node /home/arduino/anyang-collector/anyang-collector.mjs %i`, `EnvironmentFile=/etc/anyang-collector/collector.env`, `ConditionPathIsMountPoint=/mnt/usb`, `TimeoutStartSec=900`, `Nice=10`, `MemoryMax=300M`, `CPUQuota=50%`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ProtectHome=read-only`. 값 ``(자원 값은 보드 실측 전 가정). |
 | `anyang-collector-quick.timer` | `OnCalendar=*:3/10`(매 시 03·13·…·53분), `Unit=anyang-collector@quick.service`. 04:00 full과 겹치지 않게 3분 비켜 둔다(겹치면 락 때문에 한쪽이 조용히 건너뛰어 full을 놓칠 수 있다). |
 | `anyang-collector-full.timer` | `OnCalendar=*-*-* 04:00:00 Asia/Seoul`, `Persistent=true`, `Unit=anyang-collector@full.service`. 서울 04:00은 확정값(user, 2026-10-04). |
 | backfill | 타이머 없음. 수동(F-3 절차): `sudo systemd-run --unit=anyang-collector-backfill --uid=arduino -p EnvironmentFile=/etc/anyang-collector/collector.env -p ConditionPathIsMountPoint=/mnt/usb -p RuntimeMaxSec=7200 /usr/bin/node …/anyang-collector.mjs backfill --from 1 --to 47`. |
 
 - 10분 주기는 확정(user)이다. `quick`의 분 오프셋(03분)만 제안이다.
 - 포트를 열지 않는다(밖으로 나가는 HTTPS 요청과 로컬 소켓뿐). 기존 서비스와 포트 충돌이 없고, 자원은 위 상한으로 묶는다.
-  실행 사용자는 database 문서가 제안한 기존 `arduino`(미확정)와 같다. 새 OS 사용자는 만들지 않는다.
+  실행 사용자는 database 문서가 제안한 기존 `arduino`와 같다. 새 OS 사용자는 만들지 않는다.
 
 #### A-3. 설치 경로·설정·로그
 
@@ -115,7 +115,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
    - 항목 처리: 상세를 받아 `parseDetailPage`, 정리 값 + `raw_html`을 보드 DB에 upsert(같은 값이면 `synced` 유지, 달라지면 `pending`).
 3. **성공 판정 — 차단 페이지·0건은 성공이 아니다**(보드 DB 문서의 규칙과 같다):
 
-   | 상황 | 판정 | 코드(`error_summary` 접두, `(미확정)`) |
+   | 상황 | 판정 | 코드(`error_summary` 접두, ``) |
    |---|---|---|
    | 응답 `meta[name=description]`에 `IP 차단`이 있음(목록·상세 어느 쪽이든) | 즉시 중단, 실행 `failed`. 이 응답으로는 아무것도 저장하지 않음 | `ip_blocked` |
    | 첫 목록 페이지에서 `p-subject` 0개(차단 표지 없음) | `failed` | `empty_list` |
@@ -126,7 +126,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 
    `isBlockedPage`는 `meta description`의 문구와 `p-subject` 부재로 판정한다. 문구가 사이트에서 바뀌면 `empty_list`로 떨어지므로 어느 쪽이든 성공으로 기록되지 않는다.
    본문이 빈 공지(이미지만 있는 글)는 정상이라 본문 길이로는 판정하지 않는다.
-4. **차단 중 쉬기**: 마지막 실행이 `ip_blocked`였고 60분이 안 지났으면 사이트를 가져오지 않고 3단계(전송)만 한다. 막힌 사이트를 10분마다 두드리지 않기 위함이다(60분 `(미확정)`).
+4. **차단 중 쉬기**: 마지막 실행이 `ip_blocked`였고 60분이 안 지났으면 사이트를 가져오지 않고 3단계(전송)만 한다. 막힌 사이트를 10분마다 두드리지 않기 위함이다(60분 ``).
 5. **전송**: 3번 이후(수집이 실패했어도) `sync_status='pending' and next_attempt_at <= now()` 항목을 id 순으로 **20건씩** 받기 API에 보낸다([[anyang-board-collector-db]] 전송 대상 선택).
    배치는 순차(병렬 없음 — Gemini 한도와 서버 시간 예산 때문). 한 실행의 전송 상한은 `quick`/`full` 30배치, `backfill`·`sync` 무제한(전체 실행 2시간 제한).
    응답 해석:
@@ -141,7 +141,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
    | 400/413 (요청 형식·크기) | 항목 상태 변경 없이 중단, 실행 `failed('ingest_bad_request')`. 보드 버그 신호 |
 
    재시도 상한·백오프 값은 database 문서([[anyang-board-collector-db]] 대기열 상태 전이)가 원본이다. 401/400의 "횟수 미소모"는 그 표에 없는 보강이라 database에 반영을 요청한다(미해결 질문 2).
-   요청 타임아웃은 280초 `(미확정)`(함수 한도 300초 안).
+   요청 타임아웃은 280초 ``(함수 한도 300초 안).
 6. **0건·실패 보고**: Supabase 관리자 화면이 "수집 실패"를 볼 수 있도록, 아래 경우에 **항목 없는 호출**(`items: []`, `report` 포함)을 보낸다.
    - `full` 실행은 성공이든 실패든 끝에 한 번 보고한다(하루 1행의 "살아 있음" 신호).
    - `quick`은 **직전 실행이 실패가 아니었는데 이번에 실패했을 때만** 보고한다(차단이 계속돼도 10분마다 행이 쌓이지 않고, 연속 실패의 첫 번째만 남는다).
@@ -150,7 +150,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
    `embedded_chunks === 0`이 나오거나 한 실행당 10회에 닿으면 멈춘다(다음 실행이 이어간다). 임베딩 실패는 수집·전송 결과에 영향을 주지 않는다(5-1절 5번과 같음).
 8. 종료: `collector_runs` 갱신(`status`, 건수, `error_summary`), 락 해제. 종료 코드는 `success`면 0, `failed`면 1(journald에 실패가 남는다).
 
-- 이 절의 10·60·20·30 같은 상수는 모두 구현 시 코드 상수 한 곳에 둔다. 값은 `(미확정)`.
+- 이 절의 10·60·20·30 같은 상수는 모두 구현 시 코드 상수 한 곳에 둔다. 값은 ``.
 - Jev 판단 후보는 없다(차단·빈 목록·파싱 실패는 결정적 규칙으로 판정한다).
 
 ### C. Vercel 받기 API — `POST /api/ingest/notices`
@@ -203,7 +203,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 
 #### C-3. 입력 검증 (서버는 파싱하지 않고 검증만)
 
-| 대상 | 규칙 (상한 값 `(미확정)`) |
+| 대상 | 규칙 (상한 값 ``) |
 |---|---|
 | 요청 | 항목 최대 20건, 요청 본문 최대 4MB(Vercel 함수 본문 한도 4.5MB 아래) — 초과는 400/413. |
 | `source_url` | 정확히 `https://www.anyang.go.kr/youth/selectBbsNttView.do?key=3543&bbsNo=1184&nttNo=<숫자>` 형식(`notice-parser`의 `detailUrlFor`와 같은 정규식). 다른 도메인·`http`·추가 쿼리는 `rejected: INVALID_URL`. |
@@ -336,7 +336,7 @@ database 확인(`pg_cron` 미설치, 수집 잡 등록된 적 없음 — [[anyan
 
 ## 확인이 필요한 항목
 
-(pm이 프로젝트 문서에 반영한다. 모든 값은 `(미확정)`)
+(pm이 프로젝트 문서에 반영한다. 모든 값은 ``)
 
 1. 파서 공유 방식(소스 한 곳 + 번들 1개 복사), `esbuild` devDependency 추가.
 2. systemd timer 채택(cron 대신), 시스템 유닛, quick 분 오프셋 03분, 자원 상한(MemoryMax 300M 등), 차단 시 60분 쉬기, 전송 배치 20건·상한.
