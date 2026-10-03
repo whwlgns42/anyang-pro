@@ -720,10 +720,10 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
   - **원자성 한계**: "진행 중 행이 없으면 insert"는 두 호출이 동시에 오면 둘 다 통과할 수 있다. 부분 unique
     index(`status='running'`인 행은 하나만)로 막을 수 있으나 stale 행이 남으면 이후 수집이 모두 막히므로 제안하지
     않는다. 10분 주기에 quick은 대개 수 초라 겹칠 확률이 낮고, 겹쳐도 `source_url` 유니크(`on conflict`)로 공지가
-    중복 저장되지는 않는다. 필요하면 backend가 `pg_try_advisory_lock`을 쓰는 방식을 설계에 제안한다 `(미확정)`.
+    중복 저장되지는 않는다. 필요하면 backend가 `pg_try_advisory_lock`을 쓰는 방식을 설계에 제안한다 ``.
   - **mode(quick/full) 기록 여부**: `collect_runs`에는 mode 컬럼이 없다(`trigger_type`은 `scheduled/manual`).
     겹침을 mode와 무관하게 하나만 허용하면 컬럼이 필요 없다. mode별로 구분하거나 관리자 화면에 mode를 보이려면
-    `mode text` 컬럼 추가가 필요하며 이는 스키마 변경이다 `(미확정)`, backend 결정 뒤 0021에 합칠지 0022로 나눌지
+    `mode text` 컬럼 추가가 필요하며 이는 스키마 변경이다 ``, backend 결정 뒤 0021에 합칠지 0022로 나눌지
     정한다. 이번 설계는 컬럼을 추가하지 않는다.
 - collect-job(수집 잡) 실행 시작 시 1행을 만들고(`status='running'`), 끝나면 `finished_at`·
   `status`·`collected_count`·`error_summary`를 갱신한다(애플리케이션 책임).
