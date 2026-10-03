@@ -92,20 +92,41 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    서버 환경변수만(9절 환경변수 목록 갱신). 6번 의존. 확정 전 선행 조건: 확인 항목
    46-a(전송 결정 문서·처리방침 갱신 여부)가 해결돼야 착수한다. 테스트: 통과/차단/
    fail-open/전송 범위 단위 테스트([[anyang-backend-api#테스트 방법]] "Jev 게이트").
-6-2. **모순 선호 즉시 정정(신규, 확인 항목 48, backend 설계 3-3-4절, 재승인 대기)** —
-   `fetchMemories`가 `{id, preference_text}[]`를 돌려주도록 바꾸고(시스템 프롬프트 기억 절은
-   문장만 사용), 같은 목록을 추출 호출에 번호(1..N)로 실어 `extractPreferences`가
-   `{fact, replaces}[]`를 돌려주게 한다(문구·파싱·잘못된 번호는 `null` 처리·같은 번호 중복은 첫 원소만 유지, 모두
-   미확정). `extractAndStorePreference`는 문장마다 `replaces`가 있으면 순번→id로 바꿔 database의
-   대체 쿼리(`where id = $1 and user_id = $2`)를 먼저 실행하고, 없거나 0행이면 기존 유사 갱신 →
-   INSERT로 간다. 의존: 6번, database 설계 재승인
-   ([[anyang-database-schema#user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터]],
-   스키마 변경·마이그레이션 없음). 6-1과 같은 함수(`extractAndStorePreference`)를 고치므로 같은
-   구현 호출에서 6-1 → 6-2 순서로 하거나 6-2만 먼저 하고 6-1은 그 위에 얹는다(어느 쪽이든 게이트는
-   추출 호출 앞, 모순 판단은 추출 호출 안). 두 항목 모두 재승인된 것만 구현한다(6-1 보류 중이면 6-2만 구현). 테스트:
-   [[anyang-backend-api#테스트 방법]] "모순 선호 정정" 10항목(목 기반 단위 테스트 + DB 대체 쿼리
-   소유자 방어), 기존 `web/test/deepseek.test.ts`·`web/test/chat.test.ts`의 문자열 배열
-   기대값 갱신 포함.
+6-2. **모순 선호 즉시 정정 — 이력 남김(신규, 확인 항목 48·48(f), backend 설계 3-3-4절, 재승인 대기)** —
+   6-1(Jev 게이트, 보류)에 **의존하지 않는다**. 6-2만 단독으로 구현한다.
+   - 선행 조건(순서 고정): ① database 설계 재승인(안 1 구조 확정 포함 — 안 2a·2b가 선택되면 이 항목의 쿼리·
+     파일 목록을 다시 쓴다), ② **마이그레이션 0020 적용(database 구현 단계)**
+     ([[anyang-database-schema#마이그레이션 계획 (0020, 확인 항목 48(f))]], `superseded_at`·`superseded_by`
+     컬럼 추가). 0020이 먼저 적용돼야 한다 — 코드가 먼저 나가면 없는 컬럼을 참조해 모든 기억 쿼리가
+     실패한다. 0020을 먼저 적용해도 현재 코드는 정상 동작한다(database 문서). ③ 6번(채팅·기억 주입) 완료.
+   - 작업 1(추출·저장): `fetchMemories`가 `{id, preference_text}[]`를 돌려주도록 바꾸고(시스템 프롬프트 기억
+     절은 문장만 사용), 같은 목록을 추출 호출에 번호(1..N)로 실어 `extractPreferences`가
+     `{fact, replaces}[]`를 돌려주게 한다(문구·파싱·잘못된 번호는 `null` 처리·같은 번호 중복은 첫 원소만
+     유지, 모두 미확정). `extractAndStorePreference`는 문장마다 `replaces`가 있으면 순번→id로 바꿔
+     database의 대체 쿼리(활성 행에 대체됨 표시 + 새 행 INSERT, 한 문장 CTE, `user_id`는 세션 값)를 먼저
+     실행하고 1행이면 끝, 0행이면 기존 유사 갱신 → INSERT로 간다. 반환 `id`는 새 행의 id다.
+   - 작업 2(활성 기억만 — 하나라도 빠지면 옛 사실이 되살아남): `superseded_at is null` 조건을 추가한다.
+     수정 대상 파일 전부:
+     - `web/app/api/chat/route.ts` — `fetchMemories`(최근·유사 두 쿼리), `buildQueryVector`,
+       `extractAndStorePreference` 유사 갱신의 안쪽 select, 대체 쿼리 신규
+     - `web/lib/deepseek.ts` — `extractPreferences`(번호 목록 입력, `{fact, replaces}[]` 출력·파싱)
+     - `web/app/api/notices/recommended/route.ts` — 선호 벡터 select
+     - `web/app/api/jobs/notify/route.ts` — 선호 벡터 select
+     - `web/app/api/preferences/route.ts` — GET 목록
+     - `web/app/api/preferences/[id]/route.ts` — PUT의 소유 확인 select·update, DELETE(삭제 방식은 database
+       문서 "사용자 삭제와 이력" 확정 후, 미확정)
+     위 표는 [[anyang-backend-api#3-3-4. 모순 선호 즉시 정정 — 기존 기억 목록을 추출 호출에 함께 전달 (신규, 2026-10-03, 확인 항목 48, 재승인 대기)]]
+     의 "활성 기억 조건이 필요한 쿼리 전부"와 같아야 한다. 구현 전후에 `web/`에서 `user_preferences` SQL
+     문자열을 다시 검색해 표에 없는 쿼리가 있는지 확인한다.
+   - 이번 범위 밖(미확정): 대체된 기억을 기억 화면·API에 내려 주기, 되돌리기 API(되돌리기는 database 문서의
+     운영 SQL뿐), 정리 잡 등록(별도 사용자 승인 필요).
+   - 6-1과 같은 함수(`extractAndStorePreference`)를 건드리지만 6-1이 보류라 지금은 겹치지 않는다. 6-1 재개
+     때 게이트를 추출 호출 앞에 얹는다(게이트는 추출 호출 앞, 모순 판단은 추출 호출 안).
+   - 테스트: [[anyang-backend-api#테스트 방법]] "모순 선호 정정" 항목 (1)~(12) — 목 기반 단위 테스트, 이력 보존
+     (옛 행 문장·임베딩 불변), 활성 조건 누락 방지(11), 대체 쿼리 소유자 방어(DB 레벨), 마이그레이션 순서(12).
+     기존 `web/test/deepseek.test.ts`·`web/test/chat.test.ts`의 문자열 배열 기대값 갱신, 그리고 쿼리 문자열
+     일부로 분기하는 기존 목(`web/test/chat.test.ts`·`preferences.test.ts`·`notices-recommended.test.ts`·
+     `jobs-notify.test.ts`)이 활성 조건 추가 뒤에도 맞는지 확인·갱신 포함.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
