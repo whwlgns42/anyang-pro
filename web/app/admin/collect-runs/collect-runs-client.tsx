@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../_lib/api-fetch";
+import {
+  DIRECT_COLLECT_DISABLED_NOTICE,
+  HISTORY_HINT,
+  describeRun,
+  isDirectCollectDisabled,
+} from "../../_lib/collect-run-label";
 import { NoticesTab } from "./notices-tab";
 
 type CollectRun = {
@@ -21,6 +27,7 @@ export function CollectRunsClient() {
   const [runs, setRuns] = useState<CollectRun[] | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disabledNotice, setDisabledNotice] = useState(false);
   const [tab, setTab] = useState<"runs" | "notices">("runs");
 
   async function load() {
@@ -38,6 +45,11 @@ export function CollectRunsClient() {
     const res = await apiFetch("/api/admin/collect-runs", { method: "POST" });
     setRunning(false);
     if (!res.ok) {
+      const body = res.status === 410 ? await res.json().catch(() => null) : null;
+      if (isDirectCollectDisabled(res.status, body)) {
+        setDisabledNotice(true);
+        return;
+      }
       if (res.status !== 403) setError("수집 실행 중 오류가 발생했습니다.");
       return;
     }
@@ -72,25 +84,43 @@ export function CollectRunsClient() {
           <p className="hint-text">불러오는 중...</p>
         ) : (
           <>
-            <button type="button" onClick={handleRunNow} disabled={running} style={{ marginBottom: 12 }}>
+            <button type="button" onClick={handleRunNow} disabled={running || disabledNotice} style={{ marginBottom: 12 }}>
               {running ? "수집 실행 중... (최대 5분)" : "지금 수집 실행"}
             </button>
+            {disabledNotice && (
+              <p className="hint-text" role="status">
+                {DIRECT_COLLECT_DISABLED_NOTICE}
+              </p>
+            )}
             {error && (
               <p className="error-text" role="alert">
                 {error}
               </p>
             )}
+            <p className="hint-text">{HISTORY_HINT}</p>
             {runs.length === 0 && <p className="hint-text">아직 수집 실행 기록이 없어요.</p>}
-            {runs.map((run) => (
-              <div className="card" key={run.id}>
-                <strong>{new Date(run.started_at).toLocaleString()}</strong>
-                <p className="hint-text">
-                  트리거: {run.trigger_type} · 상태: {run.status} · 수집 건수:{" "}
-                  {run.collected_count ?? "-"}
-                </p>
-                {run.error_summary && <p className="error-text">{run.error_summary}</p>}
-              </div>
-            ))}
+            {runs.map((run) => {
+              const l = describeRun(run);
+              return (
+                <div className="card" key={run.id}>
+                  <strong>{new Date(run.started_at).toLocaleString()}</strong>
+                  <p className="hint-text">
+                    실행 방식: {l.trigger} · 상태: {l.status} · 수집 건수: {l.count}
+                  </p>
+                  {l.message && (
+                    <p className={l.message.tone === "error" ? "error-text" : "hint-text"}>
+                      {l.message.text}
+                      {l.message.raw && (
+                        <>
+                          {" "}
+                          <small>{l.message.raw}</small>
+                        </>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </>
         )
       ) : (
