@@ -69,6 +69,7 @@ owner: pm
 - 2026-10-03: 48 승인된 설계 13차 → 구현 완료. database 0020 운영 적용 226e4f6, backend 모순 대체 21b9d52(test 204·build 통과), code-review 치명 없음. 50 해결. 후속 51(사전 테스트·낡은 문구·push·인수인계 보관). push 보류.
 - 2026-10-03: 새 요청(메인 세션 전달) — 청안(cheongan) 디자인을 웹과 모바일 앱에 적용. 49 보류 조건(실제 소스 수령)이 풀렸다. pm이 소스를 재확인했으나 모바일 앱(React Native Expo)이 저장소·설계 어디에도 없고 확정 스택(PWA 웹앱)과 충돌해 분배 전 멈춤. 설계 호출·문서 변경 없음. 확인 항목 52.
 - 2026-10-04: 새 요청(메인 세션 전달, 계획 사용자 승인) — 공지 전체 수집·10분 주기 즉시 갱신·공지 화면 시안(별표·본문 이미지 배지·첨부 링크). 사용자 결정 5건을 결정 문서 2건에 기록, 설계 6종을 승인된 설계에서 뺌(16차). 설계 database → backend → frontend draft. 확인 항목 55.
+- 2026-10-04: 55 사용자 결정·승인(메인 세션 전달) 반영 → 승인된 설계 17차 → 구현 database 6b89b53·backend 46c7ba1·frontend c8db497, code-review 재위임 1회(b714fa1·221d019) 후 통과. test 276·build 통과. 운영 적용·배포·백필·잡 등록·push 미실행(사용자 승인 대기, 55(t)). 55(s) 설계 변경 필요로 backend-api를 뺌(18차).
 
 ### 설계 문서
 
@@ -350,6 +351,11 @@ owner: pm
     - **사용자 결정·승인(2026-10-04, user, 메인 세션이 직접 받아 전달)**: (j) 글 주소 기준으로 전부 저장 — `content_hash` unique 해제(0021에 포함), 중복 판정은 `source_url`만, 해시는 수정 감지용, 462건 모두 저장. (k)·(d) 고정 공지는 "최근 공지"(선호 없음)에서만 위로(`is_pinned desc, published_at desc`), 추천 정렬은 유사도 순서 유지·별표만. (c)·(p) `image_count` = 본문 img + 이미지 확장자(jpg·jpeg·png·gif·webp 등) 첨부 합산, 작은 이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정함. 나머지 제안값 전부 확정: (l) stale N=10분·failed 정리, (n) `npx tsx`, (a)·(o) `COLLECTOR_CONTACT` 환경변수(실제 값은 사용자가 Vercel에 직접 입력, 임의 생성 금지), (q) `renderToStaticMarkup`, frontend 시각값·문구, 재조회 30초. 설계 6종은 위 값을 반영한 상태로 승인("제안대로 승인"). push는 승인 안 됨.
     - 결정 반영(2026-10-04): database(0021에 `notices_content_hash_key` drop, down은 중복 해시 생기면 실패 → 승인 필요, stale 10분·failed 정리), backend(`source_url`만·건너뛰기 제거·count 462, 정렬, image_count 합산, `COLLECTOR_CONTACT` 미설정 시 연락처 없는 UA, `npx tsx`), frontend(정렬·시각값·문구 확정, 55-i만 미확인).
     - (r) **사용자 확인 필요(차단 아님, 구현 진행)**: 배지 문구 "본문 이미지"와 `image_count` 정의(본문 img + 이미지 첨부)가 어긋난다 — 첨부 이미지만 있는 글에도 "본문 이미지" 칩이 뜬다. 문구를 유지할지("이미지" 등으로 바꿀지) 결정 필요. 결정 전까지 "본문 이미지" 유지.
+    - **구현 완료(2026-10-04)**: database `6b89b53`(0021 up/down, collect-job-trigger.sql 두 잡 템플릿, 운영 미적용), backend `46c7ba1`(수집기 isPinned·attachments·imageCount, quick/full/backfill, advisory xact lock·stale 10분, 라우트 mode·관리자 409, 조회 API 필드·정렬·no-store, `COLLECTOR_CONTACT`, `web/scripts/backfill.ts`, 실제 HTML 픽스처), frontend `c8db497`(별표·"본문 이미지" 칩·`star` 아이콘, 상세 첨부 영역·"원문 페이지에서 보기", visibilitychange·pageshow 재조회 30초; 스킬 `design-taste-frontend`). code-review: 치명·주요 없음, 경미 3 → 재위임 1회 frontend `b714fa1`(더 보기 병합 id 중복 제거)·backend `221d019`(`published_at` null 덮어쓰기 방지 coalesce) → 재검수 해소. npm test 276개·build 통과. 화면(390·1200), 백필, 고정 공지 실측은 못 함.
+    - backend 실측 결과(2026-10-04, 목록 1~2페이지·상세 7건, 2초 간격): 첨부 `ul.p-attach a.p-attach__link`(href `./downloadBbsFile.do?atchmnflNo=N` → 절대 URL, 파일명은 `.p-icon`이 아닌 span). 고정 공지는 실측 20건에 없어 사이트 CSS `.p-table .p-notice` 근거로 `tr.p-notice` 판정(55-b 미실측 — 틀리면 isPinned가 항상 false, 수집 영향 없음. 고정 공지가 올라오면 재확인). `span.p-icon__hot`(핫이슈)은 고정 판정에 안 씀. img 제외: CKEditor 이모지(`/plugin/ckeditor/plugins/smiley/`). 응답 시간: 목록 0.74초(한 번 6.5초), 상세 0.53~1.57초, quick 새 글 0건 약 4~5초. 이미지 첨부 글은 본문 텍스트에 "사진 확대보기"가 섞인다(추출 변경 시 해시가 바뀌어 전체 재임베딩이라 그대로 둠, 필요하면 별도 요청).
+    - (s) **설계 변경 필요(2026-10-04, code-review 경미 3)**: backend가 구현 단계에서 `div.p-photo` 안의 `<img>`를 image_count에서 뺐다. 사이트가 이미지 첨부를 본문 끝 `.p-photo`에 다시 그려(src가 첨부 미리보기 경로와 같음, 7건 중 3건) 합산하면 한 장이 2로 세어지기 때문이다. 승인 범위는 "이모지·아이콘 제외 규칙"이라 이 규칙은 [[anyang-backend-api]]에 없다. 부작용: 첨부 파일명에 이미지 확장자가 없는데 `.p-photo`로 그려진 이미지는 0으로 센다. 그래서 `anyang-backend-api`를 승인된 설계에서 뺐다(18차). 사용자가 이 규칙을 승인하면 backend가 5-1절에 한 줄 반영 후 재기록. 코드는 이미 이 규칙으로 커밋됨(`46c7ba1`).
+    - (t) 운영 순서(backend·database): ① 0021 운영 적용(적용 직전 `notices_content_hash_key` 이름 확인, 적용 후 컬럼 3개·제약 제거·0019 점검 SQL 2개 0행) → ② 이 코드 배포(0021 전에 배포하면 수집·조회 쿼리가 새 컬럼 때문에 실패) → ③ 백필(`npx tsx`로 `--pages 1-2` 시험 후 1~47) → ④ pg_cron·pg_net 설치·잡 등록(URL·`SCHEDULER_SHARED_SECRET`, 40) → ⑤ 최종 POST·`full` 타임아웃 확인(55-e·m). `COLLECTOR_CONTACT` 값은 사용자가 Vercel에 직접 입력. 0021 down은 백필 뒤엔 중복 해시로 실패·값 손실 → 사용자 승인 필요. 전부 사용자 승인 대상, 미실행.
+    - (u) 경미(문서·서식, 차단 아님): [[anyang-database-schema]] 1439행이 advisory lock·`collect_runs.mode`를 아직 "미확정(55)"으로 적는다(사용자가 확정, backend-api에는 반영). `web/app/_lib/notices-refetch.ts:23` `type Doc =Pick` 공백 누락. 다음 수정 때 정리.
     - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
 
 ## 승인된 설계
@@ -385,11 +391,12 @@ owner: pm
 2026-10-04(17차): 확인 항목 55 사용자 결정·승인(메인 세션 전달 — (j) `source_url`만·unique 해제, (k)·(d) 최근 공지만 고정 위로, (c)·(p) image_count 합산, 나머지 제안값 전부, "제안대로 승인")을 database → backend → frontend가 반영한 뒤 6종을 기록한다. 55-b(고정 공지 마크업)·이모지·아이콘 img 제외 규칙은 구현 첫 단계에서 실제 HTML로 정하는 것으로 승인됐다. 55-i(첨부 직접 링크)와 (r)(배지 문구)는 승인 범위 밖 미결이다.
 
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-cheongan-design-adoption]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(18차): `anyang-backend-api`를 뺀다 — 사유: 확인 항목 55(s) code-review "설계 변경 필요"(image_count에서 `div.p-photo` img 제외 규칙이 설계에 없음). 사용자 확인 후 재기록한다.
 
 ## Jev 도입 제안
 

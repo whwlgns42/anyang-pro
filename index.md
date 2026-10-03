@@ -48,16 +48,16 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(draft — 확인 항목 55 공지 첨부·고정·이미지 수 컬럼(0021)·수집 잡 10분/하루 1회 반영 재승인 대기): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
-- [[anyang-backend-api]] — 안양 비서 API 계약(draft — 확인 항목 55 수집 모드 quick/full·백필 스크립트·겹침 방지·공지 응답 필드 반영 재승인 대기): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
-- [[anyang-cheongan-design-adoption]] — 안양 비서: 팀원 디자인 소스 cheongan(Tailwind v4 + 토큰) 웹 적용 설계(구현 완료 52, draft — 확인 항목 55 본문 이미지 배지 반영 재승인 대기): 토큰·globals.css 이행, 공통 컴포넌트, 화면 매핑표
+- [[anyang-database-schema]] — 안양 비서 DB 설계(active — 55 승인·구현: 공지 첨부·고정·이미지 수 컬럼, content_hash unique 해제(0021, 운영 미적용), 수집 잡 10분/하루 1회): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
+- [[anyang-backend-api]] — 안양 비서 API 계약(active, 55 구현 완료 — 수집 모드 quick/full·백필 스크립트·겹침 방지·공지 응답 필드. 55(s) image_count p-photo 제외 규칙 사용자 확인 대기로 승인된 설계에서 빠짐): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
+- [[anyang-cheongan-design-adoption]] — 안양 비서: 팀원 디자인 소스 cheongan(Tailwind v4 + 토큰) 웹 적용 설계(active — 52·55 구현 완료, 본문 이미지 배지 포함): 토큰·globals.css 이행, 공통 컴포넌트, 화면 매핑표
 - [[anyang-user-name-memory]] — 안양 비서: 사용자 이름 저장·메모리 설계(**미승인** — 확인 항목 54 사용자 결정 전, 계정 이름 DeepSeek 전송이 ai-models-data-transfer 결정과 충돌. draft 복귀·삭제 결정 대기)
-- [[anyang-frontend-screens]] — 안양 비서 화면 설계(draft — 확인 항목 55 공지 별표·본문 이미지 칩·첨부 목록·탭 복귀 재조회 반영 재승인 대기): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
+- [[anyang-frontend-screens]] — 안양 비서 화면 설계(active — 55 구현 완료: 공지 별표·본문 이미지 칩·첨부 목록·탭 복귀 재조회): 로그인·동의·온보딩·채팅·추천 공지·알림 설정·기억·대화 히스토리·탈퇴·처리방침, 관리자 4종, PWA
 
 ## Dev Tasks
 
-- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(draft — 55 수집기 5-1~5-5 추가: 파서·모드·라우트·백필·트리거)
-- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(draft — 55 공지 화면 N1~N3 추가: 공지 행·상세 첨부·재조회)
+- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(active — 55 수집기 5-1~5-5 추가: 파서·모드·라우트·백필·트리거)
+- [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(active — 55 공지 화면 N1~N3 추가: 공지 행·상세 첨부·재조회)
 
 ## Concepts
 
