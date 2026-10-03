@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: database
 ---
 
@@ -19,7 +19,9 @@ PostgreSQL + pgvector 위에 사용자/인증, 프로필, 개인정보 동의 �
 `pg_cron` + `pg_net`이 앱 API를
 호출하는 방식으로 앱 쪽 로직만 트리거한다. 모순으로 대체되는 선호는 같은 행을 UPDATE하되 직전 문장
 1단계를 `user_preferences.previous_fact`에 보관해 되돌릴 수 있게 한다(확인 항목 48(f), 사용자 결정 안
-2a, 마이그레이션 0020). 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
+2a, 마이그레이션 0020). 공지 전체 수집·즉시 갱신(확인 항목 55)을 위해 `notices`에 `is_pinned`·`image_count`·
+`attachments`를 더하고(마이그레이션 0021, draft) 수집 잡을 `collect-quick`(10분)·`collect-full`(하루 1회) 둘로
+나눈다. 아래 테이블·컬럼·인덱스 세부는 모두 제안이며
 사용자 설계 승인으로 확정됐다.
 
 ## Context
@@ -243,7 +245,16 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | collected_at | timestamptz, default now() | |
 | hidden_at | timestamptz, null 허용 | 관리자가 잘못 수집된 공지를 숨긴 시각. null이면 정상 노출(제안, [[glossary]]의 notice-hidden) |
 | hidden_reason | text, null 허용 | 숨김 사유(관리자가 입력, 필수 아님) |
+| is_pinned | boolean, not null, default false | 게시판의 고정 공지 여부(별표 표시, 0021, 확인 항목 55). 판정 규칙은 backend가 실제 HTML을 보고 확정한다 |
+| image_count | int, not null, default 0 | 본문 이미지 수("본문 이미지" 배지, 0021). 정의(본문 `<img>`만인지 이미지 첨부 포함인지)는 확인 항목 55-c, 사용자 확인 대기 |
+| attachments | jsonb, not null, default '[]' | 첨부 목록 `[{name, url}]`, 링크만 저장하고 파일은 복사하지 않는다(0021) |
 
+- **확인 항목 55 컬럼 3개 (확정, 사용자 결정 2026-10-04, 계획서 승인)**: 위 `is_pinned`·`image_count`·
+  `attachments`와 기본값은 확정이다. 게시판 번호(bbsNo) 컬럼은 쓸 곳이 없어 두지 않는다. 기존 행(현재 notices
+  0건)은 기본값으로 채워진다. 이전의 "고정 공지·본문 이미지는 뺀다"는 서술은 이 결정으로 대체된다
+  ([[anyang-service-scope]] "공지 화면 표시" 행). `attachments`의 원소 키는 `name`·`url` 두 개이며 jsonb 구조
+  검증 제약(check)은 두지 않는다(제안, 값 형식 검증은 수집기 몫). 인덱스는 추가하지 않는다 — 세 컬럼 모두
+  where 조건으로 쓰이지 않고 정렬 보조(`is_pinned desc`)는 462건 규모라 불필요하다(제안, 정렬 쿼리는 backend).
 - 인덱스: unique(content_hash) — 중복 방지의 핵심. unique(source_url)도 별도로 둔다(같은 글이
   URL은 같은데 본문만 갱신되는 경우 구분 필요 여부는 미확정 — 수집 대상 게시판은
   https://www.anyang.go.kr/youth/selectBbsNttList.do?bbsNo=1184&key=3543 로 확정됐으나
@@ -694,6 +705,25 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | triggered_by | uuid, FK → users.id, null 허용 | 수동 실행한 관리자. 자동 실행이면 null |
 
 - 인덱스: `(started_at desc)` — 이력을 최신 순으로 조회.
+- **"진행 중" 판정 가능 여부 (확인 항목 55, 2026-10-04 `0013_collect_runs`와 운영 DB 컬럼을 읽기 전용으로 확인)**:
+  현재 스키마로 판정할 수 있다. 진행 중 = `status='running'`(기본값)이고 `finished_at is null`, 시작 시각은
+  `started_at`(not null, default now())이다. 추가 컬럼 없이 `(started_at desc)` 인덱스로 최근 행만 훑으면 된다.
+  `status` 값 셋은 코드에서 `running/success/failed`로 쓰며 DB check 제약은 없다.
+  - **비정상 종료로 `running` 행이 남는 경우**: 함수가 제한 시간(300초)에 끊기거나 프로세스가 죽으면
+    `finished_at`이 영영 null이라 "진행 중"이 풀리지 않는다. 스키마 변경 없이 "`started_at`이 N분보다 오래된
+    `running` 행은 무시"로 처리할 수 있다(N은 함수 최대 실행 시간 300초보다 길게, 예: 10분 `(미확정)`). 이
+    경우 DB 변경은 없다. 판정 쿼리와 N의 값은 backend 설계 몫이다. 무시된 stale 행을 `failed`로 정리하는
+    update(예: 수집 시작 때 `update collect_runs set status='failed', finished_at=now(), error_summary='stale'
+    where status='running' and started_at < now() - interval 'N'`)는 관리자 화면 이력을 깨끗하게 하는
+    선택지이며 스키마 변경은 아니다 `(미확정)`.
+  - **원자성 한계**: "진행 중 행이 없으면 insert"는 두 호출이 동시에 오면 둘 다 통과할 수 있다. 부분 unique
+    index(`status='running'`인 행은 하나만)로 막을 수 있으나 stale 행이 남으면 이후 수집이 모두 막히므로 제안하지
+    않는다. 10분 주기에 quick은 대개 수 초라 겹칠 확률이 낮고, 겹쳐도 `source_url` 유니크(`on conflict`)로 공지가
+    중복 저장되지는 않는다. 필요하면 backend가 `pg_try_advisory_lock`을 쓰는 방식을 설계에 제안한다 `(미확정)`.
+  - **mode(quick/full) 기록 여부**: `collect_runs`에는 mode 컬럼이 없다(`trigger_type`은 `scheduled/manual`).
+    겹침을 mode와 무관하게 하나만 허용하면 컬럼이 필요 없다. mode별로 구분하거나 관리자 화면에 mode를 보이려면
+    `mode text` 컬럼 추가가 필요하며 이는 스키마 변경이다 `(미확정)`, backend 결정 뒤 0021에 합칠지 0022로 나눌지
+    정한다. 이번 설계는 컬럼을 추가하지 않는다.
 - collect-job(수집 잡) 실행 시작 시 1행을 만들고(`status='running'`), 끝나면 `finished_at`·
   `status`·`collected_count`·`error_summary`를 갱신한다(애플리케이션 책임).
 - 관리자 화면의 "수동 수집 실행"은 이 테이블에 `trigger_type='manual'` 행을 만들며 잡을
@@ -918,27 +948,61 @@ select cron.schedule(
     보낸다"는 보장은 `notify_logs` 쪽 책임으로 분리한다(제안).
   - 자정 경계를 포함한 정확한 조건식과 pg_cron 실행이 지연될 때의 창 보정(예: 5분보다 오래
     걸린 실행 사이의 빈 구간)은 backend 구현 단계에서 최종 확정한다.
-- collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)을 기본안으로 제안한다. Vercel Cron은
-  이전 가능성 원칙 3에 따라 쓰지 않는다. 주기는 하루 1회(제안) — 게시판이 관공서 공지
-  게시판이라 실시간성 요구가 낮고, 무료 티어 리소스(pg_net 호출, Vercel 함수 실행)를 아끼기
-  위함이다. 시각은 사용자 트래픽이 적은 새벽(예: Asia/Seoul 04:00, 제안)으로 잡아 알림
-  잡보다 충분히 먼저 끝나게 한다.
+- collect-job(공지 수집) 트리거도 같은 방식(pg_cron + pg_net)이다. Vercel Cron은 이전 가능성 원칙 3과
+  Hobby 하루 1회 제한 때문에 쓰지 않는다. **확인 항목 55(사용자 결정 2026-10-04)로 "하루 1회" 서술을 대체**한다.
+  새 글을 분 단위로 반영해야 하므로 잡을 둘로 나눈다(두 cron 식은 확정, 10분 주기 조정 가능성은 55-f `(미확정)`).
+
+  | 잡 이름 | cron (UTC) | 호출 | 역할 |
+  |---|---|---|---|
+  | `collect-quick` | `*/10 * * * *` | `/api/jobs/collect?mode=quick` | 목록 1페이지만 확인, 새 글만 상세 수집 |
+  | `collect-full` | `0 19 * * *` (서울 04:00) | `/api/jobs/collect?mode=full` | 최근 1~2페이지 정밀 점검, 본문 수정 감지 |
+
+  모드별 동작 상세는 backend 설계 몫이다([[anyang-backend-api]]). 이 문서는 트리거만 정한다.
   ```sql
-  -- 제안: 매일 새벽 1회 수집 잡 트리거 (UTC 19:00 = Asia/Seoul 04:00)
+  -- 제안: 수집 잡 2개. 기존 템플릿 web/db/jobs/collect-job-trigger.sql(잡 이름 collect-job-trigger, 하루 1회)을
+  -- 이 두 잡으로 나눈다. <APP_API_URL>, <SCHEDULER_SECRET>은 실제 값으로 바꿔 실행(문서에 값 기록 금지)
   select cron.schedule(
-    'collect-job-trigger',
+    'collect-quick',
+    '*/10 * * * *',
+    $$
+    select net.http_post(
+      url := '<APP_API_URL>/api/jobs/collect?mode=quick',
+      headers := jsonb_build_object(
+        'content-type', 'application/json',
+        'x-scheduler-secret', '<SCHEDULER_SECRET>'
+      )
+    );
+    $$
+  );
+
+  select cron.schedule(
+    'collect-full',
     '0 19 * * *',
     $$
     select net.http_post(
-      url := '앱 API URL(환경변수로 관리)',
+      url := '<APP_API_URL>/api/jobs/collect?mode=full',
       headers := jsonb_build_object(
         'content-type', 'application/json',
-        'x-scheduler-secret', '공유 시크릿(환경변수로 관리, 문서에 값 기록 금지)'
+        'x-scheduler-secret', '<SCHEDULER_SECRET>'
       )
     );
     $$
   );
   ```
+  - **템플릿 교체 계획**: 구현 단계에서 `web/db/jobs/collect-job-trigger.sql`을 위 두 잡으로 고친다. 기존 이름
+    `collect-job-trigger`는 아직 등록된 적이 없으므로(pg_cron 미설치, 2026-10-04 확인) 해제 SQL은 필요 없다. 이미
+    등록돼 있다면 `select cron.unschedule('collect-job-trigger');`를 먼저 실행한다.
+  - **운영 작업이며 사용자 승인 필요**: 현재 운영 DB에 `pg_cron`·`pg_net`은 설치돼 있지 않다(2026-10-04
+    `list_extensions`: 둘 다 `installed_version` null). 확장 설치(`create extension`), 실제 URL·시크릿 입력, 잡 등록은
+    운영 DB를 바꾸는 작업이라 구현 단계 지시서에 사용자 승인이 별도로 적혀 있어야 실행한다. 없으면 실행하지 않고
+    멈춰서 보고한다. 시크릿은 `SCHEDULER_SHARED_SECRET`을 Vercel과 Supabase Vault에 같은 값으로 넣는다
+    (프로젝트 문서 확인 항목 40). 값은 문서에 남기지 않는다.
+  - 호출 보호: 프로덕션 주소는 GET 405로 보호 미적용을 간접 확인했다(확인 항목 39 갱신). 확장 설치 뒤 실제 POST 1회로
+    최종 확인하고, 막히면 `x-vercel-protection-bypass` 헤더를 추가한다.
+  - **겹침 방지**: 10분마다 호출되므로 이전 실행이 끝나기 전에 다음 호출이 올 수 있다. `collect_runs`의 진행 중 기록으로
+    건너뛰는 판정은 backend 몫이다(판정 가능 여부와 stale 행 처리는 위 `collect_runs` 절).
+  - **`net.http_post`는 비동기**다. 응답 상태는 `net._http_response`에서, 실행 이력은 `cron.job_run_details`에서
+    본다(테스트 방법 참고). pg_net 응답 테이블 보존 기간은 기본값을 쓴다(제안).
 - UNO Q 전환 시 트리거만 `리눅스 cron + curl`로 교체하고 잡 로직(앱 API)은 그대로 둔다
   ([[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO Q)]]).
 
@@ -1098,6 +1162,44 @@ authenticated 롤에 애초에 권한이 없다.
     모른 채 정상 동작한다(기존 쿼리가 `previous_fact`를 쓰지 않는다).
   - 인덱스는 이 마이그레이션에 포함하지 않는다(위 "조회 쿼리 2종"의 인덱스 항목).
 
+### 마이그레이션 계획 (0021, 확인 항목 55)
+
+`notices`에 고정 공지·본문 이미지·첨부 컬럼 3개를 더한다(사용자 결정 2026-10-04). `web/db/migrations/`의 마지막
+파일은 `0020_user_preferences_previous_fact`이고 0021은 비어 있음을 확인했다(번호 겹침 없음). 파일은 구현 단계에서
+만든다 — 이번 설계 단계에서는 만들지 않았고 운영 DB에도 적용하지 않았다. 컬럼 의미는 위 `notices` 절에 있다.
+
+- **0021_notice_attachments_pinned** (`web/db/migrations/0021_notice_attachments_pinned.{up,down}.sql`)
+  - up:
+    ```sql
+    begin;
+    alter table notices
+      add column is_pinned boolean not null default false,
+      add column image_count int not null default 0,
+      add column attachments jsonb not null default '[]'::jsonb;
+    commit;
+    ```
+  - down:
+    ```sql
+    begin;
+    alter table notices
+      drop column attachments,
+      drop column image_count,
+      drop column is_pinned;
+    commit;
+    ```
+  - **롤백/되돌릴 수 있는가**: up은 컬럼 추가라 되돌릴 수 있는 마이그레이션이다. 상수 기본값이 있는 `not null` 추가는
+    PostgreSQL 11 이상에서 테이블을 다시 쓰지 않는다. down은 컬럼 drop이라 **수집된 첨부·고정·이미지 수 값이
+    사라진다.** 다만 이 값은 원문 사이트에서 다시 수집할 수 있는 파생 값이고, 현재 notices는 0건이다. 적용 직후
+    백필 전이라면 손실이 없다. 백필 후 down을 실행하면 데이터 삭제이므로 구현 단계 지시서에 별도 사용자 승인이
+    있어야 한다(아래 "되돌릴 수 없는 마이그레이션 표시").
+  - **0019 "공개 API 차단" 규칙**: 새 테이블이 없어 "같은 파일에서 RLS 켜기" 관례는 해당 없다. `notices`는 0019에서
+    이미 RLS가 켜지고 anon·authenticated의 테이블 권한이 회수됐다. 이 권한 회수는 테이블 수준이라 새 컬럼에도 그대로
+    적용된다(컬럼 단위 grant를 따로 두지 않았다). 그래도 운영 적용 뒤 위 "적용 후 점검" 절의 점검 SQL 2개(0행이어야
+    함)를 다시 돌린다.
+  - **적용 순서**: DB(0021)를 먼저, backend 코드를 나중에 배포한다. 코드가 먼저 나가면 없는 컬럼을 쓰는 upsert가
+    오류가 난다. 반대로 0021만 먼저 적용되면 현재 코드는 새 컬럼을 모른 채 기본값으로 정상 동작한다.
+  - 인덱스는 추가하지 않는다(위 `notices` 절).
+
 ### 되돌릴 수 없는 마이그레이션 표시
 
 - 이 설계 단계에서는 신규 테이블/컬럼 생성만 다룬다. 되돌릴 수 없는 마이그레이션(테이블·컬럼
@@ -1128,6 +1230,14 @@ authenticated 롤에 애초에 권한이 없다.
   **`previous_fact`가 채워진 행이 하나라도 있을 때 down을 실행하면 보관된 직전 문장이 사라지는 데이터 삭제**이므로
   그 경우에는 구현 단계 지시서에 별도 사용자 승인이 있어야 한다. 없으면 down을 실행하지 않고 멈춰서 보고한다
   (모두 null이면 손실이 없어 해당 없다). up 적용은 별도 승인이 필요 없다.
+- `0021_notice_attachments_pinned`(위 "마이그레이션 계획 (0021)")의 up은 컬럼 추가라 되돌릴 수 없는 마이그레이션이
+  아니다. down은 컬럼 drop이라 백필 후에는 수집된 값이 사라진다. 백필 전(현재 notices 0건) 또는 `is_pinned`가 모두
+  false·`image_count`가 모두 0·`attachments`가 모두 `[]`이면 손실이 없어 해당 없다. 그 외에 down을 실행하려면
+  구현 단계 지시서에 별도 사용자 승인이 있어야 하고, 없으면 실행하지 않고 멈춰서 보고한다. up 적용은 별도 승인이
+  필요 없다.
+- 수집 잡 두 개(`collect-quick`, `collect-full`)의 pg_cron·pg_net 확장 설치, 실제 URL·시크릿 입력, 잡 등록은
+  운영 DB를 바꾸는 작업이다. 데이터 삭제는 아니지만 외부 호출을 시작하므로 구현 단계 지시서에 사용자 승인이
+  별도로 적혀 있어야 실행한다(위 "pg_cron / pg_net 잡 정의").
 - 대체된 행 정리 잡은 두지 않으므로(사용자 결정 f-3) pg_cron 등록이나 정리용 삭제는 없다. 사용자가 기억을 삭제할 때
   `previous_fact`가 함께 사라지는 것은 앱 코드가 실행하는 일상 삭제(기억 삭제 API)이지 마이그레이션이 아니다.
 
@@ -1192,6 +1302,23 @@ authenticated 롤에 애초에 권한이 없다.
     때문). down 파일은 문법 검토만 한다. 반복 테스트는 개발용 Supabase 프로젝트가 생긴 뒤
     (프로젝트 문서 확인 항목 36)로 미룬다.
   - 앱 확인: `npm test`, `npm run build` 통과.
+- 공지 컬럼 확인(0021, 확인 항목 55, 개발용 프로젝트 또는 `begin; … rollback;`):
+  - 적용 후 `\d notices`에 `is_pinned boolean not null default false`, `image_count integer not null default 0`,
+    `attachments jsonb not null default '[]'`가 있는지 확인한다. 기존 행이 있으면 기본값으로 채워졌는지 확인한다.
+  - 기본값: 새 컬럼을 지정하지 않고 insert한 행이 `false`/`0`/`[]`인지, `attachments`에 null을 넣으면 거부되는지
+    확인한다. `[{"name":"a.pdf","url":"https://..."}]` 값이 저장되고 읽히는지도 확인한다.
+  - down: 컬럼 3개가 사라지고 다른 컬럼 값이 그대로인지, 적용 → 롤백 → 재적용이 에러 없이 반복되는지 확인한다.
+    운영에서는 반복 테스트를 하지 않는다(백필 후 값 손실 위험).
+  - 0019 점검: 운영 적용 뒤 "적용 후 점검" 절의 점검 SQL 2개가 0행인지, `set role anon; select is_pinned from
+    public.notices;`가 권한 오류로 막히는지 확인한다(`reset role`로 복귀).
+  - 앱 확인: `npm test`, `npm run build` 통과.
+- 수집 잡 등록 확인(확인 항목 55, 승인 후 구현 시): 확장 설치 뒤 `select jobname, schedule, active from cron.job
+  where jobname in ('collect-quick','collect-full');`가 2행이고 schedule이 각각 `*/10 * * * *`, `0 19 * * *`인지
+  확인한다. 시크릿이 들어간 `command` 컬럼은 출력하지 않는다. 실행 이력은 `select jobid, status, return_message,
+  start_time from cron.job_run_details order by start_time desc limit 20;`로 10분 간격 실행과 `succeeded`를 보고,
+  HTTP 응답은 `net._http_response`의 `status_code`가 200대인지 본다(405면 경로·메서드, 401이면 시크릿 불일치).
+  `collect_runs`에 `trigger_type='scheduled'` 행이 10분마다 생기는지, 진행 중 행이 끝나면 `finished_at`이 채워지는지도
+  확인한다.
 - 직전 문장 보관 확인(0020, 확인 항목 48(f), 안 2a, 개발용 프로젝트 또는 `begin; … rollback;`): 쿼리별 확인 ①~⑧은
   위 `user_preferences` 절의 "테스트 방법"에 있다(대체 후 id 불변·`previous_fact` = 옛 문장, 다른 사용자 id 차단,
   유사 갱신·PUT은 `previous_fact` 불변, swap 되돌리기). 마이그레이션 자체는 다음을 확인한다.
@@ -1214,7 +1341,7 @@ authenticated 롤에 애초에 권한이 없다.
 - 수집 대상 게시판 — 해결(2026-09-27, user): 안양시 청년 게시판 1개로 확정
   ([[anyang-service-scope]]). 그 게시판의 실제 갱신 패턴(같은 글 수정 여부)에 따른 notices
   갱신·중복 판정 세부는 여전히 미해결(위 `notices` 절 참고) — 운영하며 관찰이 필요하다.
-  collect-job 주기는 하루 1회(제안, 위 pg_cron 절 참고)로 남겨뒀다.
+  collect-job 주기는 확인 항목 55로 `collect-quick` 10분 + `collect-full` 하루 1회(서울 04:00)로 바뀌었다(위 pg_cron 절).
 - 처리방침·동의 화면 — 해결(2026-09-27, user): 채택. 가입 시 필수 동의 화면 + 동의 시각
   기록. [[anyang-service-scope]]. 동의 기록 구조(`consents` 테이블, 위 참고)도 구조 자체가
   확정됐다.
@@ -1276,6 +1403,13 @@ authenticated 롤에 애초에 권한이 없다.
   범위 밖이다. 기존 동작 유지(건드리지 않음)로 적었다.
 - 미확정 — 되돌리기(swap) 때 `updated_at`을 갱신할지(기본은 건드리지 않음)와, 되돌린 문장의 임베딩을 운영자가 계산해
   넘기는 방법(스크립트 등)은 backend 설계 몫이다(위 "되돌리기").
+- 확인 항목 55(2026-10-04, 사용자 결정): `notices.is_pinned`·`image_count`·`attachments` 3개 컬럼과 기본값(0021),
+  두 수집 잡의 cron 식, 링크만 저장, Realtime 없음은 확정이다. 반영 위치는 위 `notices` 절, "pg_cron / pg_net 잡 정의",
+  "마이그레이션 계획 (0021)"이다.
+- 미확정(55-f) — `collect-quick` 10분 주기를 5분·30분이나 야간 완화로 바꿀지. 값만 바뀌는 문제라 스키마 영향은 없다.
+- 미확정(55) — 비정상 종료로 남은 `running` 행의 stale 판정 시간 N(예: 10분)과 정리 update 여부, 겹침 방지에
+  advisory lock을 쓸지, `collect_runs.mode` 컬럼이 필요한지. 앞의 둘은 backend 설계가, 마지막은 스키마 변경 여부가 걸려 있다
+  (위 `collect_runs` 절).
 - 미확정 — 사용자당 기억 행 수 상한(위 "행 수 상한").
 - 확인 요청(이 문서 범위 밖, 보류 f-8) — 직전 문장이 DB에 남는다는 사실이 처리방침·기억 화면 안내 문구("삭제하면
   사라진다" 등)와 맞는지는 frontend 재개 때 확인한다.

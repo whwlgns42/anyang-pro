@@ -40,6 +40,8 @@ Vercel Hobby(함수 리전 `icn1` 서울) + Supabase 무료(서울 리전, pgvec
 
 원칙 3에 따라 Vercel Cron은 쓰지 않는다. 계획서 아키텍처의 "수집 잡은 Vercel Cron 가능" 제안은 이 원칙과 맞지 않으므로, 수집 잡 트리거는 원칙 2에 맞춰 설계에서 정한다(미확정).
 
+수집 잡 트리거 결정(user, 2026-10-04, "새 글 즉시 반영" 요구): Supabase `pg_cron` + `pg_net`이 수집 API를 호출한다. 가벼운 확인(목록 1페이지, 새 글만 상세)을 10분마다, 정밀 점검(최근 1~2페이지 수정 감지)을 하루 1회(서울 04:00) 돌린다. 10분은 권장 주기라 조정할 수 있다. Vercel Cron은 Hobby가 하루 1회·실행 시각 ±59분이라 쓰지 않는다(원칙 3과도 일치). 세부는 [[anyang-backend-api]]·[[anyang-database-schema]] 설계에서 정한다.
+
 ## Links
 
 - [[anyang-youth-policy-assistant]]

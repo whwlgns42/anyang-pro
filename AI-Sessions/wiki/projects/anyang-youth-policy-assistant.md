@@ -68,6 +68,7 @@ owner: pm
 - 2026-10-03: 사용자 결정 47-a = (ii) 추출 시 대체. 확인 항목 48 설계 draft(database-schema 12차로 뺌 → database → backend). 확인 항목 49 cheongan 적용 조사 draft(frontend, 새 문서 [[anyang-cheongan-design-adoption]], 코드 변경 없음). 둘 다 사용자 승인 대기, 구현은 승인 뒤.
 - 2026-10-03: 48 승인된 설계 13차 → 구현 완료. database 0020 운영 적용 226e4f6, backend 모순 대체 21b9d52(test 204·build 통과), code-review 치명 없음. 50 해결. 후속 51(사전 테스트·낡은 문구·push·인수인계 보관). push 보류.
 - 2026-10-03: 새 요청(메인 세션 전달) — 청안(cheongan) 디자인을 웹과 모바일 앱에 적용. 49 보류 조건(실제 소스 수령)이 풀렸다. pm이 소스를 재확인했으나 모바일 앱(React Native Expo)이 저장소·설계 어디에도 없고 확정 스택(PWA 웹앱)과 충돌해 분배 전 멈춤. 설계 호출·문서 변경 없음. 확인 항목 52.
+- 2026-10-04: 새 요청(메인 세션 전달, 계획 사용자 승인) — 공지 전체 수집·10분 주기 즉시 갱신·공지 화면 시안(별표·본문 이미지 배지·첨부 링크). 사용자 결정 5건을 결정 문서 2건에 기록, 설계 6종을 승인된 설계에서 뺌(16차). 설계 database → backend → frontend draft. 확인 항목 55.
 
 ### 설계 문서
 
@@ -146,6 +147,7 @@ owner: pm
     - 갱신(2026-09-29): 구글 리디렉션 URI 등록·로그인 성공(user), DEEPSEEK·GEMINI 등록·재배포 완료. 남은 것: `ADMIN_EMAILS`(사용자 입력).
 39. **사용자 결정 필요(2026-09-28, Vercel 배포)**: 프로젝트에 Vercel Authentication(ssoProtection `all_except_custom_domains`)이 켜져 있어 `*.vercel.app` 운영 주소도 Vercel 로그인 사용자만 열 수 있다. 일반 사용자와 pg_cron 수집·알림 트리거가 막힌다. 운영만 해제(미리보기는 보호 유지)할지 결정.
     - 정정(2026-09-28, 메인 세션 실측): 로그인 없이 `curl`로 확인한 결과 운영 도메인 `anyang-youth-policy-assistant.vercel.app`은 SSO로 넘어가지 않고 앱이 직접 응답(현재는 첫 배포라 404), 미리보기·배포별 주소만 `vercel.com/sso-api`로 302. 즉 운영은 이미 공개 상태라 해제할 것 없음. `--prod` 배포 후 로그인 없이 200인지 다시 확인한다.
+    - 갱신(2026-10-04, 메인 세션 조사): 현재 운영 주소 `https://web-beta-smoky-16.vercel.app/api/jobs/collect`에 GET하면 Vercel 로그인 페이지가 아니라 앱의 405(POST 전용 라우트)가 온다. 운영 주소는 보호에 막히지 않는 것으로 보인다. 최종 확인은 pg_cron·pg_net 설치 후 실제 POST 1회(55-e). 막히면 `x-vercel-protection-bypass` 헤더를 붙인다.
 40. **후속(2026-09-28, 38 이후)**: 예약 작업(collect/notify 트리거) 등록 시 `SCHEDULER_SHARED_SECRET`을 새로 만들어 Vercel과 Supabase Vault에 동시에 넣는다(2026-09-28 생성값은 보관하지 않음).
 41. **사용자 결정 필요(2026-09-28, 새 요청 — /consent에서 국외 이전 고지·DeepSeek 문구 제거)**: pm이 분배 전에 멈춤. 설계·코드 변경 없음, "승인된 설계" 기록도 그대로 둠. 확인할 것:
     - (a) **기존 사용자 결정과 충돌**: 15번(user, "수집·이용"과 "국외 이전" 분리 동의)과 [[anyang-service-scope]] "개인정보 동의" 행(DeepSeek·Gemini 국외 이전 고지), [[anyang-ai-models-data-transfer]] "동의 화면의 국외 이전 고지에 Gemini 전송 포함"을 뒤집는 결정인지. 뒤집는다면 결정 문서 2건을 고친다(pm 소유).
@@ -322,6 +324,30 @@ owner: pm
       - 참고(경미, 설계 잠금 대상): [[anyang-frontend-screens]]는 채팅 키 처리 위치를 `chat-client.tsx`로 적지만 실제는 `ui/chat.tsx`의 Composer. 다음 frontend 설계 수정 때 정리.
     - (c) 경미(code-review): ① `memory-client.tsx` 버튼이 전역 `button` 규칙을 인라인 유틸리티로 덮음 — 설계 4절 4번 문장("옛 클래스를 쓰지 않는다")과 어긋남. 전역 `button` 규칙을 지울 때 함께 정리. ② `admin/admin-nav.tsx`가 인라인 style과 `.bottom-nav` 클래스를 상단 탭으로 씀(동작 정상). ③ 탭 강제 종료로 `pagehide`가 안 오면 5초 안에 지운 기억이 남음(데이터 손실 아님, 설계 범위 안). ④ `layout.tsx` 글꼴 `subsets: ["latin"]` — 한글은 포함되나 preload 안 돼 첫 렌더 글꼴 깜빡임 가능(브라우저 미확인).
     - (d) 실제 로그인 상태 390/768/1200 화면 확인은 사람이 해야 한다(`DATABASE_URL` 없는 환경).
+55. **설계 변경(2026-10-04, 새 요청 — 공지 전체 수집·즉시 갱신·공지 화면 시안 반영)**: 안양시 청년 게시판 전체(462건, pageIndex 1~47)의 제목·본문·첨부 정보를 `/notices`에 보이고, 새 글은 분 단위로 반영한다. 계획은 사용자 승인(메인 세션 전달, 계획서 `C:\Users\whwlg\.claude\plans\https-www-anyang-go-kr-youth-selectbbsnt-keen-sunbeam.md`). 현재 notices 0건·collect_runs 0건, DB에 pg_cron·pg_net 미설치, 게시판 RSS 없음(메인 세션 확인).
+    - 사용자 결정(2026-10-04, user): ① 첨부는 링크만(파일명+URL, jsonb) ② 별표 고정 공지 + "본문 이미지" 배지 둘 다 → `notices`에 `is_pinned`·`image_count`·`attachments` ③ 스케줄 pg_cron + pg_net: `collect-quick` `*/10 * * * *`(목록 1페이지, DB에 없는 nttNo만 상세, 이어서 임베딩), `collect-full` `0 19 * * *` UTC(1~2페이지 상세 재확인, contentHash 수정 감지), 라우트 `?mode=quick|full`, `x-scheduler-secret` 유지, 진행 중 실행이 있으면 건너뜀. Vercel Cron 미사용 ④ 백필은 로컬 일회성 스크립트 `web/scripts/backfill.ts`(1~47페이지, skipExisting, 임베딩 루프) ⑤ `notices-list`가 visibilitychange·재진입 시 재조회, API no-store, Realtime 없음. 기록: [[anyang-service-scope]](수집 범위·화면 표시), [[anyang-deployment-portability]](수집 트리거).
+    - 진행: 설계 6종(`anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`·`anyang-cheongan-design-adoption`)을 승인된 설계에서 뺐다(16차). 설계 database → backend → frontend draft 후 사용자 재승인, 구현은 재승인 뒤. `anyang-user-name-memory`(54, 미승인)는 이번 범위와 섞지 않는다.
+    - 열린 항목:
+      - (a) 수집기 USER_AGENT 문의 이메일이 `TODO-문의이메일`로 남아 있다(`web/lib/collector.ts:17`). 사용자가 쓸 연락처를 정해야 한다. 임의 입력·저장하지 않는다.
+      - (b) 고정 공지 마크업 미확인. 구현 첫 단계에서 실제 HTML을 받아 판정 규칙을 확정한다.
+      - (c) `image_count` 정의(본문 `<img>`만인지, 이미지 첨부 포함인지) — 실제 HTML을 본 뒤 사용자 확인.
+      - (d) 추천 정렬(벡터 유사도)에서 고정 공지를 맨 위로 올릴지. 계획 권장: "최근 공지" 정렬에서만 위로, 추천 정렬에서는 별표만.
+      - (e) pg_cron → Vercel POST 최종 확인: 운영 GET 405로 보호 미적용을 간접 확인(39 갱신). 확장 설치 후 POST 1회, 막히면 `x-vercel-protection-bypass`, 그래도 안 되면 GitHub Actions 대체. 확장 설치와 URL·시크릿 입력은 사용자 승인이 필요한 운영 작업(40과 연결).
+      - (f) 확인 주기 10분은 권장안. 5분·30분, 야간 주기 늘리기 가능.
+      - (g) 정밀 점검은 최근 1~2페이지(20건)만 보므로 오래된 글 수정은 반영되지 않는다. 필요하면 주 1회 전체 재확인을 후속으로 검토.
+      - (h) 2단계(이번 범위 밖): 포스터 이미지만 있는 글은 본문이 비어 추천에 불리하다. Gemini 이미지 읽기로 본문 보강을 별도 설계로 검토(24와 연결).
+      - (i) 첨부 직접 링크(`downloadBbsFile.do`)가 세션 없이 열리는지 미확인. 계획은 원문 페이지 링크를 기본 경로로 둔다.
+    - **설계 draft 완료(2026-10-04)**: database [[anyang-database-schema]](notices 컬럼 3개, 0021 up/down 계획 — 백필 후 down은 사용자 승인, 0019 RLS 새 컬럼 적용, collect-quick·collect-full 잡, `collect_runs` `status='running' and finished_at is null`로 진행 중 판정). backend [[anyang-backend-api]] 5-1·7·2-1·13-1절, [[anyang-backend-tasks]] 5-1~5-5(겹침 방지 `pg_try_advisory_xact_lock` — 트랜잭션 풀러라 세션 락 안 씀, mode 생략 시 full·잘못된 값 400 `INVALID_MODE`, 겹침 시 라우트 200 `skipped`·관리자 수동 실행 409). frontend [[anyang-frontend-screens]]·[[anyang-frontend-tasks]](N1~N3)·[[anyang-cheongan-design-adoption]](배지 문구 교체, 별표·칩·첨부 영역·조용한 재조회). frontend가 자구만 정리: 41-b 줄바꿈 "(미확정)", 35행 draft 서술, 채팅 키 처리 위치 `ui/chat.tsx`. 재승인 대기.
+    - 설계에서 새로 나온 질문:
+      - (j) **`notices.content_hash`가 unique**라 제목·본문이 같은 서로 다른 글은 둘째가 저장되지 않는다(backend 발견). backend draft는 `source_url` 기준 비교로 바꾸고 해시 충돌은 건너뛰며 `skippedDuplicateCount`로 센다. 그래서 백필 뒤 건수가 462보다 적을 수 있다. 462건 전부 담아야 하면 스키마 변경(database) 필요. 사용자 결정.
+      - (k) "최근 공지"(선호 없음) 정렬을 `collected_at desc` → `is_pinned desc, published_at desc nulls last, id desc`로 바꾸는 backend 제안(백필 뒤 수집 시각이 거의 같아짐).
+      - (l) 비정상 종료로 남은 `running` 행의 stale 시간 N(제안 10분)과 그런 행을 `failed`로 정리할지.
+      - (m) pg_net 호출 쪽이 먼저 끊었을 때 Vercel 함수가 끝까지 도는지 미확인. full(약 44초, 추정)로 최종 POST 확인 때 검증(55-e와 함께).
+      - (n) 백필 실행 도구: `tsx`가 `package.json`에 없다. `npx tsx` 사용 또는 devDependency 추가 중 결정.
+      - (o) 55-a: backend 제안 — 연락처를 환경변수(예: `COLLECTOR_CONTACT`)로 받고 값이 정해질 때까지 `TODO-문의이메일` 유지.
+      - (p) `image_count`가 본문 `<img>`만이면 첨부로만 이미지가 있는 글에는 배지가 안 뜬다(55-c와 함께 결정). 포스터만 있는 글의 상세 안내 상자(`ImageNote`)는 결정 범위 밖이라 넣지 않았다 — 필요하면 별도 요청.
+      - (q) frontend 테스트 환경이 node(DOM 없음)라 `renderToStaticMarkup`·순수 함수로만 검사. jsdom·testing-library를 쓰려면 의존성 추가 승인 필요.
+    - **재승인 때 확인할 제안값(`(미확정)`)**: database — stale N. backend — 겹침 방지 방식·응답(200 skipped / 409), mode 기본 full, (k) 정렬, (j) 해시 처리, image_count 잠정 정의(본문 img만). frontend — 별표 `accent` 16px 제목 앞·일반 제목 굵기 500, 아이콘 `star` 추가(14개), 칩(테두리만, 날짜 오른쪽, 개수 없음), 첨부 0개면 영역 숨김·파일명은 링크 아닌 글자·안내 "파일은 원문 페이지에서 받을 수 있어요.", 버튼 "원문 페이지에서 보기", 재조회 최소 간격 30초·조용한 병합·`pageshow` 포함.
 
 ## 승인된 설계
 
@@ -347,17 +373,11 @@ owner: pm
 
 2026-10-03(13차): 확인 항목 48 최종 결정(user, 메인 세션 전달 — 안 2a `previous_fact`, 나머지 제안값 전부 채택)을 database → backend가 draft에 반영한 뒤 3종을 기록한다. 승인 범위는 48이다. backend 두 문서 안의 46(Jev 게이트) 3-3-3절·6-1은 보류 상태로 승인 범위 밖이며 그 `(미확정)`은 확정이 아니다(46 재개 때 문서를 다시 빼고 재승인). (f-8) 문구 정합성은 보류. 결정 밖 세부(사용자 PUT 시 `previous_fact` 그대로, 운영자 swap 시 `updated_at` 그대로·임베딩 재계산 스크립트 범위 밖)는 문서에 적힌 제안 그대로 "제안값 전부 채택" 결정으로 본다.
 
-- [[anyang-database-schema]] — 승인일 2026-10-03, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-03, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-03, 승인자 user
-
 2026-10-03(14차): `anyang-frontend-screens`와 `anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 52(청안 디자인 웹 적용, 새 요청). 재승인 뒤 다시 기록한다.
 
 2026-10-03(15차): 확인 항목 52 사용자 승인(메인 세션 전달, draft 커밋 0e06c78). 세 문서에 적힌 제안값 전부 확정(탭 순서는 청안 시안대로 대화·공지·알림·내 정보, 사이드바 240px, 테마색 `#F5F3ED`, 채팅 조건 줄 2개 필드, C10 삭제 승인 포함). 47(c)①은 범위 밖.
 
-- [[anyang-cheongan-design-adoption]] — 승인일 2026-10-03, 승인자 user
-- [[anyang-frontend-screens]] — 승인일 2026-10-03, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-10-03, 승인자 user
+2026-10-04(16차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-cheongan-design-adoption`·`anyang-frontend-screens`·`anyang-frontend-tasks` 6종을 뺀다 — 사유: 확인 항목 55(공지 전체 수집·즉시 갱신·공지 화면 시안 반영, 새 요청). 재승인 뒤 다시 기록한다. 현재 승인된 설계 문서 없음.
 
 ## Jev 도입 제안
 

@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: frontend
 ---
 
@@ -24,6 +24,8 @@ owner: frontend
 2026-09-27)에서 확정됐다. `occupation_type`의 온보딩 입력 컴포넌트(select vs 라디오, 8개
 선택지 때문에 나온 제안)는 설계 승인(2026-09-27)으로 네이티브 select로 확정됐다
 ([[anyang-frontend-screens#2. 온보딩 — 프로필 입력 (`/onboarding`)]]).
+
+**2026-10-04 추가(확인 항목 55, draft)**: 공지 화면 시안 반영 작업 N1~N3을 "공지 화면 시안 반영" 절에 추가했다. 이미 구현된 C5(공지 목록·상세)에 대한 추가 작업이며 [[anyang-frontend-screens]] 공지 목록·상세 절(2026-10-04 개정)과 [[anyang-backend-api]]의 응답 필드 구현에 의존한다. 설계 재승인 전에는 구현하지 않는다.
 
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
@@ -171,10 +173,26 @@ draft 반영에 의존한다.
 4. **접근성 점검**: 스위치 `aria-checked`·`aria-labelledby`, 현재 탭 `aria-current`, 아이콘 버튼 `aria-label`, `prefers-reduced-motion`에서 전환이 꺼지는지(`globals.css` 기존 규칙 유지).
 5. **회귀**: 기존 vitest 전체(채팅 스트림 파서·api-fetch·푸시 변환 등)가 그대로 통과해야 한다. 푸시 구독 payload(`endpoint`/`p256dh`/`auth`)와 재동의·정지 가드 흐름은 코드를 바꾸지 않았음을 diff로 확인한다.
 
+### 공지 화면 시안 반영 (확인 항목 55, 신규, 설계 draft, 구현은 재승인 후)
+
+C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "본문 이미지" 칩, 첨부 파일명, 원문 페이지 링크, 탭 복귀 재조회를 더한다. 설계 근거는 [[anyang-frontend-screens]]의 공지 목록·공지 상세 절(2026-10-04 개정)이고 API 필드는 [[anyang-backend-api#2-1. 추천 공지 피드·상세 (frontend 조율, 2026-09-27)]]이다. 값은 그 설계 승인으로 확정된다. UI를 만들 때는 `design-taste-frontend` 스킬을 호출한다. 단 그 스킬은 랜딩·포트폴리오용이고 이 화면은 청안 토큰 체계 안의 목록 행이라, 스킬의 아이콘·글꼴·색 규칙 중 청안 토큰과 충돌하는 것(예: 청안 자체 아이콘 사용, 확정된 글꼴)은 청안 설계를 따르고 그 사실을 보고에 적는다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| N1 | 공지 행: 고정 공지 별표 + 굵은 제목, `image_count>0` 칩, 별표 `aria-hidden` + 읽기 글자 "고정 공지, ". `ui/icon.tsx`에 `star` 추가 | `web/app/_components/ui/notice-row.tsx`, `web/app/_components/ui/icon.tsx`, 행 렌더 테스트 `web/test/frontend-notice-row.test.ts`(신규) | 재승인, backend의 응답 필드 구현 |
+| N2 | 공지 상세: 첨부 파일명 목록(0개면 영역 없음), 안내 한 줄, 하단 버튼 글자 "원문 페이지에서 보기", `Notice` 타입에 `attachments`·`image_count` 추가 | `web/app/(tabs)/notices/[id]/notice-detail.tsx`, 첨부 렌더 테스트 `web/test/frontend-notice-detail.test.ts`(신규) | N1 |
+| N3 | 목록 최신성: `visibilitychange`·`pageshow(persisted)` 재조회, 최소 간격 판정 `shouldRefetch`, 1페이지 병합 `mergeFirstPage`, 구독 함수와 해제, 조용한 갱신(로딩·오류 문구 없음) | `web/app/(tabs)/notices/notices-list.tsx`, `web/app/_lib/notices-refetch.ts`(신규), `web/test/frontend-notices-refetch.test.ts`(신규) | N1 |
+
+- 하단 탭바(`app-nav.tsx`)는 시안과 같은 4탭이라 바꾸지 않는다. `app/api/**`, `lib/**`, `db/**`는 건드리지 않는다.
+- 테스트 환경이 `node`(DOM 없음)이므로 새 의존성 없이 `react-dom/server`의 `renderToStaticMarkup`과 순수 함수로 검사한다. jsdom·testing-library 도입은 설계 변경이라 하지 않는다. `next/link`가 이 환경에서 그려지지 않으면 조건 판정을 순수 함수로 분리한다.
+- 단위 테스트 항목: 별표·칩 조건(고정 공지만 별표와 읽기 글자, `image_count>0`만 칩, 필드 없음/0이면 둘 다 없음), 첨부 0개(영역 없음)/n개(소제목 "첨부 파일 n개", 파일명 n줄), `source_url`이 http(s)가 아니면 원문 버튼·안내 없음, `shouldRefetch`(30초 이내/이후/조회 중), `mergeFirstPage`(새 1페이지 앞, 중복 id 제거), 구독 함수가 visible·persisted pageshow에서만 콜백을 부르고 해제 뒤에는 안 부름(가짜 `EventTarget`).
+- 화면 확인(실제 실행): `npm run dev`로 `/notices`와 상세를 390px·1200px에서 시안 설명(별표 고정 공지, "본문 이미지" 배지, 날짜, 제목·발췌 각 2줄)과 대조. 고정 공지·이미지·첨부가 있는 글과 없는 글을 모두 본다(수집 전 DB가 비어 있으면 목 응답이나 백필 뒤 데이터가 필요하다). 탭 전환 후 복귀 시 30초 뒤 요청 1건, 30초 안 0건, 갱신 중 깜빡임 없음. 열지 못한 화면이 있으면 못 했다고 보고한다.
+- 커밋: 단위마다 `npm test`·`npm run build` 통과 후 git-manager에 맡긴다. push는 사용자 승인 전 보류.
+
 ## 테스트 방법
 
 1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
-중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에 있다.
+중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에 있다.
 
 ## Links
 

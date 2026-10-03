@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -39,6 +39,14 @@ Web Push, 관리자 API(`/api/admin/*`, `ADMIN_EMAILS` 기반)를 제공한다. 
 ([[anyang-database-schema#user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터]]).
 확인 항목 46(3-3-3절 Jev 게이트)은 **보류(2026-10-03, user)**다. 그 절은 내용을 지우지 않고 표기만 달았으며
 이번 재승인·구현 대상이 아니고, 3-3-4절은 46에 의존하지 않는다. 값은 모두 재승인 대상이다.
+
+**2026-10-04 개정(확인 항목 55, 재승인 대기)**: 안양시 청년 게시판 전체(462건)를 수집하고 새 글을
+분 단위로 반영한다. 5-1절(수집기 확장: 고정 공지·첨부·이미지 수, `quick`/`full`/백필 모드, 겹침 방지,
+백필 스크립트), 7절(수집 잡을 두 개로 대체), 2-1절(공지 조회 응답에 `is_pinned`·`image_count`·`attachments`,
+`Cache-Control: no-store`)을 바꿨다. 스키마는 [[anyang-database-schema]]의 마이그레이션 0021을 따른다. 사용자
+결정(2026-10-04, 계획서 승인)은 구조, cron 식, 첨부 링크만 저장, Realtime 없음, 백필 로컬 스크립트이고,
+고정 공지 마크업·`image_count` 정의·추천 정렬의 고정 공지·USER_AGENT 연락처·주기 조정·stale 시간 N은
+`(미확정)`이다. 값은 모두 재승인 대상이다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -337,11 +345,24 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
   선호가 추출되지 않은 상태) 유사도 계산 자체가 불가능하므로, 이 경우 최신 공지 순
   (`notices.collected_at desc`, `hidden_at is null`)으로 대체해 반환한다 — 빈 목록보다
   낫다는 판단(제안).
-- 응답 필드(목록): `{ id, title, excerpt, posted_at }`. `excerpt`는 본문 앞부분
-  발췌(길이).
-- 응답 필드(상세): `{ id, title, body, source_url, posted_at }`. `source_url`은
-  원문 링크 — `notices` 테이블 컬럼명은 [[anyang-database-schema]]를 따른다(컬럼명 확정은
+- 응답 필드(목록, 2026-10-04 개정, 확인 항목 55): `{ id, title, excerpt, posted_at, is_pinned,
+  image_count }`. `excerpt`는 본문 앞부분 발췌(길이). `is_pinned`는 boolean(고정 공지 별표),
+  `image_count`는 정수(0이면 "본문 이미지" 배지 없음). 컬럼은 [[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]].
+- 응답 필드(상세, 2026-10-04 개정): `{ id, title, body, source_url, posted_at, attachments,
+  image_count }`. `attachments`는 `[{ name: string, url: string }]`이고 첨부가 없으면 빈 배열 `[]`
+  (null이 아니다). `url`은 안양시 `downloadBbsFile.do` 링크이며 파일은 복사하지 않는다. 첨부 직접 링크가
+  로그인·세션 없이 열리는지는 확인하지 못했다(55-i) — frontend는 `source_url`(원문 페이지)을 기본 경로로 둔다.
+  `source_url`은 원문 링크 — `notices` 테이블 컬럼명은 [[anyang-database-schema]]를 따른다(컬럼명 확정은
   database 소관, 이 문서는 API 응답 키만 정의).
+- **정렬(2026-10-04 개정, 확인 항목 55)**: ① 선호가 없을 때의 "최근 공지" 정렬은 고정 공지를 위로 올린다:
+  `order by is_pinned desc, published_at desc nulls last, id desc`. 기존 `collected_at desc`는 전체 백필 뒤
+  462건이 거의 같은 수집 시각이 되어 최신순이 무의미해지므로 게시일 기준으로 바꾼다(`(미확정)` — 정렬 키 변경은
+  backend 제안). `id` 타이브레이크는 페이지네이션 중복·누락을 막는다. ② 추천(벡터 유사도) 정렬은 순서를 바꾸지
+  않고 응답의 `is_pinned`로 별표만 표시하게 한다 `(미확정, 55-d — 고정 공지를 맨 위로 올릴지는 사용자 결정)`.
+  두 정렬 모두 `hidden_at is null` 조건은 그대로다.
+- **캐시(확정, 계획서)**: `GET /api/notices/recommended`와 `GET /api/notices/:id`의 200 응답에
+  `Cache-Control: no-store`를 붙인다. 새 글이 수집된 직후 화면이 옛 목록을 보이지 않게 한다. Supabase Realtime 같은
+  실시간 연결은 쓰지 않는다(확정). 재조회 시점(탭 복귀·재진입)은 frontend 소관이다.
 - 인증 필요(세션 없으면 401). 본인 프로필 기준 결과만 반환.
 
 ### 2-2. 알림 설정 — 채택 (사용자별 자유 시각 + on/off)
@@ -930,13 +951,149 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
      `cheerio`, 구현됨).
   4. `content_hash`(제목+본문 해시)로 기존 공지와 비교해 신규/변경분만 저장.
   5. 신규/변경 공지는 임베딩 파이프라인 큐에 등록(4번 참고).
-- User-Agent에 연락 가능한 식별 문자열을 남긴다(제안 예: 서비스명 + 문의 이메일).
+  - 2026-10-04 개정(확인 항목 55): 위 1~5의 페이지 범위, 모드, 비교 기준, 겹침 방지는 5-1절이 대체한다.
+- User-Agent에 연락 가능한 식별 문자열을 남긴다(제안 예: 서비스명 + 문의 이메일). 문의 이메일은 현재
+  `web/lib/collector.ts`에 `TODO-문의이메일`로 남아 있다. 이메일은 사용자가 정해야 하며 문서·코드에 임의로
+  쓰지 않는다 `(미확정, 55-a)`. 5-1절 8번 참고.
 - **공지 숨김 처리 방식 — 쿼리 조건 채택(제안)**: [[anyang-database-schema#notices]]이 제시한 두 방식 중 1번(쿼리 조건)을 기본안으로 채택한다 — 스키마 변경 없이
   애플리케이션 책임으로 끝나고, 숨김 해제 시 재임베딩 비용이 없다(YAGNI, 물리 삭제는 되돌리기
   비용만 크고 이득이 없다). `/api/notices/recommended`, `/api/notices/:id`, 채팅 RAG 검색
   (3절), notify-job 매칭(7절) 등 `notices`/`notice_chunks`를 조회하는 모든 지점에서
   `notices.hidden_at is null` 조건을 공통 쿼리 헬퍼에 넣어 빠뜨리지 않게 한다(제안, 미확정 —
   헬퍼 함수명·위치는 구현 단계에서 정함).
+
+### 5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 재승인 대기)
+
+구현 대상은 `web/lib/collector.ts`, `web/app/api/jobs/collect/route.ts`,
+`web/app/api/admin/collect-runs/route.ts`, `web/scripts/backfill.ts`(신규)다. 스키마는
+[[anyang-database-schema#notices — 공지 자격요건 구조화 컬럼 없음(확정)]]의 0021을 따른다.
+
+**1. 파서 반환 타입 (구조 확정 / 판정 규칙 미확정)**
+
+- `parseListPage(html)` → `ListItem[]`, `ListItem = { url, title, publishedAt, isPinned }`.
+  `isPinned: boolean`은 새로 추가한다. 고정 공지의 마크업은 확인하지 못했다 `(미확정, 55-b)`. 이 문서는 셀렉터를
+  추측해 쓰지 않는다. 구현 첫 단계에서 `curl`로 목록 1페이지를 받아 판정 규칙을 확정하고 그 HTML 발췌를 테스트
+  픽스처로 쓴다. 규칙을 정하지 못하면 `isPinned`는 항상 `false`로 두고 pm에게 보고한다. 같은 `nttNo`가 한 응답 안에
+  두 번 나오면(고정 공지가 일반 순서에도 있는 경우) `url` 기준으로 한 건만 남긴다(구현 첫 단계에서 실제 HTML로 확인).
+- `parseDetailPage(html)` → `DetailContent = { title, body, attachments, imageCount }`.
+  - `attachments: { name: string, url: string }[]`. 기존에 확인된 셀렉터 `ul.p-attach a.p-attach__link`
+    중 `href`에 `downloadBbsFile.do`가 들어간 링크만 담는다. `name`은 링크 텍스트(trim), `url`은 게시판 기준
+    절대 URL이다. 같은 `url`은 한 번만 담는다. 링크만 저장하고 파일은 받지 않는다(확정). 첨부가 없으면 `[]`다.
+    첨부 영역 셀렉터는 구현 첫 단계에서 실제 HTML로 다시 확인한다.
+  - `imageCount: number`. 잠정 구현은 본문 `td.p-table__content` 안의 `<img>` 개수다. 이미지 첨부 파일을 포함할지는
+    사용자 결정이다 `(미확정, 55-c)`. 정의가 바뀌면 이 함수 한 곳만 고친다.
+  - 상세 페이지에는 게시일이 없으므로 `publishedAt`은 계속 목록 값을 쓴다.
+
+**2. `runCollectJob` 시그니처와 모드 (구조 확정)**
+
+```text
+runCollectJob(triggerType, triggeredBy, opts) -> CollectResult
+opts = { mode: "quick" | "full" | "backfill", fromPage?, toPage?, skipExisting? }
+```
+
+| mode | 목록 | 상세 요청 | 용도 |
+|---|---|---|---|
+| `quick` | 1페이지만 | 목록에서 읽은 `source_url` 중 DB에 없는 것만 | 10분마다 새 글 확인 |
+| `full` | 1~2페이지 | 목록의 전부 | 하루 1회 본문 수정 감지 |
+| `backfill` | `fromPage`~`toPage` | `skipExisting`이 true면 DB에 있는 `source_url`은 건너뜀 | 로컬 일회성 전체 수집 |
+
+- 목록 URL은 기존 `BOARD_URL`에 `&pageIndex=<n>`을 붙인다(n은 1부터). `backfill`에서 빈 목록 페이지를 만나면
+  남은 페이지를 요청하지 않고 끝낸다(게시글 수가 줄었을 때 불필요한 요청 방지).
+- `skipExisting` 판정은 페이지의 목록 URL 전체를 `select source_url from notices where source_url = any($1)` 한
+  번으로 조회한다(숨김 공지도 포함되어 다시 받지 않는다). `quick`은 `skipExisting=true`와 같다.
+- `mode`를 생략하는 호출자는 `full`과 같다. 기존 동작(목록 1페이지 전부 상세)이 `full`의 부분집합이라 가장 가까운
+  안전한 기본값이다 `(미확정)`.
+- 요청 간격 2초(`DEFAULT_REQUEST_DELAY_MS`)는 모든 요청 사이(목록 포함, 맨 처음 요청 제외)에 둔다. `robots.txt`는
+  실행마다 한 번 확인하고 `Crawl-delay`가 있으면 그 값을 쓴다(기존 로직 유지). 10분마다 `quick`이 새 글 0건이면
+  요청은 robots 1건 + 목록 1건뿐이다.
+- 걸리는 시간(추정, 근거: 요청 간격 2초 × 요청 수, 응답 시간은 제외): `quick` 새 글 0건 약 2초, 새 글 N건
+  약 2×N초 / `full` 약 2×(2+20)=44초 / 백필 약 2×(47+462)=17분. 함수 한도 300초(10절) 안은 `quick`·`full`뿐이고
+  백필은 로컬에서만 돌린다. 응답 시간은 실제 측정 전이라 모른다. 구현 첫 단계에서 잰다.
+
+**3. 저장 규칙 (구조 확정 / 비교 기준은 backend 제안)**
+
+- 기존 `on conflict (source_url) do update` upsert를 유지하고 INSERT·UPDATE 대상에 `is_pinned`, `image_count`,
+  `attachments`(jsonb)를 더한다. 본문이 바뀌어 기존 행을 갱신하면 `notice_chunks`를 지워 재임베딩 대기열에 다시 올린다
+  (기존 로직 유지).
+- 비교 기준 정정 `(미확정)`: 기존 코드는 `content_hash`가 DB의 어느 행에든 있으면 건너뛴다. 이 방식은 고정 공지 해제나
+  첨부 변경처럼 해시에 들어가지 않는 값(`is_pinned`, `image_count`, `attachments`, `published_at`)을 영영
+  갱신하지 못한다. 그래서 `source_url`로 기존 행을 찾아 다음처럼 나눈다.
+  1. 기존 행이 있고 해시가 같으면: 위 4개 컬럼만 `update`한다. `collected_at`과 `notice_chunks`는 건드리지 않는다.
+  2. 기존 행이 있고 해시가 다르면: 전체 upsert + `notice_chunks` 삭제.
+  3. 기존 행이 없고 같은 해시가 다른 `source_url`에 이미 있으면: 건너뛴다(`notices.content_hash`가 `unique`라
+     삽입하면 제약 위반으로 실행 전체가 실패한다). 건너뛴 건수는 `CollectResult.skippedDuplicateCount`로 돌려주고
+     콘솔에 남긴다. 제목·본문이 같은 서로 다른 글이 있으면 둘째는 수집되지 않는다. 스키마 변경 없이 풀 수 없고, 필요하면
+     database에 요청한다(8번 미해결).
+  4. 기존 행이 없고 해시도 없으면: 삽입.
+- `collected_count`는 새로 삽입했거나 본문이 바뀌어 갱신한 건수다(1번 메타데이터만 갱신은 세지 않는다).
+
+**4. 겹침 방지 (backend 설계, `collect_runs` 사용)**
+
+`quick`이 10분 주기라 앞 실행이 끝나기 전에 다음 호출이 올 수 있다(`full` 중 `quick` 등). database 보고
+([[anyang-database-schema]]의 `collect_runs` 절)에 따라 현재
+스키마로 "진행 중 = `status='running'` and `finished_at is null`" 판정이 가능하다. 컬럼은 추가하지 않는다
+(`collect_runs.mode` 컬럼 없음. mode와 무관하게 하나만 돌리므로 필요 없다. 관리자 화면에 mode를 보이려면 그때
+database에 요청한다).
+
+- 시작 절차(한 DB 연결에서 한 트랜잭션, `pool.connect()`로 연결 하나를 잡아 `begin … commit`):
+  1. `select pg_try_advisory_xact_lock(<고정 키>)`가 false면 롤백하고 건너뛴다(`ALREADY_RUNNING`).
+  2. 오래된 진행 중 행 정리: `update collect_runs set status='failed', finished_at=now(),
+     error_summary='STALE_RUNNING' where status='running' and finished_at is null and started_at < now() -
+     interval '<N>'`. N은 함수 한도 300초보다 길어야 한다. 제안 10분 `(미확정)`. 이 update는 관리자 이력을 깨끗하게
+     하는 용도이고 스키마 변경이 아니다.
+  3. `select 1 from collect_runs where status='running' and finished_at is null limit 1`이 있으면 롤백하고
+     건너뛴다(`ALREADY_RUNNING`).
+  4. 없으면 `collect_runs`에 `running` 행을 insert하고 커밋한다. 이후 긴 작업은 트랜잭션 밖에서 한다.
+- 락은 세션 락(`pg_try_advisory_lock`)이 아니라 트랜잭션 락(`pg_try_advisory_xact_lock`)을 쓴다. 운영
+  `DATABASE_URL`이 트랜잭션 풀러(6543)라 세션이 문장마다 바뀔 수 있어 세션 락은 믿을 수 없다. 트랜잭션 락은 "검사 +
+  insert" 구간만 직렬화하고, 실행 중임은 `running` 행이 알린다. 고정 키 값은 구현에서 정한다 `(미확정, 상수 하나)`.
+- 건너뛴 호출은 `collect_runs`에 행을 남기지 않는다(10분마다 쌓이는 이력 방지).
+- 알려진 한계: 백필은 로컬에서 17분쯤 걸려(`collect_runs` 행 1개) N분이 지나면 stale로 정리되어 그 사이 `quick`이
+  함께 돌 수 있다. `source_url` upsert라 중복 저장은 없다. 백필 동안 cron을 막으려는 목적이 아니므로 허용한다.
+
+**5. 임베딩 연쇄 (기존 유지)**
+
+`/api/jobs/collect` 라우트가 수집이 성공하면 같은 요청에서 `runEmbedJob()`을 1회 호출한다(7절). `quick`·`full`
+모두 동일하다. 새 글 0건이어도 호출하며(대기열 조회 1건), 이전에 실패해 남은 공지를 복구한다. 임베딩 실패는 수집을
+실패시키지 않는다(기존). 새 글이 많으면 한 번에 `EMBED_BATCH_SIZE`(15)건씩이라 다음 10분 주기에 마저 처리된다.
+
+**6. 라우트 계약**
+
+| 라우트 | 요청 | 응답 |
+|---|---|---|
+| `POST /api/jobs/collect?mode=quick` 또는 `mode=full` | 헤더 `x-scheduler-secret`(기존 그대로) | 200 `{ mode, collected_count }` |
+| 같은 라우트(겹침) | 같음 | 200 `{ mode, skipped: true, reason: "ALREADY_RUNNING" }` (임베딩 호출 안 함) |
+| 같은 라우트(잘못된 mode) | 같음 | 400 `{ error: "INVALID_MODE" }` |
+| 같은 라우트(인증 실패) | 헤더 없음/불일치 | 401(빈 body, 기존). mode 검사보다 먼저 |
+| 같은 라우트(robots 거부/수집 실패) | 같음 | 409 `ROBOTS_DISALLOWED` / 500 `COLLECT_FAILED`(기존) |
+
+- `mode` 쿼리가 없으면 `full`로 처리한다(기존 템플릿 호출과의 호환, `(미확정)`). 겹침을 200으로 돌려주는 이유(제안):
+  pg_net 호출 기록에서 정상 건너뜀이 오류처럼 보이지 않게 하기 위함이다.
+- `POST /api/admin/collect-runs`(13-1절)는 `runCollectJob("manual", userId, { mode: "full" })`로 호출하고, 겹치면
+  409 `{ error: "ALREADY_RUNNING" }`(제안)을 돌려준다.
+- `maxDuration = 300`은 두 라우트 모두 유지한다.
+
+**7. 백필 스크립트 (확정: 로컬 일회성, 관리자 라우트·함수 분할 방식 쓰지 않음)**
+
+- 파일: `web/scripts/backfill.ts`. Vercel 함수가 아니라 로컬에서 실행한다. `.env.local`의 `DATABASE_URL`과
+  `GEMINI_API_KEY`를 쓴다(값은 문서·코드에 쓰지 않는다). 실행 도구(`tsx` 등)는 `web/package.json`에 없다.
+  `npx tsx --env-file=.env.local scripts/backfill.ts [--pages 1-2]`로 쓸지, devDependency로 추가할지는 구현 첫
+  단계에서 정한다 `(미확정, 새 의존성은 사용자 확인)`.
+- 동작: `--pages A-B`(기본 `1-47`) → `runCollectJob("manual", null, { mode: "backfill", fromPage: A, toPage: B,
+  skipExisting: true })` → `runEmbedJob()`을 `embedded_chunks === 0`이 될 때까지 반복(한 번에 15건) → 결과 출력 →
+  `pool.end()`. 끊기면 같은 명령을 다시 돌린다(`skipExisting`과 "청크 없는 공지" 임베딩 대기열 때문에 이어서 진행).
+- `--pages 1-2`는 시험 실행이다(20건 이하). 먼저 시험 실행으로 파서와 임베딩을 확인한 뒤 전체를 돌린다.
+- 겹침 방지(4번)를 그대로 거친다. `ALREADY_RUNNING`이면 메시지를 출력하고 종료 코드 1로 끝난다.
+- 운영 DB에 쓰는 실행이므로 실제 실행(시험 포함)은 사용자 승인 뒤에만 한다. 이 설계 단계에서는 실행하지 않았다.
+
+**8. 미확정·미해결 (이 절 관련)**
+
+- 고정 공지 마크업·판정 규칙 `(55-b)`, `image_count` 정의 `(55-c)`, 추천 정렬의 고정 공지 `(55-d)`, 주기 조정
+  `(55-f)`, stale 시간 N, 첨부 직접 링크 세션 `(55-i)`.
+- USER_AGENT 문의 이메일 `(55-a)`: 이메일은 코드에 하드코딩하지 않고 환경변수(예: `COLLECTOR_CONTACT`)로 받는
+  방식을 제안한다 `(미확정)`. 사용자가 값을 정하기 전까지 `TODO-문의이메일`을 유지하고, 이메일을 지어내지 않는다.
+- `content_hash unique` 때문에 제목·본문이 같은 서로 다른 글은 둘째가 수집되지 않는다(3번). 462건 백필 후
+  `count(*)`가 462와 다를 수 있다. 차이는 `skippedDuplicateCount`와 맞춰 본다.
 
 ### 6. 임베딩 파이프라인
 
@@ -953,9 +1110,27 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
 
 | 엔드포인트 | 설명 | 트리거 주기 |
 |---|---|---|
-| `POST /api/jobs/collect` | 공지 수집기(5절) 실행 | 하루 1회(제안, database 제안과 같은 시각 — Asia/Seoul 04:00, [[anyang-database-schema#pg_cron / pg_net 잡 정의]]) |
-| `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 미확정, 제안: 수집 잡 직후 |
+| `POST /api/jobs/collect?mode=quick` | 공지 수집기 가벼운 확인(5-1절): 목록 1페이지, DB에 없는 글만 상세, 이어서 임베딩 | 10분마다 `*/10 * * * *`(확정, user, 2026-10-04. 주기 조정은 55-f `(미확정)`) |
+| `POST /api/jobs/collect?mode=full` | 공지 수집기 정밀 점검(5-1절): 1~2페이지 전부 상세, 본문 수정 감지, 이어서 임베딩 | 하루 1회 `0 19 * * *` UTC = 서울 04:00(확정, user, 2026-10-04) |
+| `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 수집 잡이 같은 요청에서 이어서 호출(별도 트리거 없음). 단독 호출은 수동 복구용 |
 | `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 미확정, [[anyang-database-schema]] 제안 5분 |
+
+- **2026-10-04 개정(확인 항목 55)**: 위 표의 collect 두 줄은 기존 "수집 하루 1회(Asia/Seoul 04:00)" 서술을 대체한다.
+  두 잡의 pg_cron 등록 SQL은 database 소관이다
+  ([[anyang-database-schema#pg_cron / pg_net 잡 정의]]). Vercel Cron은 쓰지 않는다(Hobby는 하루 1회라 즉시 반영
+  요구를 못 맞추고 이전 가능성 원칙 3과도 맞지 않는다). 하루 요청은 `quick` 목록 확인 약 144건 + 새 글 상세뿐이라
+  안양시 서버 부담이 작다(추정, 근거: 24시간 × 6회/시간).
+- **확인 항목 39 갱신**: 운영 주소 `…/api/jobs/collect`에 GET하면 Vercel 로그인 페이지가 아니라 앱의 405가 돌아왔다
+  (메인 세션 조사 2026-10-04, [[anyang-youth-policy-assistant#확인이 필요한 항목]] 39). 운영 주소는 배포 보호에
+  막히지 않는 것으로 보이지만 간접 확인이다. 최종 확인은 pg_cron·pg_net 설치 뒤 실제 POST 1회다(55-e, 운영 작업이라
+  사용자 승인 필요). 막히면 `net.http_post` 헤더에 `x-vercel-protection-bypass`를 추가한다(값은 Supabase Vault에만
+  두고 문서에 남기지 않는다. 라우트 코드는 바뀌지 않는다). 그래도 안 되면 GitHub Actions로 대체한다(별도 설계 변경).
+- **미확인**: pg_net 요청의 기본 타임아웃과, 호출 쪽이 먼저 끊었을 때 Vercel 함수가 끝까지 실행되는지는 이 세션에서
+  확인하지 못했다. `full`은 약 44초 걸릴 수 있어 최종 POST 확인 때 `full`로 `collect_runs` 행이 `success`로
+  끝나는지 본다. 끊기면 `net.http_post`의 타임아웃 인자를 늘린다(database 소관 SQL).
+- 새 글이 수집되면 기존 알림 잡(`/api/jobs/notify`)이 이어서 푸시를 보낼 수 있다. 푸시 대상·조건은 아래 기존
+  설계 그대로이며 이번에 바꾸지 않는다.
+- UNO Q 전환 시 이 두 잡은 같은 주기로 리눅스 `cron` + `curl`에 옮긴다(12절).
 
 - **공유 시크릿 인증(제안)**: 요청 헤더 `x-scheduler-secret`을 환경변수
   `SCHEDULER_SHARED_SECRET` 값과 상수 시간 비교(`crypto.timingSafeEqual`, 미확정 구현
@@ -1182,7 +1357,8 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 | PATCH | `/api/admin/notices/:id/unhide` | 공지 숨김 해제 |
 
 - `POST /api/admin/collect-runs`는 5절 수집기 로직을 `trigger_type='manual'`,
-  `triggered_by=<관리자 user_id>`로 동기 실행한다(제안). Vercel Fluid Compute 함수
+  `triggered_by=<관리자 user_id>`로 `mode=full`(5-1절)로 동기 실행한다(제안). 진행 중인 수집이 있으면 409
+  `ALREADY_RUNNING`이다. Vercel Fluid Compute 함수
   한도(300초, 11절)를 넘기지 않는다는 전제 — 게시판 1개, 신규/변경분만 저장하는 구조라 매
   실행이 300초를 넘길 가능성은 낮다고 판단(YAGNI, 별도 잡 큐를 두지 않는다). 실행이 오래
   걸리는 경우가 실제로 생기면 그때 비동기 큐 도입을 재검토한다(설계 변경 대상).
@@ -1455,6 +1631,38 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 - **수동 수집 실행**: `POST /api/admin/collect-runs` 호출 시 `collect_runs`에
   `trigger_type='manual'`, `triggered_by=<관리자 id>` 행이 생기고 응답이 300초 안에
   오는지(목 서버로 짧게) 확인.
+- **공지 전체 수집·즉시 갱신(5-1절·7절, 확인 항목 55)**: 모두 목 기반 단위 테스트다(실제 사이트·운영 DB를 쓰지 않는다).
+  - 실제 사이트 확인(구현 첫 단계, 코드보다 먼저): `curl`로 목록 1페이지와 상세 3개를 받아(요청 간격 2초) 고정 공지
+    마크업, 첨부 영역 셀렉터, 본문 `<img>` 구조, 응답 시간을 확정하고 그 HTML 발췌를 픽스처에 반영한다.
+  - 파서 픽스처: 고정 공지 행은 `isPinned=true`, 일반 행은 `false`. 같은 `nttNo` 중복 행은 한 건. 상세는 첨부 0개
+    (`[]`)·1개·여러 개, `downloadBbsFile.do`가 아닌 링크 제외, 같은 URL 중복 제거, 본문 `<img>` 0개·n개일 때
+    `imageCount`가 각각 맞는지.
+  - 모드 분기(`fetch`·DB 목): `quick`은 목록 요청이 1회이고 DB에 있는 `source_url`은 상세 요청이 없다(새 글 0건이면
+    robots 1 + 목록 1 이외의 요청 없음, 새 글 N건이면 상세 N회). `full`은 1·2페이지 목록과 모든 항목 상세를 요청한다.
+    `backfill`은 `fromPage`~`toPage`의 `pageIndex`만 요청하고, `skipExisting`이면 기존 `source_url` 상세를 요청하지
+    않으며, 빈 목록 페이지에서 멈춘다. 요청 사이 간격 2초가 적용되는지(가짜 타이머).
+  - 저장 규칙: 해시가 같은 기존 행은 `is_pinned`·`image_count`·`attachments`·`published_at`만 갱신하고
+    `notice_chunks`를 지우지 않는다. 해시가 다른 기존 행은 갱신 + `notice_chunks` 삭제. 다른 `source_url`에 같은
+    해시가 있으면 삽입하지 않고 `skippedDuplicateCount`가 오른다. `collected_count`는 신규·본문 변경분만 센다.
+  - 겹침 방지: `running`이고 `finished_at` null인 행이 있으면 `ALREADY_RUNNING`, `collect_runs` insert 없음, 상세
+    요청 없음. N분보다 오래된 `running` 행은 `failed`(`STALE_RUNNING`)로 정리되고 새 행이 생긴다.
+    `pg_try_advisory_xact_lock`이 false면 건너뛴다. 건너뛴 호출은 `collect_runs` 행을 남기지 않는다.
+  - 라우트 `/api/jobs/collect`: `mode=quick|full`이 `runCollectJob`에 그대로 전달되는지, `mode` 생략은 `full`, 잘못된
+    값은 400 `INVALID_MODE`(수집 호출 없음). 인증 유지: 시크릿 없음·불일치는 401이며 mode가 잘못돼도 401이 먼저, 수집
+    호출 없음(기존 테스트 유지). 겹침은 200 `skipped`이며 `runEmbedJob`을 호출하지 않는다. 수집 성공 시 `runEmbedJob`
+    1회 호출·임베딩 실패에도 200(기존 테스트 유지). `POST /api/admin/collect-runs`는 겹치면 409 `ALREADY_RUNNING`.
+  - 조회 API: `GET /api/notices/recommended` 응답 항목에 `is_pinned`(boolean)·`image_count`(number)가 있고, 선호가 없는
+    경우 고정 공지가 일반 공지보다 앞에 오며 같은 그룹 안에서는 `published_at` 내림차순, 추천(벡터) 경로는 순서가 바뀌지
+    않는지. `GET /api/notices/:id` 응답에 `attachments`(없으면 `[]`)·`image_count`가 있고 숨김 공지는 여전히 404. 두 API
+    200 응답에 `Cache-Control: no-store`.
+  - 백필 스크립트: `--pages` 인자 파싱(`1-2`, 기본 `1-47`, 잘못된 값 거부)을 단위 테스트한다. 임베딩 루프는 목으로
+    `embedded_chunks`가 0이 되면 끝나는지 확인한다.
+  - 수동 확인(운영 DB에 쓰므로 사용자 승인 뒤에만): `backfill.ts --pages 1-2`로 20건 이하만 먼저 돌려 파서·임베딩을
+    확인, 같은 명령을 다시 돌려 중복 삽입과 상세 요청이 없는지, 이어서 전체 1~47을 돌린 뒤 `select count(*) from
+    notices`를 462(+`skippedDuplicateCount`와의 차이)와 맞추고 모든 공지에 임베딩 청크가 있는지, `collect_runs`에 실패가
+    없는지. `mode=quick`을 시크릿 헤더로 수동 호출해 새 글 0건일 때 요청이 robots 1 + 목록 1건으로 끝나는지.
+    "최신 글 1건을 지우고 다시 호출하면 그 글만 들어온다"는 확인은 운영 DB 삭제를 포함하므로 별도 사용자 승인 대상이다.
+    배포 뒤 `cron.job_run_details`로 10분 주기 실행과 성공 여부를 본다(database 소관 확인).
 - **api_usage_logs 기록**: DeepSeek·Gemini 호출을 목으로 성공/429/오류 각각 재현해
   `api_usage_logs`에 대응하는 `status` 값으로 1행씩 남는지 확인.
 
@@ -1543,6 +1751,24 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
       확인한다(DeepSeek로 나가지는 않는다, 보관 문제만).
     - (f-6) swap 뒤 임베딩 재계산 스크립트는 이번 범위 밖이다. 운영자가 필요하다고 하면 별도 요청으로 설계한다.
     - 마이그레이션 0020 적용(database 구현 단계)이 backend 구현(tasks 6-2)보다 먼저여야 한다(순서 제약, 질문 아님).
+
+- **공지 전체 수집·즉시 갱신(5-1절·7절·2-1절, 확인 항목 55, 재승인 대기)** — 확정(사용자 결정 2026-10-04): 구조(모드
+  quick/full/백필, 라우트 `?mode=`, 인증 유지, 겹침 시 건너뜀), cron 식(`*/10 * * * *`, `0 19 * * *` UTC), 링크만 저장,
+  Realtime 없음, 백필 로컬 스크립트, 두 조회 API의 `no-store`와 응답 필드 추가. 미확정(사용자 결정 필요):
+  - 55-a USER_AGENT 문의 이메일(`collector.ts:17` TODO). 이메일을 정하는 것과, 환경변수로 받을지(제안).
+  - 55-b 고정 공지 마크업 — 구현 첫 단계에서 실제 HTML로 판정 규칙을 확정한 뒤 결과 확인.
+  - 55-c `image_count` 정의(본문 `<img>`만인지, 이미지 첨부 포함인지). 잠정은 본문 `<img>`만.
+  - 55-d 추천(벡터) 정렬에서 고정 공지를 맨 위로 올릴지. 이 문서는 별표만 표시(순서 불변)로 둔다.
+  - 55-e pg_cron → Vercel POST 최종 확인과 `x-vercel-protection-bypass` 대비(운영 작업, 승인 필요). pg_net 타임아웃과
+    호출 끊김 시 함수 계속 실행 여부는 미확인.
+  - 55-f `quick` 10분 주기 조정(5분·30분·야간 완화).
+  - 55-i 첨부 직접 링크가 세션 없이 열리는지. 확인 전까지 `source_url`을 기본 경로로 둔다.
+  - backend 제안(`(미확정)`): stale `running` 행 무시 시간 N=10분과 정리 update, 겹침 방지는 트랜잭션 advisory lock +
+    `running` 행(세션 락은 트랜잭션 풀러라 쓰지 않음), `collect_runs.mode` 컬럼 없음, `mode` 생략은 `full`, 겹침은
+    200 `skipped`(관리자 수동은 409), "최근 공지" 정렬을 게시일 기준으로 변경, `source_url` 기준 비교로 정정,
+    백필 실행 도구(`tsx`) 추가 여부.
+  - database 요청 후보: `notices.content_hash unique` 때문에 제목·본문이 같은 서로 다른 글의 둘째가 수집되지 않는다
+    (5-1절 3번). 462건 전부를 담아야 하면 스키마 변경이 필요하다.
 
 ## Links
 
