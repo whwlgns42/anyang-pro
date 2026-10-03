@@ -2,23 +2,49 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
+import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
+import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
+import { AnswerBlock, Composer, MessageBubble, type AnswerState } from "../../_components/ui/chat";
+import { Icon, IconButton } from "../../_components/ui/icon";
 
 type Message = { role: "user" | "assistant"; content: string; citations?: Citation[] };
 type StoredMessage = { role: "user" | "assistant" | string; content: string };
+type Profile = { birth_year: number | null; enrollment_status: string | null } | null;
 
-// anyang-frontend-screens 3절 "인용 공지 카드"(확인 항목 22 반영, 설계 승인 2026-09-28).
-// event: citations 블록을 anyang-backend-api 3-2절 계약대로 파싱해 AI 말풍선 위에 카드로
-// 표시한다. 빈 배열이면 카드 행 자체를 그리지 않는다. 대화 히스토리 목록 진입점(8절)은
-// 상단 링크로, ?conversation_id=...로 들어오면 GET /api/conversations/:id/messages로 과거
-// 메시지를 불러와 이어서 연다.
+// 조건 줄: 시안대로 나이대와 재학·재직 두 가지만 표시한다(확인 항목 52 승인). 값이 없으면 숨긴다.
+function contextLine(profile: Profile): string | null {
+  if (!profile) return null;
+  const age = ageBandDisplay(profile.birth_year);
+  const status =
+    profile.enrollment_status && profile.enrollment_status in ENROLLMENT_STATUS_LABELS
+      ? ENROLLMENT_STATUS_LABELS[profile.enrollment_status as keyof typeof ENROLLMENT_STATUS_LABELS]
+      : null;
+  const parts = [age, status ? `${status} 기준` : null].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+// anyang-frontend-screens "청안 디자인 적용 화면 스펙" 1번. 스트림 파싱·conversation_id 처리·
+// 인용 카드 데이터(event: citations, anyang-backend-api 3-2절)는 기존 동작 그대로이고 외형만 바꿨다.
 export function ChatClient({ initialConversationId }: { initialConversationId: string | null }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile>(null);
   const conversationIdRef = useRef<string | null>(initialConversationId);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    apiFetch("/api/profile")
+      .then(async (res) => {
+        if (res.ok) setProfile(await res.json());
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!initialConversationId) return;
@@ -34,8 +60,20 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId]);
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
+  // 새 메시지가 생겼을 때만 맨 아래로 내린다.
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+  }, [messages.length, sending]);
+
+  function startNewConversation() {
+    if (sending) return;
+    conversationIdRef.current = null;
+    setMessages([]);
+    setError(null);
+    router.push("/chat");
+  }
+
+  async function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
@@ -93,55 +131,52 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
     setSending(false);
   }
 
+  const context = contextLine(profile);
+  const lastIndex = messages.length - 1;
+  const waitingForAnswer = sending && messages[lastIndex]?.role === "user";
+
+  function answerState(m: Message, index: number): AnswerState {
+    if (!sending || index !== lastIndex) return "done";
+    return m.citations === undefined && m.content === "" ? "searching" : "streaming";
+  }
+
   return (
-    <main className="page" style={{ display: "flex", flexDirection: "column" }}>
-      <div className="chat-header">
-        <h1>채팅</h1>
-        <Link href="/conversations">대화 목록</Link>
+    <main className="flex min-h-0 flex-1 flex-col">
+      <header className="flex shrink-0 items-center border-b border-rule pt-[calc(env(safe-area-inset-top)+6px)] pr-2 pb-1.5 pl-gutter">
+        <h1 className="m-0 flex-1 font-display text-display-sm">청안</h1>
+        <Link href="/conversations" aria-label="대화 기록" className="flex size-touch shrink-0 items-center justify-center text-ink">
+          <Icon name="history" />
+        </Link>
+        <IconButton icon="plus" label="새 대화" onClick={startNewConversation} />
+      </header>
+
+      <div ref={scroller} role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-gutter py-6">
+        {messages.length === 0 && !sending && (
+          <p className="m-auto text-center text-body-sm text-ink-2">궁금한 청년정책을 편하게 물어보세요.</p>
+        )}
+        {messages.map((m, i) =>
+          m.role === "user" ? (
+            <MessageBubble key={i}>{m.content}</MessageBubble>
+          ) : (
+            <AnswerBlock
+              key={i}
+              context={context}
+              state={answerState(m, i)}
+              sources={(m.citations ?? []).map((c) => ({ id: c.id, title: c.title, postedAt: c.posted_at }))}
+            >
+              {m.content}
+            </AnswerBlock>
+          ),
+        )}
+        {waitingForAnswer && <AnswerBlock context={context} state="searching" sources={[]} />}
+        {error && (
+          <p className="m-0 text-body-sm font-medium text-danger" role="alert">
+            {error}
+          </p>
+        )}
       </div>
-      <div className="chat-log" role="log" aria-live="polite">
-        {messages.map((m, i) => (
-          <div className={`chat-turn chat-turn--${m.role}`} key={i}>
-            {m.role === "assistant" && m.citations && m.citations.length > 0 && (
-              <div className="citation-row">
-                <p className="hint-text">관련 공지</p>
-                {m.citations.map((c) => (
-                  <Link key={c.id} href={`/notices/${c.id}`} className="card citation-card">
-                    <strong>{c.title}</strong>
-                    <p>{c.posted_at ? new Date(c.posted_at).toLocaleDateString() : "-"}</p>
-                  </Link>
-                ))}
-              </div>
-            )}
-            <div className={`bubble bubble--${m.role}`}>{m.content}</div>
-          </div>
-        ))}
-      </div>
-      {error && (
-        <p className="error-text" role="alert">
-          {error}
-        </p>
-      )}
-      <form onSubmit={handleSend} className="chat-input-row">
-        <label htmlFor="chat-input" className="visually-hidden" style={{ display: "none" }}>
-          메시지 입력
-        </label>
-        <textarea
-          id="chat-input"
-          rows={1}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend(e);
-            }
-          }}
-        />
-        <button type="submit" disabled={sending || !input.trim()}>
-          전송
-        </button>
-      </form>
+
+      <Composer value={input} onChange={setInput} onSubmit={handleSend} busy={sending} />
     </main>
   );
 }

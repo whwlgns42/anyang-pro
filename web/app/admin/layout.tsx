@@ -10,7 +10,7 @@ import { AdminNav } from "./admin-nav";
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   await requireSession();
   return (
-    <div className="app-shell">
+    <div className="mx-auto flex min-h-dvh w-full max-w-admin flex-col">
       <AdminNav />
       {children}
     </div>

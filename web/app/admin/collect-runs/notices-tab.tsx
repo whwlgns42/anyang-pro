@@ -127,7 +127,7 @@ export function NoticesTab() {
       ) : items.length === 0 ? (
         <p className="hint-text">공지가 없어요.</p>
       ) : (
-        <table>
+        <div className="overflow-x-auto"><table>
           <thead>
             <tr>
               <th style={{ textAlign: "left" }}>제목</th>
@@ -165,7 +165,7 @@ export function NoticesTab() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>

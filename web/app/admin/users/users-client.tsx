@@ -114,7 +114,7 @@ export function UsersClient() {
       {users === null ? (
         <p className="hint-text">불러오는 중...</p>
       ) : (
-        <table>
+        <div className="overflow-x-auto"><table>
           <thead>
             <tr>
               <th style={{ textAlign: "left" }}>이메일</th>
@@ -148,7 +148,7 @@ export function UsersClient() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </main>
   );

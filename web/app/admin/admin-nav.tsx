@@ -16,7 +16,7 @@ export function AdminNav() {
   const pathname = usePathname();
   return (
     <nav
-      className="bottom-nav"
+      className="bottom-nav m-0 w-full max-w-none"
       aria-label="관리자 메뉴"
       style={{ position: "static", borderTop: "none", borderBottom: "1px solid var(--border)" }}
     >

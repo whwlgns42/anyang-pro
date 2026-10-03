@@ -60,7 +60,7 @@ export function NotifyLogsClient() {
           <p>
             알림 켠 사용자: {summary.notify_enabled_count}명 · 등록된 기기: {summary.push_device_count}대
           </p>
-          <table>
+          <div className="overflow-x-auto"><table>
             <thead>
               <tr>
                 <th style={{ textAlign: "left" }}>날짜</th>
@@ -82,7 +82,7 @@ export function NotifyLogsClient() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </table></div>
         </>
       )}
     </main>

@@ -65,7 +65,7 @@ export function ApiUsageClient() {
       )}
 
       {providers && (
-        <table>
+        <div className="overflow-x-auto"><table>
           <thead>
             <tr>
               <th style={{ textAlign: "left" }}>제공자</th>
@@ -97,7 +97,7 @@ export function ApiUsageClient() {
               </tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       )}
     </main>
   );
