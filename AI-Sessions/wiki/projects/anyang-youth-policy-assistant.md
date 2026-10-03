@@ -67,6 +67,7 @@ owner: pm
 - 2026-10-03: overview 문서·코드 재검증(사용자 요청, 확인 항목 47). database·backend·frontend 조사, code-review 교차 검수. 채팅요청흐름 다이어그램만 최신 구현으로 갱신(매 답변 추출, 기억 주입, 0.08 갱신, 부분 답변 저장). 핵심 발견: 모순 선호는 정정되지 않고 공존(설계 범위 밖), 기억 화면 진입 경로 없음. 코드·설계 문서 변경 없음, 새 설계 draft 없음(전부 사용자 결정 대기). frontend 구현은 사용자 지시로 보류(팀원 앱 디자인 소스 적용 후 웹·앱 동시 구현으로 재개).
 - 2026-10-03: 사용자 결정 47-a = (ii) 추출 시 대체. 확인 항목 48 설계 draft(database-schema 12차로 뺌 → database → backend). 확인 항목 49 cheongan 적용 조사 draft(frontend, 새 문서 [[anyang-cheongan-design-adoption]], 코드 변경 없음). 둘 다 사용자 승인 대기, 구현은 승인 뒤.
 - 2026-10-03: 48 승인된 설계 13차 → 구현 완료. database 0020 운영 적용 226e4f6, backend 모순 대체 21b9d52(test 204·build 통과), code-review 치명 없음. 50 해결. 후속 51(사전 테스트·낡은 문구·push·인수인계 보관). push 보류.
+- 2026-10-03: 새 요청(메인 세션 전달) — 청안(cheongan) 디자인을 웹과 모바일 앱에 적용. 49 보류 조건(실제 소스 수령)이 풀렸다. pm이 소스를 재확인했으나 모바일 앱(React Native Expo)이 저장소·설계 어디에도 없고 확정 스택(PWA 웹앱)과 충돌해 분배 전 멈춤. 설계 호출·문서 변경 없음. 확인 항목 52.
 
 ### 설계 문서
 
@@ -265,6 +266,23 @@ owner: pm
     - 미확정·질문: (a) 공존안, (b) 본문 글꼴·로딩 방식, (c) 탭 4개, (d) 안양 비서에만 있는 화면(로그인·동의·온보딩·정지·처리방침·관리자 4종)에 디자인을 어디까지 입힐지, (e) `image_count`·구독 조회 GET 추가 여부, (f) 되돌리기 Toast 구현 방식, (g) 토큰 폴더 위치, 내 정보 고정 문구 파일 위치, (h) 받은 폴더에 없는 자료: `Icon.tsx`·`tokens.json`·`build-tokens.mjs` 확인 못 함, 「청안 화면 기능 정의서 v0」 못 찾음 — 팀원에게 받을지. (i) 적용을 진행한다면 frontend-screens·frontend-tasks를 승인된 설계에서 빼고 backend(필요 시 database) → frontend 설계부터 한다.
     - **보류(2026-10-03, user, 메인 세션 전달)**: 팀원에게 실제 소스코드를 받을 때까지 진행하지 않는다. Tailwind 설치·API 추가·화면 이전 등 설계 변경 모두 보류. [[anyang-cheongan-design-adoption]] draft는 그대로 둔다. 위 미확정 (a)~(i)도 그때까지 보류.
     - 역링크 미완: [[anyang-frontend-screens]]·[[anyang-frontend-tasks]](승인 잠금, frontend 소유)·[[anyang-backend-api]](backend 소유)에서 새 문서로 가는 링크 없음(lint WARN). 다음 해당 문서 설계 수정 때 넣는다.
+    - 보류 해제(2026-10-03, 메인 세션 전달 새 요청): 적용 진행. 같은 폴더에 이번에는 `Icon.tsx`(직접 그린 선 아이콘 15개, 외부 라이브러리 import 없음)·`tokens.json`·`build-tokens.mjs`·`samples/anyang-youth-notices.json`이 있다(pm 확인). 「청안 화면 기능 정의서 v0」는 여전히 폴더에 없다(README가 `../docs/`와 claude.ai 링크를 가리키지만 `docs/` 폴더 없음). 진행 전 질문은 52.
+
+52. **사용자 결정 필요(2026-10-03, 새 요청 — 청안 디자인 웹·앱 적용)**: pm이 분배 전에 멈춤. 설계 호출·설계 문서 변경 없음, "승인된 설계" 그대로.
+    - (a) **모바일 앱 범위(차단)**: 요청은 "앱: React Native Expo(준비 단계)"에도 적용하라고 하지만, 저장소에 Expo·React Native 프로젝트가 없고(`package.json` 검색 0건) wiki에도 모바일 앱 결정이 없다. 확정 스택은 "Next.js 풀스택 PWA 웹앱"([[anyang-stack-database]]). 선택지: ① 이번에는 웹(PWA)만 — 청안 프로토타입 자체가 390폭 모바일 웹 시안이라 PWA로 휴대폰 화면을 그대로 낼 수 있다(권장), ② Expo 앱을 새로 만든다 — 스택 결정 변경(결정 문서 갱신), 앱 폴더 위치, 인증(Auth.js 세션 쿠키를 앱에서 쓸 수 없어 토큰 방식 API 필요 → backend 설계 변경), 푸시(Web Push 대신 Expo 푸시 → backend·database 설계 변경), 스토어 배포 계정 결정이 따라온다, ③ 웹 먼저, 앱은 별도 요청으로.
+    - (b) **"직접 복사 금지"의 범위**: 청안 README의 이행 방법은 컴포넌트 복사다. 토큰 생성물(`tokens.css`·`tailwind.css`·`tokens.ts`)과 원본 `tokens.json`·`build-tokens.mjs`는 그대로 가져와도 되는지(토큰은 값의 원본이라 다시 쓰면 어긋남), 컴포넌트만 새로 작성하는지.
+    - (c) 49의 미확정 (a)~(g) — 설계 방향을 정하는 값이라 답이 필요하다. 권장안을 함께 적는다(전부 제안):
+      - 공존안: D(`globals.css`를 `@layer components`로) 후 B(화면 단위 점진 이행)
+      - 글꼴: 토큰대로 Hahmlet·IBM Plex Sans KR·IBM Plex Mono, `next/font/google` 로딩(본문을 Pretendard로 할지는 팀원 정의서의 미확정 항목 5번)
+      - 하단 탭: 청안대로 4개(공지·대화·알림·내 정보). 47(b) 기억 화면 진입 경로가 함께 해결된다
+      - 청안 시안이 없는 화면(로그인·동의·온보딩·정지·처리방침·대화 기록·관리자 4종): 토큰·공통 컴포넌트만 입힘, 관리자는 25번처럼 가독성·일관성만
+      - 공지 상세 이미지 배지(`image_count`)·알림 "받는 기기" 목록(구독 조회 GET): 이번엔 해당 UI를 빼고 기존 API만 쓴다(backend·database 설계 변경 없음 → 요청의 "기존 API 유지"와 맞음). 넣는다면 backend(필요 시 database) 설계부터
+      - 관심사 삭제 되돌리기: 클라이언트에서 삭제 요청을 5초 늦춤(API 변경 없음)
+      - 토큰 위치: `web/` 안(외부 폴더 import는 Turbopack 동작 확인 못 함)
+    - (d) **함께 처리할지**: 47(c) frontend 버그 ①~③(어차피 다시 쓰는 파일), ④ manifest 아이콘, ⑤ 가입 폼 가림 안내, 48(f-8) 처리방침·기억 화면 문구 정합성. 권장: ①~③과 (f-8)은 포함, ④⑤는 별도.
+    - (e) 「청안 화면 기능 정의서 v0」(화면별 데이터 필드) — 팀원에게 받아 `AI-Sessions/raw/`에 둘지, 없이 프로토타입 코드만 근거로 할지.
+    - (f) 참고(요청 문구와 규칙 차이): 설계 문서 위치는 요청의 `wiki/projects/`가 아니라 규칙대로 `wiki/design/`·`wiki/dev-tasks/`를 쓴다. 커밋은 기능 단위로 git-manager가 하고 push는 45·51(c)대로 사용자 승인 전 보류.
+    - 답을 받으면: [[anyang-frontend-screens]]·[[anyang-frontend-tasks]]를 승인된 설계에서 빼고(14차), (c)에서 API 추가를 고르면 backend 문서도 뺀다. 설계는 필요한 에이전트만 database → backend → frontend 순으로 한 번에 하나씩, [[anyang-cheongan-design-adoption]]을 갱신하거나 frontend-screens에 반영 → 사용자 재승인 → 구현(taste-skill `design-taste-frontend`) → code-review.
 
 ## 승인된 설계
 
