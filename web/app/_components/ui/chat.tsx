@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import Link from "next/link";
+import { shouldSubmitOnKey } from "../../_lib/composer-key";
 import { formatDate } from "../../_lib/format";
 import { Icon } from "./icon";
 
@@ -106,7 +107,7 @@ export function Composer({ value, onChange, onSubmit, busy }: ComposerProps) {
   const canSend = value.trim().length > 0 && !busy;
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (shouldSubmitOnKey(e)) {
       e.preventDefault();
       onSubmit();
     }
