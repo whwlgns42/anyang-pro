@@ -7,8 +7,17 @@ import { apiFetch } from "../../../_lib/api-fetch";
 import { formatDate, isHttpUrl, splitLinks } from "../../../_lib/format";
 import { buttonClass } from "../../../_components/ui/controls";
 import { Icon } from "../../../_components/ui/icon";
+import { Attachments } from "./attachments";
 
-type Notice = { id: string; title: string; body: string; source_url: string; posted_at: string | null };
+type Notice = {
+  id: string;
+  title: string;
+  body: string;
+  source_url: string;
+  posted_at: string | null;
+  attachments?: { name: string; url: string }[];
+  image_count?: number;
+};
 
 // anyang-frontend-screens "청안 디자인 적용 화면 스펙" 3번(공지 상세). source_url은 새 탭으로만
 // 연다(iframe 임베드 없음). http(s)로 시작할 때만 링크로 그린다.
@@ -93,6 +102,7 @@ export function NoticeDetail({ id }: { id: string }) {
                 ),
               )}
             </div>
+            <Attachments attachments={notice.attachments} hasSource={isHttpUrl(notice.source_url)} />
           </article>
 
           {isHttpUrl(notice.source_url) && (
@@ -101,10 +111,10 @@ export function NoticeDetail({ id }: { id: string }) {
                 href={notice.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="원문 보기, 새 창에서 열림"
+                aria-label="원문 페이지에서 보기, 새 창에서 열림"
                 className={`${buttonClass("primary", "lg")} w-full`}
               >
-                원문 보기
+                원문 페이지에서 보기
                 <Icon name="external" size={18} strokeWidth={1.8} />
               </a>
             </div>

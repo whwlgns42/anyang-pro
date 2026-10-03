@@ -1,0 +1,34 @@
+// 공지 목록 최신성: 탭 복귀·뒤로가기 복원 시 1페이지를 조용히 다시 받는다.
+
+export const REFETCH_MIN_GAP_MS = 30_000;
+
+// 마지막 성공 조회 후 minGapMs 안이거나 조회 중이면 생략한다.
+export function shouldRefetch(lastFetchedAt: number | null, now: number, minGapMs: number, inFlight = false): boolean {
+  if (inFlight) return false;
+  return lastFetchedAt === null || now - lastFetchedAt >= minGapMs;
+}
+
+// 새 1페이지를 앞에 두고, 이미 쌓인 항목 중 같은 id는 뺀 채 이어 붙인다.
+export function mergeFirstPage<T extends { id: string }>(prev: T[], firstPage: T[]): T[] {
+  const ids = new Set(firstPage.map((x) => x.id));
+  return [...firstPage, ...prev.filter((x) => !ids.has(x.id))];
+}
+
+type Doc = Pick<Document, "visibilityState" | "addEventListener" | "removeEventListener">;
+type Win = Pick<Window, "addEventListener" | "removeEventListener">;
+
+// visible이 될 때와 persisted pageshow일 때만 onTrigger를 부른다. 반환 함수로 해제한다.
+export function subscribeRefetch(doc: Doc, win: Win, onTrigger: () => void): () => void {
+  const onVisibility = () => {
+    if (doc.visibilityState === "visible") onTrigger();
+  };
+  const onPageShow = (e: Event) => {
+    if ((e as PageTransitionEvent).persisted) onTrigger();
+  };
+  doc.addEventListener("visibilitychange", onVisibility);
+  win.addEventListener("pageshow", onPageShow);
+  return () => {
+    doc.removeEventListener("visibilitychange", onVisibility);
+    win.removeEventListener("pageshow", onPageShow);
+  };
+}

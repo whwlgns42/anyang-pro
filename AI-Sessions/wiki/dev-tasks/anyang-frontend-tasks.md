@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: frontend
 ---
 

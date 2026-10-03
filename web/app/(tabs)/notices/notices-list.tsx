@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../_lib/api-fetch";
 import { formatKoreanDay } from "../../_lib/format";
 import { Button } from "../../_components/ui/controls";
 import { NoticeRow } from "../../_components/ui/notice-row";
+import { REFETCH_MIN_GAP_MS, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
 
-type NoticeItem = { id: string; title: string; excerpt: string; posted_at: string | null };
+type NoticeItem = {
+  id: string;
+  title: string;
+  excerpt: string;
+  posted_at: string | null;
+  is_pinned?: boolean;
+  image_count?: number;
+};
 
 // anyang-frontend-screens "청안 디자인 적용 화면 스펙" 2번(공지 목록). 무한 스크롤 대신 "더 보기"
 // 버튼으로 페이지네이션한다. 관심사 개수는 GET /api/preferences 길이이며, 이 호출이 실패하면
@@ -20,6 +28,8 @@ export function NoticesList() {
   const [error, setError] = useState<string | null>(null);
   const [interestCount, setInterestCount] = useState<number | null>(null);
   const [today, setToday] = useState<string | null>(null);
+  const lastFetchedAt = useRef<number | null>(null);
+  const refetching = useRef(false);
 
   // 서버·클라이언트 불일치(hydration)를 피하려고 마운트 뒤에 계산한다.
   useEffect(() => {
@@ -53,6 +63,7 @@ export function NoticesList() {
         if (cancelled) return;
         setItems((prev) => (page === 1 ? data : [...prev, ...data]));
         setHasMore(data.length > 0);
+        if (page === 1) lastFetchedAt.current = Date.now();
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -61,6 +72,25 @@ export function NoticesList() {
       cancelled = true;
     };
   }, [page]);
+
+  // 탭 복귀·뒤로가기 복원 시 1페이지를 조용히 다시 받는다(로딩·오류 문구 없음, 실패하면 기존 목록 유지).
+  useEffect(() => {
+    return subscribeRefetch(document, window, () => {
+      if (!shouldRefetch(lastFetchedAt.current, Date.now(), REFETCH_MIN_GAP_MS, refetching.current)) return;
+      refetching.current = true;
+      apiFetch("/api/notices/recommended?page=1")
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = (await res.json()) as NoticeItem[];
+          lastFetchedAt.current = Date.now();
+          setItems((prev) => mergeFirstPage(prev, data));
+        })
+        .catch(() => {})
+        .finally(() => {
+          refetching.current = false;
+        });
+    });
+  }, []);
 
   const personalized = (interestCount ?? 0) > 0;
 
@@ -98,7 +128,15 @@ export function NoticesList() {
         )}
         <ol className="m-0 list-none p-0 px-gutter">
           {items.map((item) => (
-            <NoticeRow key={item.id} id={item.id} title={item.title} excerpt={item.excerpt} postedAt={item.posted_at} />
+            <NoticeRow
+              key={item.id}
+              id={item.id}
+              title={item.title}
+              excerpt={item.excerpt}
+              postedAt={item.posted_at}
+              isPinned={item.is_pinned}
+              imageCount={item.image_count}
+            />
           ))}
         </ol>
         {loading && <p className="m-0 px-gutter py-4 text-body-sm text-ink-2">불러오는 중...</p>}

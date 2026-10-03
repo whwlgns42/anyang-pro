@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-10-03
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -147,7 +147,7 @@ A안(전면 교체)은 화면 19개를 한 번에 건드려야 하고, C안(프�
 
 | 컴포넌트 | 파일 | 청안 참고 | 쓰는 화면 | 안양 쪽 변경점 |
 |---|---|---|---|---|
-| `Icon`, `IconButton` | `ui/icon.tsx` | `Icon.tsx` (15개: chat·notices·bell·person·history·plus·send·chevron-right/left·external·image·phone·share·pencil·trash) | 전부 | 모양은 청안과 같게 그린다. `image`·`phone`은 이번에 쓰이지 않으므로 만들지 않는다 — 13개. 2026-10-04(확인 항목 55)에 고정 공지 별표용 `star` 1개를 더한다 — 14개(청안에 없는 새 아이콘, `(미확정)`) |
+| `Icon`, `IconButton` | `ui/icon.tsx` | `Icon.tsx` (15개: chat·notices·bell·person·history·plus·send·chevron-right/left·external·image·phone·share·pencil·trash) | 전부 | 모양은 청안과 같게 그린다. `image`·`phone`은 이번에 쓰이지 않으므로 만들지 않는다 — 13개. 2026-10-04(확인 항목 55)에 고정 공지 별표용 `star` 1개를 더한다 — 14개(청안에 없는 새 아이콘) |
 | `Button`, `buttonClass` | `ui/controls.tsx` | `Controls.tsx` | 이행한 화면, 탈퇴 다이얼로그, 원문 보기 | `Link`에 같은 모양을 입히려고 `buttonClass`를 내보낸다 |
 | `Switch` | `ui/controls.tsx` | 같음 | 알림 | 접근성 속성(`role="switch"`, `aria-labelledby`·`describedby`) 유지 |
 | `SettingsGroup` | `ui/controls.tsx` | 같음 | 알림, 내 정보 | |

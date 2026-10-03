@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode, SVGProps } from "react";
 
-// 청안 react-prototype/Icon.tsx와 같은 모양(팀 자체 제작 선 아이콘). 안양 화면에서 쓰는 13개만 둔다.
+// 청안 react-prototype/Icon.tsx와 같은 모양(팀 자체 제작 선 아이콘). 안양 화면에서 쓰는 14개만 둔다(star는 청안에 없는 추가분).
 export type IconName =
   | "chat"
   | "notices"
@@ -14,7 +14,8 @@ export type IconName =
   | "external"
   | "share"
   | "pencil"
-  | "trash";
+  | "trash"
+  | "star";
 
 const shapes: Record<IconName, ReactNode> = {
   chat: <path d="M4.5 5.5h15v10.5h-9l-4.5 3.5v-3.5h-1.5z" />,
@@ -65,6 +66,7 @@ const shapes: Record<IconName, ReactNode> = {
     </>
   ),
   trash: <path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 12.5h9.2L17.5 7" />,
+  star: <path d="M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.8 6.9 19.5l1-5.7-4.1-4 5.7-.8z" fill="currentColor" />,
 };
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "name"> & {
