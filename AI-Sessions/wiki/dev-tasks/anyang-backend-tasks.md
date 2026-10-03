@@ -83,7 +83,8 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    저장하지 않음, 기존 `if (assistantText)` 조건 유지). 잘린 답변 표시는 두지 않는다. 3번
    의존. 테스트: 3-3절·3-3-1절·3-3-2절·3절 5번의 테스트 방법([[anyang-backend-api#테스트
    방법]]) 참고.
-6-1. **Jev 게이트(신규, 확인 항목 46, backend 설계 3-3-3절, 재승인 대기)** —
+6-1. **Jev 게이트(신규, 확인 항목 46, backend 설계 3-3-3절, 보류 — 추후 운영 서비스 Jev 적용 시 재개(2026-10-03, user))** —
+   상태: 보류. 이 항목의 값은 재개 때 다시 검토하며 이번 재승인·구현 대상이 아니다.
    `extractAndStorePreference`의 `extractPreferences` 호출 직전에 Jev Noul 판정 1회를
    둔다. 확률 < 임계값(0.2, 미확정)이면 추출·저장을 건너뛴다. Jev 오류·타임아웃(2초,
    미확정)·`TYPESAFE_API_KEY` 없음이면 기존대로 추출(fail-open). 전송은 `maskPii` 적용한
@@ -91,6 +92,20 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
    서버 환경변수만(9절 환경변수 목록 갱신). 6번 의존. 확정 전 선행 조건: 확인 항목
    46-a(전송 결정 문서·처리방침 갱신 여부)가 해결돼야 착수한다. 테스트: 통과/차단/
    fail-open/전송 범위 단위 테스트([[anyang-backend-api#테스트 방법]] "Jev 게이트").
+6-2. **모순 선호 즉시 정정(신규, 확인 항목 48, backend 설계 3-3-4절, 재승인 대기)** —
+   `fetchMemories`가 `{id, preference_text}[]`를 돌려주도록 바꾸고(시스템 프롬프트 기억 절은
+   문장만 사용), 같은 목록을 추출 호출에 번호(1..N)로 실어 `extractPreferences`가
+   `{fact, replaces}[]`를 돌려주게 한다(문구·파싱·잘못된 번호는 `null` 처리·같은 번호 중복은 첫 원소만 유지, 모두
+   미확정). `extractAndStorePreference`는 문장마다 `replaces`가 있으면 순번→id로 바꿔 database의
+   대체 쿼리(`where id = $1 and user_id = $2`)를 먼저 실행하고, 없거나 0행이면 기존 유사 갱신 →
+   INSERT로 간다. 의존: 6번, database 설계 재승인
+   ([[anyang-database-schema#user_preferences — 대화에서 추출한 선호, 벡터. "AI가 기억하는 내 정보" 화면의 데이터]],
+   스키마 변경·마이그레이션 없음). 6-1과 같은 함수(`extractAndStorePreference`)를 고치므로 같은
+   구현 호출에서 6-1 → 6-2 순서로 하거나 6-2만 먼저 하고 6-1은 그 위에 얹는다(어느 쪽이든 게이트는
+   추출 호출 앞, 모순 판단은 추출 호출 안). 두 항목 모두 재승인된 것만 구현한다(6-1 보류 중이면 6-2만 구현). 테스트:
+   [[anyang-backend-api#테스트 방법]] "모순 선호 정정" 10항목(목 기반 단위 테스트 + DB 대체 쿼리
+   소유자 방어), 기존 `web/test/deepseek.test.ts`·`web/test/chat.test.ts`의 문자열 배열
+   기대값 갱신 포함.
 7. **알림 잡** — `/api/jobs/notify`(시각 창 매칭 + 코사인 유사도 + Web Push 호출,
    `notify_logs` pending 선점·정체 재시도 포함). **다중 기기 발송 판정(신규, 확인 항목 30,
    backend 설계 7절)** — 사용자의 `push_subscriptions` 전체에 전송, 한 대라도 성공하면
