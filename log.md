@@ -113,3 +113,4 @@ YYYY-MM-DD HH:mm | command | summary | linked files
 2026-10-04 --:-- | save | 안양 비서 58 push 4950b33..30a22f7, vercel deploy --prod Ready(테스트 알림 API 로그인 없이 401, sw.js 새 url 검사 반영). 실기기 수신 확인은 메인 세션·사용자 | [[anyang-youth-policy-assistant]]
 2026-10-04 --:-- | save | 안양 비서 58 실기기 수신 확인(user "알람이 잘 왔어"): 운영 웹 푸시 첫 실제 전달 확인. 57(n) 임계값 0.75·58(a) 제안값 13건은 열린 항목 그대로 | [[anyang-youth-policy-assistant]]
 2026-10-04 --:-- | save | 안양 비서 57(n) 결정(user "좀 낮춰줘"): 알림 임계값 0.75 → 0.70. database·backend 설계 반영 → 29차 → backend 110476c(test 418·build), code-review 치명·주요 0. overview 문서의 0.75는 요청 시 최신화 | [[anyang-youth-policy-assistant]] [[anyang-backend-api]] [[anyang-database-schema]]
+2026-10-04 --:-- | save | 안양 비서 57(n) push 30a22f7..63efbb8, vercel deploy --prod Ready(임계값 0.70 운영 반영). 이전 배포 때 테스트 알림 API error 로그 1건 원인 미조사(57(o)) | [[anyang-youth-policy-assistant]]
