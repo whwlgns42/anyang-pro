@@ -47,6 +47,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   const lastCitations = useRef<Citation[] | undefined>(undefined);
   const pendingScroll = useRef<{ scrollTop: number; atBottom: boolean } | null>(null);
   const firstRun = useRef(true);
+  const loadAbort = useRef<AbortController | null>(null);
   const scrollState = useRef({ scrollTop: 0, atBottom: true });
 
   useEffect(() => {
@@ -68,9 +69,14 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     loadedIdRef.current = id;
     conversationIdRef.current = id;
     readyRef.current = false;
+    pendingScroll.current = null; // 이전 대화의 복원 스크롤이 새 대화에 적용되지 않게 한다
+    loadAbort.current?.abort(); // 늦게 온 이전 조회가 새 대화 messages를 덮어쓰지 않게 한다
+    const ac = new AbortController();
+    loadAbort.current = ac;
     setRestoring(true);
     const snap = userId ? readSnapshot(browserStorage(), userId, id) : null;
     const done = () => {
+      if (ac.signal.aborted) return;
       readyRef.current = true;
       setRestoring(false);
     };
@@ -80,13 +86,15 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
       done();
       return;
     }
-    apiFetch(`/api/conversations/${id}/messages`)
+    apiFetch(`/api/conversations/${id}/messages`, { signal: ac.signal })
       .then(async (res) => {
+        if (ac.signal.aborted) return;
         if (!res.ok) {
           if (snap) setMessages(snap.messages);
           return;
         }
         const history = (await res.json()) as StoredMessage[];
+        if (ac.signal.aborted) return;
         if (snap) {
           const merged = mergeStreamingSnapshot(snap.messages, history);
           pendingScroll.current = { scrollTop: snap.scrollTop, atBottom: snap.atBottom };
@@ -166,6 +174,10 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     if (sending) return;
     conversationIdRef.current = null;
     loadedIdRef.current = null;
+    pendingScroll.current = null;
+    loadAbort.current?.abort();
+    readyRef.current = true;
+    setRestoring(false);
     setMessages([]);
     setInterrupted(false);
     setError(null);
@@ -237,6 +249,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
       }
     }
     streamingRef.current = false;
+    flushRef.current(); // streaming:false를 즉시 기록
     setSending(false);
   }
 
