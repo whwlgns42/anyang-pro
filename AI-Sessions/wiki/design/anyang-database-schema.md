@@ -141,13 +141,20 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | id | uuid, PK | |
-| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안 |
-| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안 |
-| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고 |
+| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안. `test_notify`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값" |
+| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안. `user`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값" |
+| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고. `test_notify`일 때는 `sha256(user_id)` |
 | created_at | timestamptz, not null, default now() | 시도 시각 |
 
 - 인덱스: `(attempt_type, identifier_type, identifier_hash, created_at)` — 창 안 횟수를
   세는 조회에 쓴다(제안).
+- **테스트 알림 값 (`(미확정)`, 확인 항목 58, 2026-10-04, backend 제안)**: 테스트 알림 1분 1회 제한을 이 테이블에
+  `attempt_type='test_notify'`, `identifier_type='user'`, `identifier_hash=sha256(user_id)`(원본 id 미저장)로 한 행씩
+  기록해 센다. 선점 쿼리·순서·동시 요청 한계는 [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]]
+  이 원본이라 여기 옮기지 않는다. 사실 확인(2026-10-04 운영 DB 읽기 전용 조회): `auth_attempts`의 제약은 기본키
+  `auth_attempts_pkey` 하나뿐이고 check 제약이 없다 — 값 셋은 DB가 강제하지 않으므로 새 값에 마이그레이션·인덱스가
+  필요 없다(기존 인덱스가 그대로 맞는다). 이 행도 아래 보존·정리(1일) 대상에 포함된다 — 정리 잡이 등록되면 함께 지워지고,
+  1분 창 판정에는 영향이 없다(정리 잡 등록 여부는 아래 절의 승인 규칙을 따른다).
 - **원값/해시 선택 (제안)**: 개인정보 최소화 관점에서 이메일·IP 원값 대신 SHA-256
   해시(`sha256(lower(trim(email)))`, `sha256(ip_text)`)로 저장한다 — 판정에는 "같은 값인지"
   비교만 필요하고 원값 복원이 필요 없다(단방향 해시로 충분). `identifier_type='email'`이면
@@ -1015,7 +1022,7 @@ select cron.schedule(
 ### 알림 잡 활성화 — DB 몫 (확인 항목 57, 2026-10-04, 설계 draft)
 
 이 절은 [[anyang-youth-policy-assistant]] 확인 항목 57의 database 몫(A 일괄 발송 방지, B pg_cron 안, C 첫 활성화·롤백)이다.
-이 절의 값은 모두 `(미확정)`이며 코드·운영 DB 변경은 하지 않았다. 실측은 2026-10-04 운영 Supabase를 읽기 전용으로 조회했다(건수만, 개인정보 값 없음).
+이 절의 값은 사용자 설계 승인(27차)으로 확정됐고 구현·배포됐다(커밋 `c4c0174`, `be79941`). 운영 DB에는 잡 `notify-job-trigger`(`*/5 * * * *`, active)가 등록돼 있고 명령에 `x-notify-secret` 헤더와 `timeout_milliseconds := 30000`이 들어 있음을 2026-10-04 읽기 전용으로 확인했다. 아래 "실측"은 활성화 전(설계 시점)의 건수다(건수만, 개인정보 값 없음).
 
 #### 실측 (건수)
 
@@ -1048,13 +1055,13 @@ select cron.schedule(
 | (다) 컷오프 시각 | `collected_at > greatest(enabled_at, cutoff)` | 상수 또는 설정 행 | `enabled_at` 규칙과 중복. 백필 방어는 이미 되어 있어 새 효과 없음 |
 | (라) 현행 유지 | 조건 변경 없음 | 없음 | 현재 위험 0이나 위 두 틈이 남음 |
 
-**권장안**: (나) — 현행 `collected_at > enabled_at` 조건은 그대로 두고, `published_at` 기준 최근 N일 제한을 후보 쿼리에 더한다. N=14일 ``(근거: 최근 7일 2건·30일 5건으로 공지 빈도가 낮아 짧으면 알림이 거의 안 나가고, 너무 길면 옛 글이 섞임. 값은 사용자 결정). 운영 데이터 변경 없음, 롤백은 코드 되돌리기뿐. `published_at`이 null이면 `collected_at`으로 대체한다. 스키마 변경 없음(인덱스도 462행이라 불필요).
+**채택안**: (나) — 현행 `collected_at > enabled_at` 조건은 그대로 두고, `published_at` 기준 최근 14일 제한을 후보 쿼리에 더한다(근거: 설계 시점 최근 7일 2건·30일 5건으로 공지 빈도가 낮아 짧으면 알림이 거의 안 나가고, 너무 길면 옛 글이 섞임. 구현은 [[anyang-backend-api]] 7-1절). 운영 데이터 변경 없음, 롤백은 코드 되돌리기뿐. `published_at`이 null이면 `collected_at`으로 대체한다. 스키마 변경 없음(인덱스도 462행이라 불필요).
 
 #### B. pg_cron 안
 
 - **확장**: `create extension pg_cron;`(Supabase는 `cron` 스키마 생성). `pg_net`·`supabase_vault`는 이미 설치됨. 운영 DB 변경이므로 구현 지시서에 사용자 승인이 별도로 있어야 실행한다.
 - **키**: 새 키 하나를 Vault에 둔다(`SCHEDULER_SHARED_SECRET`은 값을 모르고 바꾸지도 않는다). 값은 문서·로그·SQL 기록에 남기지 않는다. 잡 명령은 값을 문자열로 넣지 않고 Vault에서 읽어 `cron.job.command`에 값이 남지 않게 한다.
-- **헤더명·검증**: 새 키를 받는 헤더(예: `x-notify-secret`)와 서버 환경변수명은 backend 몫 ``. 현재 `lib/scheduler-auth.ts`는 `x-scheduler-secret` 하나만 알며, 새 키를 인정하는 코드 변경이 필요하다.
+- **헤더명·검증**: 헤더 `x-notify-secret`, 서버 환경변수 `NOTIFY_TRIGGER_SECRET`으로 backend가 확정했다([[anyang-backend-api]] 7-1절). 기존 `x-scheduler-secret`은 notify 라우트 밖 기존 잡용으로 그대로 둔다.
 
 ```sql
 -- 1회 설정(값은 실행 시점에 입력, 문서에 기록하지 않음)
@@ -1079,7 +1086,7 @@ select cron.schedule(
   $$
 );
 ```
-- 헤더명 `x-notify-secret`(backend 확정 전 가칭), 타임아웃 30000ms는 ``. pg_net 기본 5000ms는 사용자 루프(발송)가 길어지면 끊길 수 있어 늘렸다. 끊겨도 서버 쪽 처리가 계속되는지는 Vercel 동작이라 database가 확인할 수 없다(backend 확인).
+- 헤더명 `x-notify-secret`(backend 확정), 타임아웃 30000ms(운영 잡에 적용됨). pg_net 기본 5000ms는 사용자 루프(발송)가 길어지면 끊길 수 있어 늘렸다. 끊겨도 서버 쪽 처리가 계속되는지는 Vercel 동작이라 database가 확인할 수 없다(backend 확인).
 - `net.http_post`는 비동기다. 응답은 `net._http_response`, 실행 이력은 `cron.job_run_details`에서 본다.
 
 **보드 timer 안과 비교 (database가 아는 사실)**
@@ -1089,13 +1096,13 @@ select cron.schedule(
 | 이력 | `cron.job_run_details`·`net._http_response`로 SQL 조회 | systemd journal, 보드 접속 필요 |
 | 가동률 | database가 측정할 수 없다. Supabase 무료 프로젝트는 일정 기간 미사용 시 일시중지 정책이 있는 것으로 알고 있으나 이 프로젝트에 적용되는지는 확인하지 못했다(추정, 근거: 기억, 미확인) | 보드 정전·네트워크 단절 시 중단. 수집 타이머와 같은 장비라 수집·알림이 함께 멈춤 |
 | 변경 범위 | 확장 설치·Vault 2건·잡 1건(DB), 서버 헤더 검증 1개 추가 | 보드 유닛·키 파일, 서버 헤더 검증 1개 추가 |
-권장은 backend와 함께 정한다. 미해결 질문으로 남긴다.
+선택은 pg_cron으로 확정됐고 운영에 등록됐다(위 확인 결과).
 
 #### C. 첫 활성화 절차 (DB 쪽)
 
 1. **사전 점검**(읽기 전용): `select count(*) from notify_settings where enabled;` — 현재 0. 0이면 잡을 등록해도 아무도 대상이 아니다. 1 이상이면 누구인지 확인하고 멈춘다.
 2. **테스트 계정 1개만 대상**: 현재 notify_settings가 비어 있으므로 별도 설정 변경 없이, 테스트 계정이 앱 화면에서 알림을 켜는 순간(`enabled_at=now()`) 그 계정 하나만 후보가 된다. 필요 조건: 선호 보유(7행·사용자 2명 있음), 푸시 구독 1건 이상(현재 0), 알림 시각이 5분 창 안(PUT으로 지금+10분 정도). 다른 사용자가 중간에 알림을 켜면 대상이 늘어나므로 잡 등록 직전에 1번을 다시 센다.
-3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 ``. 안 쓰면 새 공지를 기다린다.
+3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 사항이다(이 문서가 정하지 않는다). 안 쓰면 새 공지를 기다린다.
 4. **확인**: `cron.job_run_details`에서 5분마다 실행, `net._http_response`에서 상태 200, `notify_logs`에 그 계정 행의 `result`가 `success`인지 본다.
 
 롤백(잡 중지·해제, 승인 불필요한 쪽부터):
@@ -1561,3 +1568,5 @@ authenticated 롤에 애초에 권한이 없다.
 - [[anyang-backend-tasks]]
 - [[anyang-frontend-screens]]
 - [[anyang-backend-api-mihwakjeong-removal-corruption]]
+- [[anyang-supabase-connection]]
+- [[anyang-user-name-memory]]
