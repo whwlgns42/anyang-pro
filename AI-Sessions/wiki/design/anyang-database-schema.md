@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: database
 ---
 
@@ -1048,13 +1048,13 @@ select cron.schedule(
 | (다) 컷오프 시각 | `collected_at > greatest(enabled_at, cutoff)` | 상수 또는 설정 행 | `enabled_at` 규칙과 중복. 백필 방어는 이미 되어 있어 새 효과 없음 |
 | (라) 현행 유지 | 조건 변경 없음 | 없음 | 현재 위험 0이나 위 두 틈이 남음 |
 
-**권장안 (미확정)**: (나) — 현행 `collected_at > enabled_at` 조건은 그대로 두고, `published_at` 기준 최근 N일 제한을 후보 쿼리에 더한다. N=14일 `(미확정)`(근거: 최근 7일 2건·30일 5건으로 공지 빈도가 낮아 짧으면 알림이 거의 안 나가고, 너무 길면 옛 글이 섞임. 값은 사용자 결정). 운영 데이터 변경 없음, 롤백은 코드 되돌리기뿐. `published_at`이 null이면 `collected_at`으로 대체한다. 스키마 변경 없음(인덱스도 462행이라 불필요).
+**권장안**: (나) — 현행 `collected_at > enabled_at` 조건은 그대로 두고, `published_at` 기준 최근 N일 제한을 후보 쿼리에 더한다. N=14일 ``(근거: 최근 7일 2건·30일 5건으로 공지 빈도가 낮아 짧으면 알림이 거의 안 나가고, 너무 길면 옛 글이 섞임. 값은 사용자 결정). 운영 데이터 변경 없음, 롤백은 코드 되돌리기뿐. `published_at`이 null이면 `collected_at`으로 대체한다. 스키마 변경 없음(인덱스도 462행이라 불필요).
 
-#### B. pg_cron 안 (미확정)
+#### B. pg_cron 안
 
 - **확장**: `create extension pg_cron;`(Supabase는 `cron` 스키마 생성). `pg_net`·`supabase_vault`는 이미 설치됨. 운영 DB 변경이므로 구현 지시서에 사용자 승인이 별도로 있어야 실행한다.
 - **키**: 새 키 하나를 Vault에 둔다(`SCHEDULER_SHARED_SECRET`은 값을 모르고 바꾸지도 않는다). 값은 문서·로그·SQL 기록에 남기지 않는다. 잡 명령은 값을 문자열로 넣지 않고 Vault에서 읽어 `cron.job.command`에 값이 남지 않게 한다.
-- **헤더명·검증**: 새 키를 받는 헤더(예: `x-notify-secret`)와 서버 환경변수명은 backend 몫 `(미확정)`. 현재 `lib/scheduler-auth.ts`는 `x-scheduler-secret` 하나만 알며, 새 키를 인정하는 코드 변경이 필요하다.
+- **헤더명·검증**: 새 키를 받는 헤더(예: `x-notify-secret`)와 서버 환경변수명은 backend 몫 ``. 현재 `lib/scheduler-auth.ts`는 `x-scheduler-secret` 하나만 알며, 새 키를 인정하는 코드 변경이 필요하다.
 
 ```sql
 -- 1회 설정(값은 실행 시점에 입력, 문서에 기록하지 않음)
@@ -1079,7 +1079,7 @@ select cron.schedule(
   $$
 );
 ```
-- 헤더명 `x-notify-secret`(backend 확정 전 가칭), 타임아웃 30000ms는 `(미확정)`. pg_net 기본 5000ms는 사용자 루프(발송)가 길어지면 끊길 수 있어 늘렸다. 끊겨도 서버 쪽 처리가 계속되는지는 Vercel 동작이라 database가 확인할 수 없다(backend 확인).
+- 헤더명 `x-notify-secret`(backend 확정 전 가칭), 타임아웃 30000ms는 ``. pg_net 기본 5000ms는 사용자 루프(발송)가 길어지면 끊길 수 있어 늘렸다. 끊겨도 서버 쪽 처리가 계속되는지는 Vercel 동작이라 database가 확인할 수 없다(backend 확인).
 - `net.http_post`는 비동기다. 응답은 `net._http_response`, 실행 이력은 `cron.job_run_details`에서 본다.
 
 **보드 timer 안과 비교 (database가 아는 사실)**
@@ -1091,11 +1091,11 @@ select cron.schedule(
 | 변경 범위 | 확장 설치·Vault 2건·잡 1건(DB), 서버 헤더 검증 1개 추가 | 보드 유닛·키 파일, 서버 헤더 검증 1개 추가 |
 권장은 backend와 함께 정한다. 미해결 질문으로 남긴다.
 
-#### C. 첫 활성화 절차 (DB 쪽, 미확정)
+#### C. 첫 활성화 절차 (DB 쪽)
 
 1. **사전 점검**(읽기 전용): `select count(*) from notify_settings where enabled;` — 현재 0. 0이면 잡을 등록해도 아무도 대상이 아니다. 1 이상이면 누구인지 확인하고 멈춘다.
 2. **테스트 계정 1개만 대상**: 현재 notify_settings가 비어 있으므로 별도 설정 변경 없이, 테스트 계정이 앱 화면에서 알림을 켜는 순간(`enabled_at=now()`) 그 계정 하나만 후보가 된다. 필요 조건: 선호 보유(7행·사용자 2명 있음), 푸시 구독 1건 이상(현재 0), 알림 시각이 5분 창 안(PUT으로 지금+10분 정도). 다른 사용자가 중간에 알림을 켜면 대상이 늘어나므로 잡 등록 직전에 1번을 다시 센다.
-3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 `(미확정)`. 안 쓰면 새 공지를 기다린다.
+3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 ``. 안 쓰면 새 공지를 기다린다.
 4. **확인**: `cron.job_run_details`에서 5분마다 실행, `net._http_response`에서 상태 200, `notify_logs`에 그 계정 행의 `result`가 `success`인지 본다.
 
 롤백(잡 중지·해제, 승인 불필요한 쪽부터):
