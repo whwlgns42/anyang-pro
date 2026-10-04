@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: database
 ---
 
@@ -1367,14 +1367,14 @@ DB에서 점검할 수 있다. 데이터가 7행이라 인덱스는 두지 않�
 
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
-| code | text, PK | `profiles.occupation_type` 코드. `other`는 의미 있는 설명 문장을 만들 수 없어 행을 두지 않는다 `(미확정)` → 7행(`it`, `manufacturing`, `service_sales`, `office_management`, `culture_arts`, `medical_welfare`, `construction_agriculture`). 코드값 원본은 [[anyang-service-scope#Details]] |
-| sentence | text, not null | 임베딩한 고정 설명 문장(사용자 데이터 아님, [[anyang-ai-models-data-transfer]] 보충). 문장 원본은 backend 시드 스크립트의 상수이고 이 컬럼은 무엇을 임베딩했는지 남기는 기록이다 `(미확정)` |
+| code | text, PK | `profiles.occupation_type` 코드. `other`는 의미 있는 설명 문장을 만들 수 없어 행을 두지 않는다 → 7행(`it`, `manufacturing`, `service_sales`, `office_management`, `culture_arts`, `medical_welfare`, `construction_agriculture`). 코드값 원본은 [[anyang-service-scope#Details]] |
+| sentence | text, not null | 임베딩한 고정 설명 문장(사용자 데이터 아님, [[anyang-ai-models-data-transfer]] 보충). 문장 원본은 backend 시드 스크립트의 상수이고 이 컬럼은 무엇을 임베딩했는지 남기는 기록이다 |
 | embedding | vector(768), not null | `notice_chunks`와 같은 모델·차원 |
 | embedding_model | text, not null | 예: `gemini-embedding-001` |
 | updated_at | timestamptz, not null, default now() | 마지막 임베딩 시각 |
 
-- FK 없음(`profiles.occupation_type`은 자유 text이고 `other`·null은 행이 없다). check 제약도 두지 않는다 — 직군 코드를 늘리면 마이그레이션 없이 행만 더하면 된다 `(미확정)`.
-- **0022_occupation_embeddings** `(미확정)`(`web/db/migrations/0022_occupation_embeddings.{up,down}.sql`, 구현 단계에서 작성):
+- FK 없음(`profiles.occupation_type`은 자유 text이고 `other`·null은 행이 없다). check 제약도 두지 않는다 — 직군 코드를 늘리면 마이그레이션 없이 행만 더하면 된다.
+- **0022_occupation_embeddings**(`web/db/migrations/0022_occupation_embeddings.{up,down}.sql`, 구현 단계에서 작성):
   ```sql
   -- up
   begin;
