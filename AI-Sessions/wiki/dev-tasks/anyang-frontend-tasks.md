@@ -222,7 +222,7 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 
 ### 채팅 뒤로가기 시 대화·인용 유지 (확인 항목 60, 신규, 설계 draft — 구현은 재승인 후)
 
-공지 상세에서 뒤로 와도 대화·인용 카드·스크롤이 남게 한다. 설계 근거와 모든 값(대부분 `(미확정)`)은 [[anyang-frontend-screens#3-1. 채팅 뒤로가기 시 대화·인용 유지 (신규, 확인 항목 60, 설계 draft)]]이고 여기에 옮겨 적지 않는다. backend·DB 변경은 없다. UI를 새로 만들지 않고 기존 채팅 화면의 상태 처리만 바꾸므로 `design-taste-frontend` 스킬은 부르지 않는다(안내 한 줄만 추가).
+공지 상세에서 뒤로 와도 대화·인용 카드·스크롤이 남게 한다. 설계 근거와 모든 값(대부분)은 [[anyang-frontend-screens#3-1. 채팅 뒤로가기 시 대화·인용 유지 (신규, 확인 항목 60, 설계 draft)]]이고 여기에 옮겨 적지 않는다. backend·DB 변경은 없다. UI를 새로 만들지 않고 기존 채팅 화면의 상태 처리만 바꾸므로 `design-taste-frontend` 스킬은 부르지 않는다(안내 한 줄만 추가).
 
 | 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
 |---|---|---|---|
@@ -231,7 +231,7 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 | S3 | 로그아웃·탈퇴 후 `clearAllChatSnapshots` 호출 | `web/app/(tabs)/settings/profile-section.tsx`, `web/app/suspended/suspended-actions.tsx`, `web/app/(tabs)/settings/account/account-client.tsx` | S1 |
 
 - 수정하지 않는 것: `notice-detail.tsx`(뒤로 버튼은 이미 `router.back()`이고 URL만 맞으면 된다), `app/api/**`, `lib/**`, `db/**`, `chat-stream.ts`.
-- 구현 시작 때 승인된 설계 문서의 `(미확정)` 확정 여부를 확인한다. 특히 URL 교체 수단은 응답 헤더 수신 직후 `window.history.replaceState`(제안 안 A)이고, 실행 확인에서 의도대로 안 되면 설계 변경으로 보고한다.
+- 구현 시작 때 승인된 설계 문서의 확정 여부를 확인한다. 특히 URL 교체 수단은 응답 헤더 수신 직후 `window.history.replaceState`(제안 안 A)이고, 실행 확인에서 의도대로 안 되면 설계 변경으로 보고한다.
 - 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "채팅 뒤로가기 유지(확인 항목 60, 3-1절)"가 원본이다(여기에 복제하지 않는다).
 - 커밋: S1 → S2 → S3 순으로 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다(S1·S2는 묶어도 된다). push는 사용자 승인 전 보류.
 

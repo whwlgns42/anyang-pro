@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ConfirmDialog } from "../../../_components/ui/controls";
 import { ScreenHeader } from "../../../_components/ui/screen";
+import { browserStorage, clearAllChatSnapshots } from "../../../_lib/chat-snapshot";
 
 // anyang-frontend-screens 8-1절 + 청안 적용 6번: 되돌릴 수 없는 동작이라 <dialog> 확인 후에만
 // DELETE /api/account를 호출한다. 탈퇴는 정지·재동의 필요 상태에서도 호출 가능(backend 예외).
@@ -23,6 +24,7 @@ export function AccountClient() {
       setError("탈퇴 처리 중 오류가 발생했습니다.");
       return;
     }
+    clearAllChatSnapshots(browserStorage());
     router.push("/login");
   }
 

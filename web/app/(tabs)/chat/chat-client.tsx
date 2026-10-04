@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
+import { browserStorage, mergeStreamingSnapshot, readSnapshot, writeSnapshot } from "../../_lib/chat-snapshot";
 import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
 import { AnswerBlock, Composer, MessageBubble, type AnswerState } from "../../_components/ui/chat";
 import { Icon, IconButton } from "../../_components/ui/icon";
@@ -28,7 +29,7 @@ function contextLine(profile: Profile): string | null {
 
 // anyang-frontend-screens "청안 디자인 적용 화면 스펙" 1번. 스트림 파싱·conversation_id 처리·
 // 인용 카드 데이터(event: citations, anyang-backend-api 3-2절)는 기존 동작 그대로이고 외형만 바꿨다.
-export function ChatClient({ initialConversationId }: { initialConversationId: string | null }) {
+export function ChatClient({ initialConversationId, userId }: { initialConversationId: string | null; userId: string | null }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -36,7 +37,16 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile>(null);
   const conversationIdRef = useRef<string | null>(initialConversationId);
+  const [restoring, setRestoring] = useState(initialConversationId !== null);
+  const [interrupted, setInterrupted] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
+  const loadedIdRef = useRef<string | null>(null);
+  const readyRef = useRef(initialConversationId === null);
+  const messagesRef = useRef<Message[]>([]);
+  const streamingRef = useRef(false);
+  const lastCitations = useRef<Citation[] | undefined>(undefined);
+  const pendingScroll = useRef<{ scrollTop: number; atBottom: boolean } | null>(null);
+  const scrollState = useRef({ scrollTop: 0, atBottom: true });
 
   useEffect(() => {
     apiFetch("/api/profile")
@@ -46,29 +56,114 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (!initialConversationId) return;
-    apiFetch(`/api/conversations/${initialConversationId}/messages`).then(async (res) => {
-      if (!res.ok) return;
-      const history = (await res.json()) as StoredMessage[];
-      setMessages(
-        history
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-      );
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialConversationId]);
+  // 3-1절 복원: 보관분(sessionStorage) -> 서버 순. loadedIdRef가 이미 쓰는 대화 id를 기록해,
+  // 스트리밍 중 URL이 바뀌어 prop이 새 id가 되어도 messages를 덮어쓰지 않는다.
+  useLayoutEffect(() => {
+    const id = initialConversationId;
+    if (!id || loadedIdRef.current === id) return;
+    loadedIdRef.current = id;
+    conversationIdRef.current = id;
+    readyRef.current = false;
+    setRestoring(true);
+    const snap = userId ? readSnapshot(browserStorage(), userId, id) : null;
+    const done = () => {
+      readyRef.current = true;
+      setRestoring(false);
+    };
+    if (snap && !snap.streaming) {
+      pendingScroll.current = { scrollTop: snap.scrollTop, atBottom: snap.atBottom };
+      setMessages(snap.messages);
+      done();
+      return;
+    }
+    apiFetch(`/api/conversations/${id}/messages`)
+      .then(async (res) => {
+        if (!res.ok) {
+          if (snap) setMessages(snap.messages);
+          return;
+        }
+        const history = (await res.json()) as StoredMessage[];
+        if (snap) {
+          const merged = mergeStreamingSnapshot(snap.messages, history);
+          pendingScroll.current = { scrollTop: snap.scrollTop, atBottom: snap.atBottom };
+          setMessages(merged.messages);
+          setInterrupted(merged.interrupted);
+          if (userId) {
+            writeSnapshot(browserStorage(), userId, id, { ...snap, messages: merged.messages, streaming: false });
+          }
+          return;
+        }
+        setMessages(
+          history
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        );
+      })
+      .catch(() => {})
+      .finally(done);
+  }, [initialConversationId, userId]);
 
-  // 새 메시지가 생겼을 때만 맨 아래로 내린다.
+  // 보관: 최신 상태를 ref에 들고, 즉시 쓰기(스트림 종료·인용 수신)와 500ms 지연 쓰기(델타)로 나눈다.
+  function flush() {
+    const id = conversationIdRef.current;
+    if (!userId || !id || !readyRef.current) return;
+    writeSnapshot(browserStorage(), userId, id, {
+      messages: messagesRef.current,
+      scrollTop: scrollState.current.scrollTop,
+      atBottom: scrollState.current.atBottom,
+      streaming: streamingRef.current,
+    });
+  }
+  const flushRef = useRef(flush);
   useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
+    flushRef.current = flush;
+  });
+
+  useEffect(() => {
+    messagesRef.current = messages;
+    const last = messages[messages.length - 1];
+    if (!streamingRef.current || last?.citations !== lastCitations.current) {
+      lastCitations.current = last?.citations;
+      flushRef.current();
+      return;
+    }
+    const t = setTimeout(() => flushRef.current(), 500);
+    return () => clearTimeout(t);
+  }, [messages]);
+
+  // 이동 직전·새로고침·탭 숨김에도 쓴다. 언마운트 정리 함수는 공지 상세로 가는 Link와 router.back()이 모두 지난다.
+  useEffect(() => {
+    const save = () => flushRef.current();
+    const onHide = () => document.visibilityState === "hidden" && save();
+    window.addEventListener("pagehide", save);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", save);
+      document.removeEventListener("visibilitychange", onHide);
+      save();
+    };
+  }, []);
+
+  // 복원 직후 첫 변화는 보관한 스크롤 위치로, 그 밖에는 새 메시지가 생겼을 때만 맨 아래로 내린다.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const p = pendingScroll.current;
+    pendingScroll.current = null;
+    el.scrollTo({ top: p && !p.atBottom ? p.scrollTop : el.scrollHeight });
   }, [messages.length, sending]);
+
+  function handleScroll() {
+    const el = scroller.current;
+    if (el) scrollState.current = { scrollTop: el.scrollTop, atBottom: el.scrollHeight - el.scrollTop - el.clientHeight <= 8 };
+  }
 
   function startNewConversation() {
     if (sending) return;
     conversationIdRef.current = null;
+    loadedIdRef.current = null;
     setMessages([]);
+    setInterrupted(false);
     setError(null);
     router.push("/chat");
   }
@@ -79,6 +174,8 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
     setInput("");
     setError(null);
     setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setInterrupted(false);
+    streamingRef.current = true;
     setSending(true);
 
     const res = await apiFetch("/api/chat", {
@@ -91,6 +188,7 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
     });
 
     if (!res.ok || !res.body) {
+      streamingRef.current = false;
       setSending(false);
       if (res.status !== 403) {
         setError("응답을 받아오지 못했습니다.");
@@ -99,7 +197,13 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
     }
 
     const convId = res.headers.get("x-conversation-id");
-    if (convId) conversationIdRef.current = convId;
+    if (convId && convId !== conversationIdRef.current) {
+      conversationIdRef.current = convId;
+      loadedIdRef.current = convId; // prop이 새 id로 바뀌어도 불러오기로 덮어쓰지 않는다
+      // router.replace는 page.tsx를 다시 그려 스트리밍 상태를 흔들 수 있어, 네이티브 replaceState로 URL만 맞춘다(3-1절 7번).
+      window.history.replaceState(null, "", `/chat?conversation_id=${encodeURIComponent(convId)}`);
+      flushRef.current();
+    }
 
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -128,6 +232,7 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
         });
       }
     }
+    streamingRef.current = false;
     setSending(false);
   }
 
@@ -150,8 +255,8 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
         <IconButton icon="plus" label="새 대화" onClick={startNewConversation} />
       </header>
 
-      <div ref={scroller} role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-gutter py-6">
-        {messages.length === 0 && !sending && (
+      <div ref={scroller} onScroll={handleScroll} role="log" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-gutter py-6">
+        {messages.length === 0 && !sending && !restoring && (
           <p className="m-auto text-center text-body-sm text-ink-2">궁금한 청년정책을 편하게 물어보세요.</p>
         )}
         {messages.map((m, i) =>
@@ -169,6 +274,9 @@ export function ChatClient({ initialConversationId }: { initialConversationId: s
           ),
         )}
         {waitingForAnswer && <AnswerBlock context={context} state="searching" sources={[]} />}
+        {interrupted && (
+          <p className="m-0 text-meta text-ink-3">답변이 중간에 멈췄을 수 있어요. 새로고침하면 저장된 내용을 보여줘요.</p>
+        )}
         {error && (
           <p className="m-0 text-body-sm font-medium text-danger" role="alert">
             {error}

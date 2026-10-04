@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { browserStorage, clearAllChatSnapshots } from "../../_lib/chat-snapshot";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ENROLLMENT_STATUS_LABELS, GENDER_LABELS, OCCUPATION_TYPE_LABELS } from "../../_lib/profile-labels";
@@ -62,6 +63,7 @@ export function AccountLinks() {
 
   async function handleLogout() {
     await signOut({ redirect: false });
+    clearAllChatSnapshots(browserStorage());
     router.push("/login");
   }
 

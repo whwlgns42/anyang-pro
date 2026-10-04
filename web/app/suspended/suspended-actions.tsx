@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
+import { browserStorage, clearAllChatSnapshots } from "../_lib/chat-snapshot";
 import { useRouter } from "next/navigation";
 
 export function SuspendedActions() {
@@ -8,6 +9,7 @@ export function SuspendedActions() {
 
   async function handleLogout() {
     await signOut({ redirect: false });
+    clearAllChatSnapshots(browserStorage());
     router.push("/login");
   }
 
