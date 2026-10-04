@@ -28,6 +28,16 @@ export function requireSchedulerSecret(request: Request): Response | null {
   return null;
 }
 
+// anyang-backend-api 7-1절 — 알림 잡 트리거 전용 키. NOTIFY_TRIGGER_SECRET이 비면 항상 false.
+export function verifyNotifyTriggerSecret(request: Request): boolean {
+  return verifyHeaderSecret(request, "x-notify-secret", process.env.NOTIFY_TRIGGER_SECRET);
+}
+
+// /api/jobs/notify 전용 — 스케줄러 키 또는 notify 키. 다른 잡 라우트는 새 키를 모른다.
+export function requireNotifyJobSecret(request: Request): Response | null {
+  return verifySchedulerSecret(request) || verifyNotifyTriggerSecret(request) ? null : new Response(null, { status: 401 });
+}
+
 export function requireBackfillSecret(request: Request): Response | null {
   return verifyBackfillSecret(request) ? null : new Response(null, { status: 401 });
 }

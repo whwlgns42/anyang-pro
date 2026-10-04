@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -226,7 +226,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     16번과 대상 테이블·보존 기간이 달라 별도 작업 단위로 둔다(YAGNI에 위배되지 않음 —
     합치면 오히려 조건 분기가 늘어난다).
 
-18. **알림 잡 활성화(신규, 확인 항목 57, 재승인 대기, 값 `(미확정)`)** — [[anyang-backend-api#7-1. 알림 잡 활성화 (신규, 2026-10-04, 확인 항목 57, 설계 draft — 모든 값 `(미확정)`)]]
+18. **알림 잡 활성화(신규, 확인 항목 57, 승인)** — [[anyang-backend-api#7-1. 알림 잡 활성화 (신규, 2026-10-04, 확인 항목 57, 승인)]]
     기준. 7번(알림 잡)·9번(공유 시크릿) 수정이다. 스키마 변경 없음.
     - 18-1. `web/lib/scheduler-auth.ts`: `verifyNotifyTriggerSecret`(`x-notify-secret` ↔ `NOTIFY_TRIGGER_SECRET`)·`requireNotifyJobSecret`(scheduler 또는 새 키) 추가.
       notify 라우트만 교체, `collect`·`embed`·`ingest`·`requireAnyJobSecret`은 그대로. 테스트: 새 키 통과·기존 키 유지·타 라우트 401.

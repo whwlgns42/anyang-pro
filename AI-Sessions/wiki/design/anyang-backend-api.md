@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -62,7 +62,7 @@ Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모�
 (`published_at` 14일 상한, 알림 쿼리 한 곳), B 트리거(Supabase pg_cron + pg_net + 새 키), C 첫 활성화·롤백·구독 0개
 사용자 처리를 정한다. 새 키 `NOTIFY_TRIGGER_SECRET`(헤더 `x-notify-secret`)은 notify 라우트에서만 통한다(9절). 스키마
 변경 없음, DB 몫(확장 설치·Vault·잡 등록 SQL)은 [[anyang-database-schema#알림 잡 활성화 — DB 몫 (확인 항목 57, 2026-10-04, 설계 draft)]]
-가 소유한다. 모든 값은 `(미확정)`이며 사용자 승인으로 확정된다. status는 draft다.
+가 소유한다. 모든 값은 사용자 승인으로 확정됐다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -1161,7 +1161,7 @@ database에 요청한다).
 | `POST /api/jobs/collect?mode=full` | 공지 수집기 정밀 점검(5-1절): 1~2페이지 전부 상세, 본문 수정 감지, 이어서 임베딩 | 하루 1회 `0 19 * * *` UTC = 서울 04:00(확정, user, 2026-10-04) |
 | `POST /api/jobs/collect?mode=backfill&from=N&to=M` | 일회성 전체 수집 분할 호출(5-1절 7번): 한 호출 최대 5페이지, 이어서 시간 예산까지 임베딩 반복. 인증은 `x-backfill-secret` | 트리거 없음. 사용자가 백필 때만 수동 호출(cron 등록 안 함) |
 | `POST /api/jobs/embed` | 임베딩 파이프라인(6절) 실행 | 수집 잡이 같은 요청에서 이어서 호출(별도 트리거 없음). 단독 호출은 수동 복구용(`x-backfill-secret`도 허용, 5-1절 7번) |
-| `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 5분마다 `*/5 * * * *`(미확정, 확인 항목 57). 트리거·인증·활성화는 7-1절 |
+| `POST /api/jobs/notify` | 알림 시각이 된 사용자에게 새 공지 매칭·푸시 | 5분마다 `*/5 * * * *`(확인 항목 57). 트리거·인증·활성화는 7-1절 |
 
 - **2026-10-04 개정(확인 항목 56, 재승인 대기)**: 위 표의 `collect` 세 줄은 **운영에서 쓰지 않는다**. 수집 트리거는 보드의 systemd timer
   (quick 10분·full 서울 04:00, 값 유지)가 맡고 결과는 `POST /api/ingest/notices`로 온다([[anyang-board-collector]] A·C). `pg_cron`은 설치된 적이 없고
@@ -1254,7 +1254,7 @@ database에 요청한다).
   아니다.
 - Vercel Cron은 이전 가능성 원칙 3에 따라 쓰지 않는다.
 
-### 7-1. 알림 잡 활성화 (신규, 2026-10-04, 확인 항목 57, 설계 draft — 모든 값 `(미확정)`)
+### 7-1. 알림 잡 활성화 (신규, 2026-10-04, 확인 항목 57, 승인)
 
 현황(코드·문서 읽기 전용 확인): `/api/jobs/notify`는 7절대로 구현돼 있으나 운영에서 한 번도 호출된 적이 없다(트리거 없음,
 `notify_logs` 0행). 운영 실측(users 4, `notify_settings` 0행, `push_subscriptions` 0, `user_preferences` 7행·2명, notices 462
@@ -1266,19 +1266,19 @@ database에 요청한다).
   enabled_at`이 백필 462건을 이미 막는다. 아래 두 틈만 막으면 된다.
 - **틈 1 수정된 옛 글**: `notice-store`가 본문이 바뀐 글을 upsert하면 `collected_at`이 `now()`로 오른다. `published_at`은 그대로다.
 - **틈 2 보드가 처음 수집한 옛 글**: `published_at`은 오래됐지만 `collected_at`이 지금이다.
-- **채택(미확정)**: 알림 후보 공지 쿼리 **한 곳**(`web/app/api/jobs/notify/route.ts`의 사용자별 공지 조회, 현재 `n.collected_at > $2`
+- **채택**: 알림 후보 공지 쿼리 **한 곳**(`web/app/api/jobs/notify/route.ts`의 사용자별 공지 조회, 현재 `n.collected_at > $2`
   옆)에 조건 하나를 더한다. 추천 피드·채팅·관리자 쿼리는 건드리지 않는다.
   ```sql
   and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)
   ```
-  `$3`은 코드 상수 `NOTIFY_MAX_AGE_DAYS = 14`(미확정, database 근거 수용: 최근 7일 2건·30일 5건이라 짧으면 알림이 거의 안 나가고 길면
+  `$3`은 코드 상수 `NOTIFY_MAX_AGE_DAYS = 14`(database 근거 수용: 최근 7일 2건·30일 5건이라 짧으면 알림이 거의 안 나가고 길면
   옛 글이 섞인다). 환경변수로 만들지 않는다(바꾸려면 어차피 재배포, YAGNI). 기존 `collected_at > enabled_at`은 그대로 두고 AND로 겹친다.
 - **`published_at` 날짜만(00:00 UTC) 처리**: 시각이 없어 한도는 일 단위다. 00:00 UTC가 서울 09:00이라 경계 오차는 최대 약 9시간이며(추정, 근거:
   UTC+9) 14일 한도에는 무의미하다. 오늘 날짜 글은 항상 통과한다. null이면 `collected_at`으로 대체한다(실측 null 0건, 방어용).
 - **수정된 옛 글**: 14일 밖 글은 `published_at`이 낡아 차단된다. 14일 안 글이 수정되면 통과할 수 있으나 글 id가 같아서
   `notify_logs unique(user_id, notice_id)`가 이미 보낸 분의 재발송을 막고, 못 보낸 분이면 새 글로 취급하는 것이 맞다.
 - **보드가 처음 수집한 옛 글**: `published_at`이 14일 밖이면 차단된다. 반대 비용은 보드가 14일 넘게 멈췄다 복구될 때 그 사이 글이 푸시되지 않는
-  것이다(화면에는 보인다). 수용한다(미확정).
+  것이다(화면에는 보인다). 수용한다.
 - **발송 상한(현행 유지)**: 사용자별 공지 조회가 `limit 20`(청크)이라 한 사용자가 한 번의 실행에서 받는 공지는 최대 20건이다.
 - **거절한 안**: (가) 백필분 `notify_logs` 사전 기록 — 지금 효과 0, 미래 사용자에 무력, 행만 쌓임. (다) 컷오프 시각 — `enabled_at`과 중복.
   `notice-store`가 `collected_at`을 올리지 않게 바꾸는 안 — 관리자 정렬·stale 판정과 얽혀 변경 범위가 커진다.
@@ -1300,7 +1300,7 @@ database에 요청한다).
 - **권장 근거**: 보드는 안양시 수집만 맡기고 알림은 보드 상태와 분리한다. UNO Q 이전 시에는 트리거만 `cron + curl`로 교체한다(12절 6번). 가동률의
   약점은 Supabase 무료 프로젝트 일시중지 정책이 이 프로젝트에 적용되는지 확인하지 못한 점이다(추정, 근거: 기억, 미확인) — 멈추면 앱 전체가 멈추므로
   (1)만의 추가 위험은 아니다.
-- **새 키(미확정)**: 환경변수 `NOTIFY_TRIGGER_SECRET`(Vercel), 요청 헤더 `x-notify-secret`, Vault 이름 `notify_trigger_secret`(database 문서의
+- **새 키**: 환경변수 `NOTIFY_TRIGGER_SECRET`(Vercel), 요청 헤더 `x-notify-secret`, Vault 이름 `notify_trigger_secret`(database 문서의
   가칭 헤더 `x-notify-secret`을 그대로 채택 — database 문서와 어긋남 없음). 값은 사용자가 만들어 Vercel과 Vault에 같게 넣는다(에이전트는 만들지 않고
   문서·로그에 남기지 않는다). 기존 `SCHEDULER_SHARED_SECRET` 값·헤더는 바꾸지 않는다.
 - **notify 라우트 인증 변경**: `web/lib/scheduler-auth.ts`에 `verifyNotifyTriggerSecret`(`x-notify-secret` ↔ `NOTIFY_TRIGGER_SECRET`, 기존
@@ -1309,7 +1309,7 @@ database에 요청한다).
   notify는 `x-backfill-secret`·`x-collector-secret`을 계속 받지 않는다. 기존 `x-scheduler-secret` 경로는 유지한다(UNO Q cron+curl 호환).
   `x-notify-secret`이 `collect`·`embed`·`ingest`에서 401이 되는지를 테스트로 고정한다.
 - **함수 실행 시간**: notify 라우트에는 `export const maxDuration`이 없다. 설정 없으면 기본 한도에 걸릴 수 있어
-  ([[anyang-jobs-collect-missing-maxduration]]) `export const maxDuration = 60`(미확정)을 추가한다. pg_net 타임아웃은 database 안 30초(미확정)다.
+  ([[anyang-jobs-collect-missing-maxduration]]) `export const maxDuration = 60`을 추가한다. pg_net 타임아웃은 database 안 30초다.
   호출 쪽이 먼저 끊어도 Vercel 함수가 끝까지 실행되는지는 확인하지 못했다. 끊겨서 `pending`이 남으면 같은 (사용자, 공지)가 다음 날 창에 다시 매칭될 때
   10분 지난 `pending`으로 재선점돼 하루 늦게 간다(7절 기존 설계). 첫 실행의 `net._http_response` 응답 시간으로 30초 안에 끝나는지 확인한다.
 
@@ -1332,7 +1332,7 @@ database에 요청한다).
    | (b) `enabled_at` 당기기(database 안) | 테스트 계정 1행의 `enabled_at`을 백필 구간 이전으로 당김 | 1행 UPDATE, 롤백은 원래 값 복원 | **A의 14일 상한이 그대로 걸려** 최근 14일에 게시된 글만 받는다(현재 몇 건). 그중 선호와 유사도 0.75 이상이 없으면 0건이다 |
    | (c) 사전 읽기 전용 조회 후 선택 | (b) 전에 database가 같은 쿼리(`collected_at > 당길 값`, `published_at` 14일, 유사도 0.75)를 읽기 전용으로 돌려 받을 공지 수를 센다 | 없음 | 0건이면 (b)는 푸시 경로를 확인하지 못한다 |
 
-   권장(미확정): (c)로 먼저 센다. 1건 이상이면 (b)로 확인한다. 0건이면 (a)로 기다리며 이번에는 "cron → 라우트 → 200"까지만 확인한 것으로 보고한다.
+   권장: (c)로 먼저 센다. 1건 이상이면 (b)로 확인한다. 0건이면 (a)로 기다리며 이번에는 "cron → 라우트 → 200"까지만 확인한 것으로 보고한다.
    푸시 전달 자체는 운영에서 아직 확인된 적이 없다. 로컬 코드(`web-push` 연동)와 테스트 목만 검증돼 있다.
 6. **확인**: `cron.job_run_details` 5분마다 성공, `net._http_response` 200, `notify_logs`에 테스트 계정 행의 `result`가 `success`, 실제 기기에서 알림 수신.
    알림을 눌렀을 때 `/notices/[id]`로 이동하는지도 본다(서비스워커, frontend 소관 동작 확인).
@@ -1340,7 +1340,7 @@ database에 요청한다).
    지우고 재배포하면 새 헤더는 401이 된다. ③ 코드 커밋을 되돌린다. 테스트 계정은 알림을 끄고 구독을 해지한다. 생긴 `notify_logs` 행은 그대로 둬도 된다
    (그 계정은 이미 받은 공지만 막힌다). (b)를 썼다면 `enabled_at`을 원래 값으로 되돌린다.
 
-- **구독 0개 사용자의 `notify_logs failed` 영구 소진 — 처리 제안(미확정)**: 지금 `sendToAllDevices`는 구독이 없으면 성공 0·실패 0을 돌려주고 route가
+- **구독 0개 사용자의 `notify_logs failed` 영구 소진 — 처리 제안**: 지금 `sendToAllDevices`는 구독이 없으면 성공 0·실패 0을 돌려주고 route가
   이를 `failed`(`error_summary` `unknown`)로 기록한다. `unique(user_id, notice_id)` 때문에 나중에 구독해도 그 공지는 다시 보내지 않는다. 같은 일이 모든
   기기가 410/404로 지워진 경우에도 생긴다. 수정: 발송 결과가 `successCount === 0 && failedCount === 0`이면 `failed`로 쓰지 않고 `delete from notify_logs where user_id
   = $1 and notice_id = $2 and result = 'pending'`로 선점 행을 지우고 넘어간다(다음에 구독하면 다시 대상이 된다). 구독은 있는데 모두 실패한 경우(실패 ≥ 1)는
@@ -1349,7 +1349,7 @@ database에 요청한다).
   당기는 방법이 있으나 구독 API 변경이라 이번에 하지 않는다. 운영 `notify_logs`가 0행이라 정리할 기존 행은 없다.
 - **frontend 영향**: 없다. API 계약·응답이 바뀌지 않는다. 테스트 계정은 기존 설정 화면(`notifications-client.tsx`)의 구독·알림 켜기를 쓴다.
 
-#### D. 사용자 결정·`(미확정)` 목록
+#### D. 사용자 결정 목록
 
 1. 일괄 발송 방지로 (나)를 쓸지, 한도 N일(제안 14).
 2. 트리거로 (1) pg_cron + pg_net을 쓸지(권장), 알림 주기 5분.
@@ -1395,7 +1395,7 @@ database에 요청한다).
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 클라이언트(서비스워커/`PushManager.subscribe`)가 구독 생성에 쓰는 공개키. `VAPID_PUBLIC_KEY`와 같은 값이며 `NEXT_PUBLIC_` 접두사로 브라우저에 노출된다(확정, 확인 항목 31) |
 | `APP_ORIGIN` | 배포 origin. 커스텀 도메인을 붙이기 전까지는 Vercel 기본 도메인, 붙인 뒤에는 그 도메인(OAuth 리다이렉트, VAPID subject, 푸시에 사용) |
 | `ADMIN_EMAILS` | 관리자 이메일 목록(쉼표 구분, 예: `a@x.com,b@y.com`). 13절 `/api/admin/*` 인가에만 쓴다. DB 역할 컬럼 없음([[anyang-service-scope]] 확정) |
-| `NOTIFY_TRIGGER_SECRET` | 알림 잡 트리거(Supabase pg_net → `POST /api/jobs/notify`)의 `x-notify-secret` 인증(신규, 확인 항목 57, `(미확정)`). **notify 라우트에서만** 통한다. 비어 있으면 그 헤더는 항상 401. 사용자가 값을 만들어 Vercel과 Supabase Vault(`notify_trigger_secret`)에 같게 넣는다. 값은 문서에 쓰지 않는다. 7-1절 |
+| `NOTIFY_TRIGGER_SECRET` | 알림 잡 트리거(Supabase pg_net → `POST /api/jobs/notify`)의 `x-notify-secret` 인증(신규, 확인 항목 57). **notify 라우트에서만** 통한다. 비어 있으면 그 헤더는 항상 401. 사용자가 값을 만들어 Vercel과 Supabase Vault(`notify_trigger_secret`)에 같게 넣는다. 값은 문서에 쓰지 않는다. 7-1절 |
 | `COLLECTOR_CONTACT` | 공지 수집기 User-Agent에 넣는 문의 연락처(선택값, 확정, 확인 항목 55-a). 실제 값은 사용자가 Vercel·로컬 `.env.local`에 직접 넣는다. 미설정이면 연락처 없는 UA `anyang-youth-policy-bot/1.0`로 수집한다(5-1절 8번) |
 | `COLLECTOR_INGEST_SECRET` | 보드 → `POST /api/ingest/notices`·`/api/jobs/embed`의 `x-collector-secret` 인증(신규, 확인 항목 56, ``). 비어 있으면 받기 API 전체 401. 사용자가 값을 만들어 Vercel과 보드 `collector.env`에 같게 넣는다. 값은 문서에 쓰지 않는다. [[anyang-board-collector]] C-1 |
 | `DIRECT_COLLECT_ENABLED` | 서버 직접 수집(`/api/jobs/collect`, 관리자 수동 수집)을 켜는 스위치(신규, 선택, 확인 항목 56, ``). 없으면 꺼짐(410). 운영에서는 추가하지 않는다. [[anyang-board-collector]] D |

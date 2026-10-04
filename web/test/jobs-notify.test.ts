@@ -12,7 +12,7 @@ vi.mock("@/lib/web-push", () => ({
   },
 }));
 
-const { POST } = await import("@/app/api/jobs/notify/route");
+const { POST, maxDuration } = await import("@/app/api/jobs/notify/route");
 
 function makeRequest(secret?: string) {
   return new Request("http://localhost/api/jobs/notify", {
@@ -332,5 +332,69 @@ describe("POST /api/jobs/notify", () => {
     const json = (await res.json()) as { sent_count: number };
     expect(json.sent_count).toBe(0);
     expect(sendPushMock).not.toHaveBeenCalled();
+  });
+
+  it("exports maxDuration = 60", () => {
+    expect(maxDuration).toBe(60);
+  });
+
+  it("notice query carries the 14-day published_at limit as $3 (AND with collected_at > enabled_at)", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("from notify_settings ns") && text.includes("join users")) return { rows: [{ user_id: "u1" }] };
+      if (text.includes("select enabled_at from notify_settings")) return { rows: [{ enabled_at: new Date("2026-01-01") }] };
+      if (text.includes("select embedding from user_preferences")) return { rows: [{ embedding: JSON.stringify([1, 0]) }] };
+      return { rows: [] };
+    });
+    await POST(makeRequest("secret"));
+    const call = queryMock.mock.calls.find(([sql]) => String(sql).includes("from notice_chunks nc"));
+    expect(String(call?.[0])).toContain("n.collected_at > $2");
+    expect(String(call?.[0])).toContain("coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)");
+    expect(call?.[1]?.[2]).toBe(14);
+  });
+
+  function zeroDeviceMock(subscriptions: { endpoint: string }[]) {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("from notify_settings ns") && text.includes("join users")) return { rows: [{ user_id: "u1" }] };
+      if (text.includes("select enabled_at from notify_settings")) return { rows: [{ enabled_at: new Date("2026-01-01") }] };
+      if (text.includes("select embedding from user_preferences")) return { rows: [{ embedding: JSON.stringify([1, 0]) }] };
+      if (text.includes("from notice_chunks nc")) return { rows: [{ id: "notice-1", similarity: 0.9 }] };
+      if (text.includes("insert into notify_logs")) return { rows: [], rowCount: 1 };
+      if (text.includes("select endpoint, p256dh, auth from push_subscriptions")) {
+        return { rows: subscriptions.map((s) => ({ ...s, p256dh: "p", auth: "a" })) };
+      }
+      if (text.includes("select title from notices")) return { rows: [{ title: "t" }] };
+      return { rows: [] };
+    });
+  }
+
+  it("user with zero subscriptions: pending row is deleted, never marked failed", async () => {
+    zeroDeviceMock([]);
+    const res = await POST(makeRequest("secret"));
+    expect(((await res.json()) as { sent_count: number }).sent_count).toBe(0);
+    const del = queryMock.mock.calls.find(([sql]) => String(sql).includes("delete from notify_logs"));
+    expect(del?.[1]).toEqual(["u1", "notice-1"]);
+    expect(String(del?.[0])).toContain("result = 'pending'");
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("result = 'failed'"))).toBe(false);
+  });
+
+  it("all devices gone (410): pending row deleted, not failed", async () => {
+    zeroDeviceMock([{ endpoint: "g" }]);
+    sendPushMock.mockRejectedValue(Object.assign(new Error("Gone"), { statusCode: 410 }));
+    await POST(makeRequest("secret"));
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("delete from notify_logs"))).toBe(true);
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("result = 'failed'"))).toBe(false);
+  });
+
+  it("accepts x-notify-secret and rejects it when NOTIFY_TRIGGER_SECRET is empty", async () => {
+    process.env.NOTIFY_TRIGGER_SECRET = "nk";
+    queryMock.mockResolvedValue({ rows: [] });
+    const ok = await POST(new Request("http://localhost/api/jobs/notify", { method: "POST", headers: { "x-notify-secret": "nk" } }));
+    expect(ok.status).toBe(200);
+    process.env.NOTIFY_TRIGGER_SECRET = "";
+    const no = await POST(new Request("http://localhost/api/jobs/notify", { method: "POST", headers: { "x-notify-secret": "" } }));
+    expect(no.status).toBe(401);
+    delete process.env.NOTIFY_TRIGGER_SECRET;
   });
 });

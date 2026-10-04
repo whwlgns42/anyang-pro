@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { requireSchedulerSecret } from "@/lib/scheduler-auth";
+import { requireNotifyJobSecret } from "@/lib/scheduler-auth";
 import { sendPushNotification, isGoneSubscriptionError } from "@/lib/web-push";
 
 // anyang-backend-api 7절 — 알림 잡. 시각 창 매칭 + 코사인 유사도 + notify_logs pending 선점.
 const SIMILARITY_THRESHOLD = 0.75; // 설계 제안값(미확정)
+// anyang-backend-api 7-1절 — 일괄 발송 방지: 게시일 기준 14일 상한.
+const NOTIFY_MAX_AGE_DAYS = 14;
+
+export const maxDuration = 60;
 const PENDING_RETRY_MINUTES = 10;
 
 // anyang-database-schema "pg_cron / pg_net 잡 정의" 절의 대상 사용자 선정 SQL 그대로(자정
@@ -98,7 +102,7 @@ async function sendToAllDevices(userId: string, noticeId: string): Promise<SendR
 }
 
 export async function POST(request: Request) {
-  const authError = requireSchedulerSecret(request);
+  const authError = requireNotifyJobSecret(request);
   if (authError) return authError;
 
   const { rows: candidates } = await pool.query<{ user_id: string }>(CANDIDATE_USERS_SQL);
@@ -126,9 +130,10 @@ export async function POST(request: Request) {
          join notices n on n.id = nc.notice_id
         where n.hidden_at is null
           and n.collected_at > $2
+          and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)
         order by nc.embedding <=> $1
         limit 20`,
-      [JSON.stringify(avgPref), enabledAt],
+      [JSON.stringify(avgPref), enabledAt, NOTIFY_MAX_AGE_DAYS],
     );
 
     const matched = new Map<string, number>();
@@ -151,6 +156,12 @@ export async function POST(request: Request) {
           [userId, noticeId, failedCount],
         );
         sentCount++;
+      } else if (failedCount === 0) {
+        // 구독 0개(또는 전부 만료 삭제): failed로 소진하지 않고 선점 행을 지워 구독 후 재대상이 되게 한다(7-1절).
+        await pool.query(
+          `delete from notify_logs where user_id = $1 and notice_id = $2 and result = 'pending'`,
+          [userId, noticeId],
+        );
       } else {
         await pool.query(
           `update notify_logs set result = 'failed', sent_at = now(), error_summary = $3, failed_device_count = $4
