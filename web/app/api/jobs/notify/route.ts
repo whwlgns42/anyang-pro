@@ -7,6 +7,9 @@ import { sendToUserDevices } from "@/lib/push-send";
 const SIMILARITY_THRESHOLD = 0.70; // 확인 항목 57(n) 사용자 결정(2026-10-04, 승인된 설계 29차)으로 0.75에서 변경
 // anyang-backend-api 7-1절 — 일괄 발송 방지: 게시일 기준 14일 상한.
 const NOTIFY_MAX_AGE_DAYS = 14;
+// anyang-backend-api 7-2절(확인 항목 59, 승인된 설계 30차): 직군 임계값·합산 상한.
+const OCCUPATION_THRESHOLD = 0.60;
+const MAX_MATCHES = 20;
 
 export const maxDuration = 60;
 const PENDING_RETRY_MINUTES = 10;
@@ -43,6 +46,38 @@ function averageVectors(vectors: number[][]): number[] {
     for (let i = 0; i < dim; i++) sum[i] += v[i];
   }
   return sum.map((s) => s / vectors.length);
+}
+
+// anyang-backend-api 7-2절 — 사용자 직군의 문장 벡터. 직군 null·other·행 없음·테이블 없음(0022 전 배포)이면 null → 현행(선호만).
+async function getOccupationVector(userId: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<{ embedding: string }>(
+      `select oe.embedding
+         from profiles p
+         join occupation_embeddings oe on oe.code = p.occupation_type
+        where p.user_id = $1`,
+      [userId],
+    );
+    return rows[0]?.embedding ?? null;
+  } catch (err) {
+    if ((err as { code?: string }).code === "42P01") return null; // undefined_table
+    throw err;
+  }
+}
+
+async function queryNotices(vector: string, enabledAt: Date) {
+  const { rows } = await pool.query<{ id: string; similarity: number }>(
+    `select n.id, 1 - (nc.embedding <=> $1) as similarity
+       from notice_chunks nc
+       join notices n on n.id = nc.notice_id
+      where n.hidden_at is null
+        and n.collected_at > $2
+        and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)
+      order by nc.embedding <=> $1
+      limit 20`,
+    [vector, enabledAt, NOTIFY_MAX_AGE_DAYS],
+  );
+  return rows;
 }
 
 async function tryReserve(userId: string, noticeId: string): Promise<boolean> {
@@ -90,31 +125,30 @@ export async function POST(request: Request) {
       `select embedding from user_preferences where user_id = $1 order by updated_at desc limit 5`,
       [userId],
     );
-    if (prefRows.length === 0) continue; // 선호 없으면 매칭 대상 없음(설계 확정)
+    const occupationVector = await getOccupationVector(userId);
+    if (prefRows.length === 0 && !occupationVector) continue; // 선호도 직군 벡터도 없으면 매칭 대상 없음(7-2절)
 
-    const avgPref = averageVectors(prefRows.map((r) => JSON.parse(r.embedding) as number[]));
-
-    const { rows: noticeRows } = await pool.query<{ id: string; similarity: number }>(
-      `select n.id, 1 - (nc.embedding <=> $1) as similarity
-         from notice_chunks nc
-         join notices n on n.id = nc.notice_id
-        where n.hidden_at is null
-          and n.collected_at > $2
-          and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)
-        order by nc.embedding <=> $1
-        limit 20`,
-      [JSON.stringify(avgPref), enabledAt, NOTIFY_MAX_AGE_DAYS],
-    );
-
+    // 관심사(0.70)와 직군(0.60)을 각자 임계값으로 거른 합집합. 같은 공지는 높은 유사도, 합산 상한 20건.
     const matched = new Map<string, number>();
-    for (const row of noticeRows) {
-      if (row.similarity >= SIMILARITY_THRESHOLD) {
+    const collect = (rows: { id: string; similarity: number }[], threshold: number) => {
+      for (const row of rows) {
+        if (row.similarity < threshold) continue;
         const prev = matched.get(row.id);
         if (prev === undefined || row.similarity > prev) matched.set(row.id, row.similarity);
       }
+    };
+    if (prefRows.length > 0) {
+      const avgPref = averageVectors(prefRows.map((r) => JSON.parse(r.embedding) as number[]));
+      collect(await queryNotices(JSON.stringify(avgPref), enabledAt), SIMILARITY_THRESHOLD);
     }
+    if (occupationVector) collect(await queryNotices(occupationVector, enabledAt), OCCUPATION_THRESHOLD);
 
-    for (const noticeId of matched.keys()) {
+    const noticeIds = [...matched.entries()]
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, MAX_MATCHES)
+      .map(([id]) => id);
+
+    for (const noticeId of noticeIds) {
       const reserved = await tryReserve(userId, noticeId);
       if (!reserved) continue;
 

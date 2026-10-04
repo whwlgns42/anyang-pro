@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -247,7 +247,7 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     - 순서: 19-1 → 19-2 → 19-3(독립 커밋 가능). 19-4는 frontend 구현과 같은 배포에 나가야 한다(서버가 `url`을 보내는데 서비스워커가 모르면 클릭이 `/notices`로 간다 — 서비스워커가 먼저 나가도 해가 없고 서버가 먼저 나가도 푸시는 오지만 이동이 틀린다).
     - 의존: 7(발송 루프)·8(`web-push`)·1-5(`auth_attempts`) 구현 완료분.
 
-20. **직군 매칭 반영(신규, 확인 항목 59, 설계 draft, 모든 값 `(미확정)`)** — [[anyang-backend-api#7-2. 직군 매칭 반영 (신규, 2026-10-04, 확인 항목 59, 설계 draft, 이 절의 제안값은 모두 `(미확정)`)]] 기준. 스키마는 [[anyang-database-schema]] 0022(database 작업이 먼저).
+20. **직군 매칭 반영(신규, 확인 항목 59, 승인된 설계 30차)** — [[anyang-backend-api#7-2. 직군 매칭 반영 (신규, 2026-10-04, 확인 항목 59, 설계 draft)]] 기준. 스키마는 [[anyang-database-schema]] 0022(database 작업이 먼저).
     - 20-0. (구현 전, database) v2 문장 벡터로 직군 유사도 재실측 — 7-2절 C 판단 기준 통과 여부 확인. 통과하지 못하면 20-1 이하를 시작하지 않고 pm에게 (c) 전환 제안으로 보고한다.
     - 20-1. `web/lib/occupation-sentences.ts`: 직군 코드 7종의 문장 상수(v2, 확정된 것).
     - 20-2. `web/scripts/seed-occupation-embeddings.ts`: 문장을 `embedText`로 임베딩해 `occupation_embeddings`에 upsert(1회 실행). 테스트: 목 임베딩, 재실행 행 수 불변. 운영 실행은 사용자 승인 뒤.

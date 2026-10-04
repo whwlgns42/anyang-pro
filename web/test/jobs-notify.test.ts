@@ -415,4 +415,96 @@ describe("POST /api/jobs/notify", () => {
     expect(no.status).toBe(401);
     delete process.env.NOTIFY_TRIGGER_SECRET;
   });
+  // anyang-backend-api 7-2절(확인 항목 59) — 직군 매칭. 직군 벡터는 "[0,1]", 선호 벡터는 [1,0]으로 구분한다.
+  function occMock(opts: { pref: boolean; occ: "vec" | "none" | "no-table"; prefSims?: Record<string, number>; occSims?: Record<string, number> }) {
+    queryMock.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text.includes("from notify_settings ns") && text.includes("join users")) return { rows: [{ user_id: "u1" }] };
+      if (text.includes("select enabled_at from notify_settings")) return { rows: [{ enabled_at: new Date("2026-01-01") }] };
+      if (text.includes("select embedding from user_preferences")) {
+        return { rows: opts.pref ? [{ embedding: JSON.stringify([1, 0]) }] : [] };
+      }
+      if (text.includes("join occupation_embeddings")) {
+        if (opts.occ === "no-table") throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
+        return { rows: opts.occ === "vec" ? [{ embedding: "[0,1]" }] : [] };
+      }
+      if (text.includes("from notice_chunks nc")) {
+        const sims = params?.[0] === "[0,1]" ? opts.occSims : opts.prefSims;
+        return { rows: Object.entries(sims ?? {}).map(([id, similarity]) => ({ id, similarity })) };
+      }
+      if (text.includes("insert into notify_logs")) return { rows: [], rowCount: 1 };
+      if (text.includes("select endpoint, p256dh, auth from push_subscriptions")) return { rows: [{ endpoint: "e", p256dh: "p", auth: "a" }] };
+      if (text.includes("select title from notices")) return { rows: [{ title: "t" }] };
+      return { rows: [] };
+    });
+    sendPushMock.mockResolvedValue(undefined);
+  }
+  const noticeQueries = () => queryMock.mock.calls.filter(([sql]) => String(sql).includes("from notice_chunks nc"));
+  const sentIds = () =>
+    queryMock.mock.calls.filter(([sql]) => String(sql).includes("result = 'success'")).map(([, p]) => (p as unknown[])[1]);
+
+  it("occupation: no occupation vector or missing table behaves as before (preference only, no occupation query)", async () => {
+    for (const occ of ["none", "no-table"] as const) {
+      queryMock.mockReset();
+      occMock({ pref: true, occ, prefSims: { a: 0.9 }, occSims: { b: 0.9 } });
+      const json = (await (await POST(makeRequest("secret"))).json()) as { sent_count: number };
+      expect(json.sent_count).toBe(1);
+      expect(noticeQueries()).toHaveLength(1);
+    }
+  });
+
+  it("occupation: no preference + occupation vector -> notified by occupation query alone (0.60)", async () => {
+    occMock({ pref: false, occ: "vec", occSims: { a: 0.65, b: 0.55 } });
+    const json = (await (await POST(makeRequest("secret"))).json()) as { sent_count: number };
+    expect(json.sent_count).toBe(1);
+    expect(sentIds()).toEqual(["a"]);
+  });
+
+  it("occupation: no preference and no occupation vector -> skipped", async () => {
+    occMock({ pref: false, occ: "none" });
+    const json = (await (await POST(makeRequest("secret"))).json()) as { sent_count: number };
+    expect(json.sent_count).toBe(0);
+    expect(noticeQueries()).toHaveLength(0);
+  });
+
+  it("occupation: union with separate thresholds, same notice once, cap 20", async () => {
+    // 선호 0.70: a(0.72) 통과, b(0.65) 탈락. 직군 0.60: a(0.62) 중복, b(0.65) 통과, c(0.59) 탈락.
+    occMock({ pref: true, occ: "vec", prefSims: { a: 0.72, b: 0.65 }, occSims: { a: 0.62, b: 0.65, c: 0.59 } });
+    const json = (await (await POST(makeRequest("secret"))).json()) as { sent_count: number };
+    expect(json.sent_count).toBe(2);
+    expect(sentIds().sort()).toEqual(["a", "b"]);
+
+    queryMock.mockReset();
+    const many = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`p${i}`, 0.9]));
+    const many2 = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`o${i}`, 0.8]));
+    occMock({ pref: true, occ: "vec", prefSims: many, occSims: many2 });
+    expect(((await (await POST(makeRequest("secret"))).json()) as { sent_count: number }).sent_count).toBe(20);
+  });
+
+  it("occupation: both queries carry hidden/enabled_at/14-day conditions", async () => {
+    occMock({ pref: true, occ: "vec" });
+    await POST(makeRequest("secret"));
+    const calls = noticeQueries();
+    expect(calls).toHaveLength(2);
+    for (const [sql, params] of calls) {
+      expect(String(sql)).toContain("n.hidden_at is null");
+      expect(String(sql)).toContain("n.collected_at > $2");
+      expect(String(sql)).toContain("make_interval(days => $3)");
+      expect((params as unknown[])[2]).toBe(14);
+    }
+  });
+
+  it("occupation: already-reserved (user, notice) is not resent via the occupation path", async () => {
+    occMock({ pref: false, occ: "vec", occSims: { a: 0.9 } });
+    const base = queryMock.getMockImplementation()!;
+    queryMock.mockImplementation(async (sql: string, params?: unknown[]) => {
+      const text = String(sql);
+      if (text.includes("insert into notify_logs")) return { rows: [], rowCount: 0 };
+      if (text.includes("update notify_logs set reserved_at")) return { rows: [], rowCount: 0 };
+      return base(sql, params);
+    });
+    const json = (await (await POST(makeRequest("secret"))).json()) as { sent_count: number };
+    expect(json.sent_count).toBe(0);
+    expect(sendPushMock).not.toHaveBeenCalled();
+  });
 });
