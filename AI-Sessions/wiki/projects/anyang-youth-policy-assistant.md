@@ -435,6 +435,17 @@ owner: pm
       - 롤백: `select cron.alter_job((select jobid from cron.job where jobname='notify-job-trigger'), active := false);`(일시 중지) / `select cron.unschedule('notify-job-trigger');` / Vault 2건 삭제 / `drop extension pg_cron`(다른 잡 없을 때만).
       - **테스트 계정 단계에서 멈춤(사용자 할 일)**: 선호(기억)가 있는 계정(현재 2명) 중 하나로 운영 앱 `/settings/notifications`에서 브라우저 알림 허용(푸시 구독) → 알림 켜기 → 알림 시각을 지금 + 약 15분(서울 시각)으로 저장. iPhone은 홈 화면에 앱을 추가한 PWA에서만 웹 푸시가 된다. 끝나면 pm 재호출 → database가 그 계정이 받을 공지 수를 읽기 전용으로 세고(14일 상한·유사도 0.75), 1건 이상이면 그 계정 `enabled_at`만 백필 이전으로 당김(승인된 운영 1행) → 알림 시각 창에서 발송·`notify_logs` success·기기 수신·`/notices/[id]` 이동 확인. 0건이면 새 공지 대기로 하고 "cron → 라우트 → 200"까지만 확인한 것으로 기록.
     - 확인 못 함: pg_net이 30초에 끊었을 때 Vercel 함수가 끝까지 도는지(끊겨 `pending`이 남으면 다음 날 창에서 다시 선점돼 하루 늦게 발송 — 첫 실행 응답 시간으로 확인), Supabase 무료 프로젝트 일시중지 정책 적용 여부, 운영 Vercel `VAPID_*` 3개 존재, 개발용 Supabase 프로젝트 존재.
+    - **테스트 결과(2026-10-04, 메인 세션 실측)**: 테스트 계정(user `2646968e…`)이 알림을 켬 — notify_time 12:06, enabled_at 12:04 KST, 구독 1, 선호 6. 12:00·12:05 cron 200 `{"sent_count":0}`. 이 계정 선호(최근 5개 평균)와 14일 이내 공지 3건의 최대 유사도 0.728(일자리 박람회)·0.726(역량강화 특강)·0.633 — 모두 임계값 0.75 미만이라 `enabled_at`을 당겨도 0건 → 당기지 않음(운영 데이터 무변경). 푸시 실제 전달은 아직 미확인.
+    - (n) **확인 필요(사용자 판단, 이번엔 바꾸지 않음)**: 유사도 임계값 0.75가 실제로는 거의 발송되지 않는 수준일 수 있다(테스트 계정 최댓값 0.728). 바꾸면 설계 변경(backend-api 7절).
+58. **새 요청(2026-10-04, user, 메인 세션 전달 — 테스트 알림 버튼, 사용자가 승인한 범위로 설계·구현, 재승인 없음)**:
+    - backend: `POST /api/notify-settings/test` — 로그인 세션 인증, 본인 `push_subscriptions`에만 발송, payload 제목 "테스트 알림입니다"·누르면 `/settings/notifications`, 410·404 구독은 기존 규칙대로 삭제, `notify_logs` 미기록, 사용자당 1분 1회 제한(429), 응답 `{success_count, failed_count}`, 구독 0이면 409 `NO_SUBSCRIPTION`, 정지 사용자는 기존 정지 규칙.
+    - frontend: 알림 설정 화면에 "테스트 알림 보내기" 버튼, 결과 안내 3가지(성공 n대 / 구독 없음 / 잠시 후 다시 시도), 기존 화면 스타일·taste-skill, 서비스 워커 알림 클릭 이동이 테스트 payload에서도 동작.
+    - 순서: 설계 반영(backend-api·frontend-screens·tasks) → 28차 → 구현·test·build → code-review → 커밋 → push → deploy → 운영 확인(키 없이 401) → 보고. 실기기 수신 확인은 메인 세션·사용자.
+    - 진행: `anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(28차 전 단계).
+    - 설계 반영(2026-10-04): backend [[anyang-backend-api]] 8-1절·[[anyang-backend-tasks]] 19(제한은 스키마 변경 없이 기존 `auth_attempts` 사용 — 운영 DB에 check 제약 없음 확인, 구독 0이면 슬롯 안 씀, payload에 선택 필드 `url` 추가·공지 payload 불변), frontend [[anyang-frontend-screens]] 알림·서비스워커 절·[[anyang-frontend-tasks]] T1~T3, database [[anyang-database-schema]] auth_attempts 값 한 줄 + 57 절 낡은 표기 정리. 겸해서 backend-api 61·1859행 낡은 문구 정정.
+    - (a) **사용자 확인 필요 — 에이전트 제안값(`(미확정)`, 제안대로 구현)**: backend ① payload 필드명 `url`과 서비스워커 경로 검증 ② 제한 저장 값 `attempt_type='test_notify'`·`identifier_type='user'`·`sha256(user_id)` ③ 429 코드 `TOO_MANY_ATTEMPTS` 재사용 ④ 200이면서 성공 0 응답 처리 ⑤ 발송 루프 공용 함수 분리 ⑥ 같은 사용자 동시 요청 2회 허용(락 없음; 화면은 진행 중 버튼 비활성으로 막음). frontend ⑦ 버튼은 알림이 켜져 있을 때만 표시(꺼져 있으면 결과가 항상 "구독 없음"이라 숨김) ⑧ 소제목 "알림 확인"·보조 "지금 알림이 오는지 확인해 보세요." ⑨ 안내 글: 성공 "n대에 테스트 알림을 보냈어요." / 구독 없음 "알림을 받는 기기가 없어요. 알림을 껐다가 다시 켜 주세요." / 429 "잠시 후 다시 시도해 주세요." ⑩ 일부 실패 "n대에 보냈어요. m대는 보내지 못했어요." ⑪ 새 안내 "알림을 보내지 못했어요. 잠시 후 다시 시도해 주세요."(200 `{0,m}`·401·5xx·네트워크 오류 등) ⑫ 200 `{0,0}`은 "구독 없음"과 같은 안내 ⑬ 서비스워커가 `/\`로 시작하는 `url`도 거부.
+    - **구현(2026-10-04)**: backend `80258c3`(`web/lib/push-send.ts` `sendToUserDevices` 분리, `web/app/api/notify-settings/test/route.ts`, `auth-attempts.ts` `claimTestNotifySlot`, notify 라우트가 공용 함수 사용), frontend `eb08b31`(sw.js `url` 처리, `describeTestResult`, 알림 설정 화면 버튼; 스킬 `design-taste-frontend` 호출 — 제품 UI는 범위 밖이라 청안 설계 우선), database `edcdb4d`(schema status active, auth_attempts 값 반영). code-review 치명·주요 0, 경미 2 → frontend `57c84a1`(sw.js url에 제어 문자 있으면 거부 — `/\t/evil.com` 차단, `role="status"` 상시 렌더) → 재검수 0건. npm test 418·build 통과. 화면 실행·실기기 수신은 미확인.
+      - 경미(문서, 설계 잠금): [[anyang-backend-api]] 8-1절 1431행 "운영 DB 실제 제약은 읽지 않았다"는 database 확인(check 없음, pkey만)과 어긋남 — 다음 설계 수정 때. 참고: 전부 실패(`{0,m}`)여도 1분 슬롯은 소비됨(설계대로).
 
 ## 승인된 설계
 
@@ -486,8 +497,6 @@ owner: pm
 
 2026-10-04(23차): 확인 항목 56 사용자 결정·승인(메인 세션 전달 — B안, 스위치, 제안값 전부 확정, "제안대로 승인"). database가 B안을 본문 기준으로 정리(별도 클러스터 `17 collector`, 포트 5433, `pg_createcluster`, 소켓 전용·peer, USB 가드 드롭인)한 뒤 7종을 기록한다. 포트 5433·클러스터 구성 세부는 B안 승인에서 직접 따라 나온 값으로 본다. 나머지 문서의 `(미확정)` 표시는 구현 단계에서 각 소유자가 지운다.
 
-- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(23차 이어서): `anyang-board-collector`·`anyang-board-collector-db`를 뺀다 — 사유: 확인 항목 56(j) code-review "설계 변경 필요"(full 성공 보고 충돌, 표에 없는 코드 값, 응답표 문구, PGPORT, 90일 삭제). 사용자 결정 후 24차로 재기록한다.
 
@@ -505,9 +514,15 @@ owner: pm
 
 2026-10-04(27차): 확인 항목 57-D 사용자 결정·승인(메인 세션 전달 — 8건 전부, 제안값이 문서에 적힌 그대로 확정)으로 3종을 다시 기록한다. 각 소유자가 구현 단계에서 `(미확정)` 표시를 지운다.
 
+2026-10-04(27차 이어서): `anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 58(테스트 알림 버튼, 새 요청). 설계 반영 후 28차로 재기록한다. 같은 사유로 `anyang-database-schema`도 뺀다(`auth_attempts` 값 셋에 `test_notify`·`user` 한 줄 추가).
+
+2026-10-04(28차): 확인 항목 58 — 사용자가 메인 세션을 통해 승인한 값(경로·인증·본인 구독·제목·클릭 이동·410/404 삭제·notify_logs 미기록·1분 1회 429·응답·409 `NO_SUBSCRIPTION`·정지 규칙·버튼·안내 3종·서비스워커 이동, "재승인 없음")을 backend·frontend·database가 반영한 뒤 4종을 다시 기록한다. 승인 범위는 그 값들이다. 에이전트가 새로 정한 값은 `(미확정)` 그대로 승인 범위 밖이며, 확인 항목 58 (a)에 모아 사용자 확인을 받는다(20차와 같은 처리 — 제안값대로 구현한다).
+
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 
