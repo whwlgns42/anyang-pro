@@ -428,6 +428,9 @@ owner: pm
       - C 첫 활성화: 사전 점검(알림 켠 사용자 0 재확인, Vercel `VAPID_*` 이름만 확인) → 코드 배포 → database 잡 등록 → 테스트 계정(앱에서 푸시 구독·알림 켜기, 선호 보유) → 확인. 새 공지를 기다리지 않으려면 database가 그 계정이 받을 공지 수를 읽기 전용으로 세어 1건 이상이면 그 계정 `enabled_at`만 백필 이전으로 당김(운영 1행, 롤백은 원래 값), 0건이면 새 공지 대기. 운영에서 푸시 실제 전달은 아직 확인된 적 없음. 롤백: `cron.alter_job(active:=false)`/`cron.unschedule`, 새 키 삭제 후 재배포, 코드 되돌리기.
       - 추가 수정 제안: 구독 0개 사용자는 성공 0·실패 0이면 `failed`로 남기지 않고 `pending` 선점 행을 지움(나중에 구독하면 다시 대상). notify 라우트에 `maxDuration` 없음 → 60초(미확정) 추가([[anyang-jobs-collect-missing-maxduration]]와 같은 유형).
     - 사용자 결정 필요(D): ① A (나) 채택과 N일(제안 14) ② B pg_cron + pg_net 채택, 주기 5분 ③ 새 키 이름(`NOTIFY_TRIGGER_SECRET`·`x-notify-secret`), 값 생성·Vercel·Vault 입력(사용자 또는 메인 세션 — 값 비노출, `SCHEDULER_SHARED_SECRET` 불변) ④ `maxDuration` 60초, pg_net 타임아웃 30초 ⑤ 구독 0개 처리 방식 ⑥ 테스트 방법(사전 조회 후 `enabled_at` 당기기 또는 새 공지 대기, 운영 1행 변경 허용 여부) ⑦ 운영 작업 승인: `pg_cron` 확장 설치, Vault 2건, 잡 등록, 코드 배포, Vercel 환경변수 추가 ⑧ 보드 14일 이상 정지 시 그 사이 글 미발송 수용 여부.
+    - **사용자 결정·승인(2026-10-04, user, 메인 세션 전달)**: ① (나) 채택, 상한 14일 ② pg_cron + pg_net, `*/5` ③ `NOTIFY_TRIGGER_SECRET`·`x-notify-secret`·Vault `notify_trigger_secret` 확정 — 메인 세션이 값을 만들어 Vercel production(sensitive)·`web/.env.local`에 넣음, Vault에는 활성화 때 database가 `.env.local`에서 읽어 MCP로 넣음, 값은 문서·로그·보고·커밋에 남기지 않음, `SCHEDULER_SHARED_SECRET`·기존 키 불변 ④ `maxDuration` 60초, pg_net 타임아웃 30초 ⑤ 구독 0개 사용자 pending 삭제 승인 ⑥ 테스트는 테스트 계정 1명의 `enabled_at`만 당김(운영 1행 변경 승인), 앱 구독·알림 켜기는 사용자가 직접 — 그 단계에서 멈추고 사용자 할 일 보고 ⑦ 운영 작업(pg_cron 설치, Vault 2건, 잡 등록, 코드 배포) 승인, 환경변수 추가는 완료 ⑧ 보드 14일 이상 정지 기간 글 미알림 수용. 순서: (미확정) 정리 → 27차 → 구현·test·build → code-review → 커밋 → push → deploy(Not authorized면 1회 재시도) → 사전 점검(알림 켠 사용자 0) → pg_cron·Vault·잡 → 첫 실행 응답·`cron.job_run_details` → 테스트 계정 단계에서 멈춤.
+    - **구현(2026-10-04)**: backend `c4c0174`(notify 후보 쿼리 14일 상한·`make_interval(days => $3)`, 구독 0개·전부 만료면 pending 삭제, `maxDuration = 60`, `requireNotifyJobSecret` — notify만 `x-notify-secret` 허용, `.env.example`), code-review 치명 0·주요 1(database 문서 57 절 `(미확정)` 미제거)·경미 → backend `1f47753`(테스트 env 복원, 0.75 주석 "설계 승인값", 일부 성공·전부 실패 시 삭제 미호출 테스트), database `2e8d8f3`(db 문서 status active·`(미확정)` 제거) → 재검수 치명·주요 0. npm test 398·build 통과.
+      - 후속(문서, 설계 잠금이라 다음 설계 수정 때): [[anyang-database-schema]] 57 절에 빈 백틱 4곳, "설계 draft"·"이 절의 값은 모두 (미확정)"·"backend 확정 전 가칭"·"권장안" 등 승인 전 어휘 잔존, Links 역링크 2건(`anyang-supabase-connection`, `anyang-user-name-memory`). [[anyang-backend-api]] 61행 "재승인 대기", 1859행 "확정 전 모든 값이 제안" 잔존 — 두 문서 링크 제목은 함께 고쳐야 깨지지 않음. 알림 처리가 직렬이라 같은 시각 사용자가 수십 명을 넘으면 `maxDuration` 60초 초과 가능(설계 7-1에 적힌 위험) — 그때 분할·병렬 설계 변경 검토.
     - 확인 못 함: pg_net이 30초에 끊었을 때 Vercel 함수가 끝까지 도는지(끊겨 `pending`이 남으면 다음 날 창에서 다시 선점돼 하루 늦게 발송 — 첫 실행 응답 시간으로 확인), Supabase 무료 프로젝트 일시중지 정책 적용 여부, 운영 Vercel `VAPID_*` 3개 존재, 개발용 Supabase 프로젝트 존재.
 
 ## 승인된 설계
@@ -496,6 +499,12 @@ owner: pm
 - [[anyang-board-collector-db]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(26차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 57(알림 잡 활성화·과거 공지 일괄 발송 방지, 새 요청). 재승인 뒤 다시 기록한다. 남은 승인된 설계: `anyang-cheongan-design-adoption`, `anyang-frontend-screens`, `anyang-frontend-tasks`, `anyang-board-collector`, `anyang-board-collector-db`.
+
+2026-10-04(27차): 확인 항목 57-D 사용자 결정·승인(메인 세션 전달 — 8건 전부, 제안값이 문서에 적힌 그대로 확정)으로 3종을 다시 기록한다. 각 소유자가 구현 단계에서 `(미확정)` 표시를 지운다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 
