@@ -27,6 +27,8 @@ owner: frontend
 
 **2026-10-04 추가(확인 항목 55, draft)**: 공지 화면 시안 반영 작업 N1~N3을 "공지 화면 시안 반영" 절에 추가했다. 이미 구현된 C5(공지 목록·상세)에 대한 추가 작업이며 [[anyang-frontend-screens]] 공지 목록·상세 절(2026-10-04 개정)과 [[anyang-backend-api]]의 응답 필드 구현에 의존한다. 설계 재승인 전에는 구현하지 않는다.
 
+**2026-10-04 추가(확인 항목 60, draft)**: 채팅 뒤로가기 시 대화·인용 유지 작업 S1~S3을 "채팅 뒤로가기 시 대화·인용 유지" 절에 추가했다. 이미 구현된 채팅 화면에 대한 추가 작업이며 [[anyang-frontend-screens]] 3-1절에 의존한다. 설계 재승인 전에는 구현하지 않는다.
+
 **2026-10-04 추가(확인 항목 58, draft)**: 알림 설정 화면 테스트 알림 버튼 작업 T1~T3을 "테스트 알림 버튼" 절에 추가했다. 이미 구현된 알림 설정(C 단위)에 대한 추가 작업이며 [[anyang-frontend-screens]] 알림 절 "테스트 알림 보내기"·서비스워커 절과 [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]]에 의존한다.
 
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
@@ -217,6 +219,21 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, 푸시 구독·권한 흐름, `push`·`notificationclick` 핸들러, `page.tsx`.
 - 테스트 항목과 화면 확인 절차는 [[anyang-frontend-screens]] 테스트 방법의 "테스트 알림 보내기(확인 항목 58)"가 원본이다(여기에 복제하지 않는다). 실제 기기 수신·클릭 이동은 메인 세션·사용자 확인 몫이다.
 - 커밋: 단위(또는 T1~T3 묶음)마다 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
+
+### 채팅 뒤로가기 시 대화·인용 유지 (확인 항목 60, 신규, 설계 draft — 구현은 재승인 후)
+
+공지 상세에서 뒤로 와도 대화·인용 카드·스크롤이 남게 한다. 설계 근거와 모든 값(대부분 `(미확정)`)은 [[anyang-frontend-screens#3-1. 채팅 뒤로가기 시 대화·인용 유지 (신규, 확인 항목 60, 설계 draft)]]이고 여기에 옮겨 적지 않는다. backend·DB 변경은 없다. UI를 새로 만들지 않고 기존 채팅 화면의 상태 처리만 바꾸므로 `design-taste-frontend` 스킬은 부르지 않는다(안내 한 줄만 추가).
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| S1 | 순수 함수와 단위 테스트: 키 생성, 보관 직렬화·모양 검사 읽기, 크기 상한·대화 개수 정리, 저장소 오류 흡수 래퍼, 접두사 일괄 삭제, 스트리밍 보관분 서버 병합 | `web/app/_lib/chat-snapshot.ts`(신규), `web/test/frontend-chat-snapshot.test.ts`(신규) | 없음 |
+| S2 | `page.tsx`가 `userId`를 내려주고, `chat-client.tsx`에 복원(보관분 → 서버), 저장 시점, 스크롤 복원, 대화 id 수신 시 URL 교체, `loadedIdRef`로 중복 불러오기 방지, 새 대화 흐름 유지 | `web/app/(tabs)/chat/chat-client.tsx`, `web/app/(tabs)/chat/page.tsx` | S1 |
+| S3 | 로그아웃·탈퇴 후 `clearAllChatSnapshots` 호출 | `web/app/(tabs)/settings/profile-section.tsx`, `web/app/suspended/suspended-actions.tsx`, `web/app/(tabs)/settings/account/account-client.tsx` | S1 |
+
+- 수정하지 않는 것: `notice-detail.tsx`(뒤로 버튼은 이미 `router.back()`이고 URL만 맞으면 된다), `app/api/**`, `lib/**`, `db/**`, `chat-stream.ts`.
+- 구현 시작 때 승인된 설계 문서의 `(미확정)` 확정 여부를 확인한다. 특히 URL 교체 수단은 응답 헤더 수신 직후 `window.history.replaceState`(제안 안 A)이고, 실행 확인에서 의도대로 안 되면 설계 변경으로 보고한다.
+- 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "채팅 뒤로가기 유지(확인 항목 60, 3-1절)"가 원본이다(여기에 복제하지 않는다).
+- 커밋: S1 → S2 → S3 순으로 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다(S1·S2는 묶어도 된다). push는 사용자 승인 전 보류.
 
 ## 테스트 방법
 

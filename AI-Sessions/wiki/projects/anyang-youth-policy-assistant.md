@@ -474,6 +474,12 @@ owner: pm
       - **push·배포(2026-10-04)**: 기록 커밋 `1161a4f`, push `63efbb8..1161a4f`. `vercel deploy --prod` 1회 성공(`dpl_92XCK1WMd4jLVkvUsN8cEYbp6DFJ`, 16:02 KST, 별칭 `web-beta-smoky-16.vercel.app`). `/login` 200, notify 키 없이 401, 배포 후 error 로그 없음, 16:05 첫 cron 실행 notify 라우트 오류 없음(info). 관리 API 미사용.
       - 남은 것: 직군 매칭 실제 발송은 직군 0.60 이상인 새 공지가 수집되고 알림 켠 사용자에게 매칭될 때 확인된다(현재 대상 0). 규칙 반영(59(p))은 메인 세션.
     - (p) 원래 기록: database가 v2 실측 때 벡터 리터럴(약 58KB)이 커서 MCP 대신 "Supabase 관리 API의 읽기 전용 쿼리 엔드포인트"로 SQL을 실행했다고 보고. 어떤 자격 증명으로 호출했는지 보고에 없다 — 기존 키 사용 범위 원칙과 맞는지 다음 database 호출 때 확인(값은 묻지 않고 종류·보관 위치만).
+60. **새 요청(2026-10-04, user — 채팅 뒤로가기 시 대화·인용 공지 유지, frontend만, DB·서버 변경 없음)**: 채팅 답변 아래 인용 카드 5건 중 하나를 눌러 `/notices/[id]`로 갔다가 뒤로가면 대화와 인용 카드가 사라진다. 사용자는 1→5번 순차 열람을 기대한다. 원인(메인 세션): `web/app/(tabs)/chat/chat-client.tsx:33` messages가 컴포넌트 state뿐이고, 새 대화에 conversation_id가 생겨도 URL이 `/chat` 그대로라 재마운트 시 빈 상태(`page.tsx`는 `?conversation_id`가 있을 때만 과거 대화를 연다). 인용(citations)은 SSE event로만 오고 DB에 저장되지 않는다.
+    - 사용자 결정(범위 1·2번만): ① 같은 탭 임시 보관 — messages(인용 포함)와 스크롤 위치를 sessionStorage에 conversation_id 키로 보관, 뒤로가기·같은 탭 새로고침 때 서버 재조회 없이 즉시 복원·스크롤 복원, sessionStorage 접근은 try/catch, 실패하면 ② 경로, localStorage 금지(탭 종료 시 삭제) ② URL 동기화 — conversation_id가 생기면 `router.replace`로 `/chat?conversation_id=…`(히스토리 추가 없음), sessionStorage 없어도 서버에서 대화 본문 복원(인용 카드는 없음, 수용). 스트리밍 중 이동 후 복귀 시 마지막 답변 처리 방식을 정해 문서에 적는다. 공지 상세 뒤로 버튼과 브라우저 뒤로가기가 같은 결과. 새 대화 시작 등 기존 흐름과 충돌 없음, 다른 사용자·대화 보관분 섞임 방지(로그아웃 시 정리 포함). 에이전트가 새로 정한 세부값은 `(미확정)`으로 두고 제안대로 구현.
+    - 진행: `anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(31차 전 단계). frontend 설계 → 31차 → 구현 → test·build → code-review → 커밋 → push → deploy → 운영 확인.
+    - **설계 draft(2026-10-04, frontend)**: [[anyang-frontend-screens]] 3-1절·테스트 방법(단위 ①~⑧, 수동 가~자)·확인 항목 8, [[anyang-frontend-tasks]] S1(순수 함수)·S2(`chat-client.tsx`·`page.tsx`)·S3(로그아웃·탈퇴 정리). backend 영향 없음(기존 `GET /api/conversations/:id/messages`와 43-b 부분 답변 저장만 사용). 공지 상세 뒤로 버튼은 이미 히스토리 있으면 `router.back()`·없으면 `/notices`라 변경 없이 브라우저 뒤로가기와 같은 결과가 된다.
+    - (a) **사용자 결정 필요 — 결정 문구와 다른 제안**: URL 동기화 수단. 결정은 `router.replace`인데 frontend 확인 결과 위험이 두 가지다. ① 지금 `chat-client.tsx`는 `initialConversationId`가 바뀌면 서버 대화를 다시 불러와 스트리밍 중인 messages를 덮어쓴다(설계는 `loadedIdRef`로 막음) ② Next.js 16.3.6에서 페이지 세그먼트 캐시 키에 검색 파라미터가 들어가, 스트리밍 중 `router.replace`가 재마운트·스트림 중단을 일으키는지 확정하지 못했다(실행 미확인). 제안: 응답 헤더로 conversation_id를 받는 즉시 `window.history.replaceState`(Next.js 문서상 라우터와 연동, 서버 요청·재렌더 없음, 히스토리 추가 없음 — 결정의 목적과 같음). 대안: 스트림 완료 후 `router.replace`(첫 대화에서 답변 도중 이동하면 URL에 id가 없어 서버 복원 불가). 구현 중 제안 안이 안 되면 설계 변경으로 보고.
+    - 에이전트 제안값(`(미확정)`, 제안대로 구현 예정): 키 `anyang:chat:v1:{userId}:{conversationId}`, 보관 JSON 필드·모양 검사, 크기 상한(content 합 200,000자, 같은 탭 대화 10개, 용량 오류 시 1회 재시도), 저장 지연 500ms·즉시 저장 시점, 스트리밍 중 이동 후 복귀는 서버 1회 조회해 병합하고 답이 없으면 "답변이 중간에 멈췄을 수 있어요…" 한 줄, 스크롤 `atBottom` 8px, 복원 전 빈 대화 안내 숨김, 로그아웃 정리 3곳(`profile-section.tsx`·`suspended-actions.tsx`·탈퇴 성공 후 `account-client.tsx`; 세션 만료로 밀려나는 경우는 정리 안 함), 새 대화 시 이전 보관분은 지우지 않음.
 
 ## 승인된 설계
 
@@ -546,8 +552,6 @@ owner: pm
 
 2026-10-04(28차): 확인 항목 58 — 사용자가 메인 세션을 통해 승인한 값(경로·인증·본인 구독·제목·클릭 이동·410/404 삭제·notify_logs 미기록·1분 1회 429·응답·409 `NO_SUBSCRIPTION`·정지 규칙·버튼·안내 3종·서비스워커 이동, "재승인 없음")을 backend·frontend·database가 반영한 뒤 4종을 다시 기록한다. 승인 범위는 그 값들이다. 에이전트가 새로 정한 값은 `(미확정)` 그대로 승인 범위 밖이며, 확인 항목 58 (a)에 모아 사용자 확인을 받는다(20차와 같은 처리 — 제안값대로 구현한다).
 
-- [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(28차 이어서): `anyang-database-schema`·`anyang-backend-api`를 뺀다 — 사유: 확인 항목 57(n) 알림 임계값 0.75 → 0.70(user 결정). 값 반영 후 29차로 재기록한다.
 
@@ -560,6 +564,8 @@ owner: pm
 2026-10-04(30차 이어서): 3종을 뺀다 — 사유: 확인 항목 59 code-review 문서 정정(확정값 0.60·상한 20 등이 문서에 `T_occ`·"v2 실측 뒤 정한다"·빈 괄호·"설계 draft"로 남음, database 절 제목·"마이그레이션 파일은 만들지 않았고" 사실 불일치). 값 변경 없이 30차에서 사용자가 확정한 값을 적는 정정이므로, 정정 후 같은 승인(30차)으로 다시 기록한다(10차 이어서와 같은 처리).
 
 2026-10-04(30차 재기록): database(절 제목을 "승인·구현 완료"로, 0022 적용·시드 사실, 채택값)·backend(`T_occ` = 0.60, 빈 괄호·"설계 draft"·"v2 실측 후 확정" 정리, 앵커 링크 갱신)가 정정을 마쳤다. 값 변경 없음. backend-api 7-2절 제목의 "설계 draft"는 여러 앵커가 걸려 있어 남김(다음 설계 수정 때 앵커와 함께).
+
+2026-10-04(30차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 60(채팅 뒤로가기 시 대화·인용 유지, 새 요청). 반영 후 31차로 재기록한다.
 
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
