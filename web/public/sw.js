@@ -4,10 +4,13 @@
 // anyang-frontend-screens 4절에 확정된 공지 상세 라우트 `/notices/[id]`를 따른다.
 // 이 함수가 원본이다(app/_lib/push.ts는 이 파일을 import할 수 없어 복제하지 않는다).
 // 테스트는 web/test/frontend-push.test.ts에서 이 소스를 직접 읽어 검증한다.
+// url(테스트 알림, 확인 항목 58)은 같은 출처 상대 경로만 쓴다: `/`로 시작하고 `//`·`/\`로 시작하지 않을 때.
 function parsePushPayload(payload) {
+  const safeUrl =
+    typeof payload.url === "string" && /^\/(?![/\\])/.test(payload.url) ? payload.url : null;
   return {
     title: payload.title || "안양 청년정책 비서",
-    url: payload.notice_id ? `/notices/${payload.notice_id}` : "/notices",
+    url: safeUrl || (payload.notice_id ? `/notices/${payload.notice_id}` : "/notices"),
   };
 }
 

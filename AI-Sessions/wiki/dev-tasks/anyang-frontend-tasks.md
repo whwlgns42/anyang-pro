@@ -27,6 +27,8 @@ owner: frontend
 
 **2026-10-04 추가(확인 항목 55, draft)**: 공지 화면 시안 반영 작업 N1~N3을 "공지 화면 시안 반영" 절에 추가했다. 이미 구현된 C5(공지 목록·상세)에 대한 추가 작업이며 [[anyang-frontend-screens]] 공지 목록·상세 절(2026-10-04 개정)과 [[anyang-backend-api]]의 응답 필드 구현에 의존한다. 설계 재승인 전에는 구현하지 않는다.
 
+**2026-10-04 추가(확인 항목 58, draft)**: 알림 설정 화면 테스트 알림 버튼 작업 T1~T3을 "테스트 알림 버튼" 절에 추가했다. 이미 구현된 알림 설정(C 단위)에 대한 추가 작업이며 [[anyang-frontend-screens]] 알림 절 "테스트 알림 보내기"·서비스워커 절과 [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]]에 의존한다.
+
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
 3절(채팅 인용 카드)·11절(공지 목록 탭) draft 반영에 의존한다.
@@ -202,10 +204,24 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - 구현 중 backend가 `error_summary` 형식을 바꾸면(미해결 질문) 설계 변경이다. 구현 단계에서 UI를 만들 때는 `design-taste-frontend` 스킬을 호출하되, 기존 관리자 화면의 클래스(`card`, `hint-text`, `error-text`)를 따른다.
 - 커밋: `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
 
+### 테스트 알림 버튼 (확인 항목 58, 신규, 설계 draft)
+
+알림 설정 화면에 "테스트 알림 보내기" 버튼을 더하고, 서비스워커가 테스트 payload의 `url`로 알림 클릭 이동을 하게 한다. 사용자가 승인한 범위라 재승인 없이 구현하지만 문구·표시 조건 등 `(미확정)` 값은 구현 시작 때 설계 문서에서 확정 여부를 확인한다. UI를 만들 때는 `design-taste-frontend` 스킬을 호출하고, 청안 토큰·기존 `Button`과 충돌하는 규칙은 청안 설계를 따르며 그 사실을 보고에 적는다. 설계 근거는 [[anyang-frontend-screens]]이고 API 계약은 [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]]이다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| T1 | 서비스워커 `parsePushPayload`: 안전한 `url`(`/` 시작, `//`·`/\` 시작 아님) 우선, 아니면 기존 규칙. 테스트 갱신(타입에 `url?: string`, 케이스 ⑪~⑭ 추가) | `web/public/sw.js`, `web/test/frontend-push.test.ts` | backend 문서 확인(코드 의존 없음) |
+| T2 | `describeTestResult(status, body)` 순수 함수와 단위 테스트(케이스 ①~⑩) | `web/app/_lib/test-notify.ts`(신규), `web/test/frontend-test-notify.test.ts`(신규) | 없음 |
+| T3 | 알림 화면: 켜진 상태에서만 보이는 버튼, 진행 중 비활성, 결과 줄(`role="status"`), `fetch` 예외 처리 | `web/app/(tabs)/settings/notifications/notifications-client.tsx` | T2, backend의 `POST /api/notify-settings/test` 구현(없으면 목 응답으로 화면만 확인) |
+
+- 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, 푸시 구독·권한 흐름, `push`·`notificationclick` 핸들러, `page.tsx`.
+- 테스트 항목과 화면 확인 절차는 [[anyang-frontend-screens]] 테스트 방법의 "테스트 알림 보내기(확인 항목 58)"가 원본이다(여기에 복제하지 않는다). 실제 기기 수신·클릭 이동은 메인 세션·사용자 확인 몫이다.
+- 커밋: 단위(또는 T1~T3 묶음)마다 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
+
 ## 테스트 방법
 
 1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
-중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에 있다.
+중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에, 테스트 알림 버튼(T1~T3)은 위 "테스트 알림 버튼" 절에 있다.
 
 ## Links
 

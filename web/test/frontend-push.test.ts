@@ -8,7 +8,7 @@ import { urlBase64ToUint8Array, subscriptionToPayload } from "@/app/_lib/push";
 // 평가해, 복제본이 아닌 진짜 sw.js 소스를 검증한다.
 const swSource = readFileSync(path.join(__dirname, "../public/sw.js"), "utf-8");
 const fnSource = swSource.slice(0, swSource.indexOf("self.addEventListener"));
-const parsePushPayload: (payload: { title?: string; notice_id?: string }) => {
+const parsePushPayload: (payload: { title?: string; notice_id?: string; url?: unknown }) => {
   title: string;
   url: string;
 } = new Function(`${fnSource}\nreturn parsePushPayload;`)();
@@ -49,6 +49,23 @@ describe("parsePushPayload", () => {
       title: "새 공지",
       url: "/notices/abc-123",
     });
+  });
+
+  it("uses a safe same-origin url (test notification payload)", () => {
+    expect(
+      parsePushPayload({ title: "테스트 알림입니다", url: "/settings/notifications" }),
+    ).toEqual({ title: "테스트 알림입니다", url: "/settings/notifications" });
+  });
+
+  it("ignores unsafe or malformed url and falls back to the existing rules", () => {
+    for (const url of ["//evil.com", "https://evil.com", "/\\evil.com", "settings", 5, ""]) {
+      expect(parsePushPayload({ url }).url).toBe("/notices");
+      expect(parsePushPayload({ url, notice_id: "n1" }).url).toBe("/notices/n1");
+    }
+  });
+
+  it("prefers url over notice_id when both are present", () => {
+    expect(parsePushPayload({ url: "/a", notice_id: "n1" }).url).toBe("/a");
   });
 
   it("falls back to a default title and the notices list url", () => {

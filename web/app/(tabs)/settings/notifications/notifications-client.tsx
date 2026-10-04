@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { apiFetch } from "../../../_lib/api-fetch";
 import { formatNotifyTime } from "../../../_lib/format";
 import { needsHomeScreenInstall, readInstallEnv } from "../../../_lib/install-state";
+import { describeTestResult, type TestResult } from "../../../_lib/test-notify";
 import { urlBase64ToUint8Array, subscriptionToPayload } from "../../../_lib/push";
 import { Button, SettingsGroup, Switch } from "../../../_components/ui/controls";
 import { Icon } from "../../../_components/ui/icon";
@@ -28,6 +29,8 @@ export function NotificationsClient() {
   const [error, setError] = useState<string | null>(null);
   const [needsResubscribe, setNeedsResubscribe] = useState(false);
   const [installRequired, setInstallRequired] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   // 사용자 에이전트는 마운트 뒤에만 읽는다(서버 렌더와의 불일치 방지).
   useEffect(() => {
@@ -127,6 +130,23 @@ export function NotificationsClient() {
     save(enabled, value);
   }
 
+  // 확인 항목 58: 서버가 동시 두 요청을 막지 못하므로 testing 동안의 비활성이 중복 전송을 막는다.
+  async function sendTest() {
+    setTesting(true);
+    setTestResult(null);
+    let status = 0;
+    let body: unknown = null;
+    try {
+      const res = await apiFetch("/api/notify-settings/test", { method: "POST" });
+      status = res.status;
+      body = await res.json().catch(() => null);
+    } catch {
+      // 네트워크 오류는 (0, null)로 처리한다.
+    }
+    setTestResult(describeTestResult(status, body));
+    setTesting(false);
+  }
+
   const disabled = installRequired;
   const status = disabled
     ? "홈 화면에 추가한 뒤 켤 수 있어요"
@@ -184,6 +204,24 @@ export function NotificationsClient() {
                 />
               </div>
             </SettingsGroup>
+
+            {enabled && !disabled && (
+              <section className="flex flex-col items-start gap-2">
+                <h2 className="m-0 text-label font-semibold text-ink-2">알림 확인</h2>
+                <p className="m-0 text-body-sm text-ink-2">지금 알림이 오는지 확인해 보세요.</p>
+                <Button variant="secondary" onClick={sendTest} disabled={testing} aria-busy={testing}>
+                  {testing ? "보내는 중..." : "테스트 알림 보내기"}
+                </Button>
+                {testResult && (
+                  <p
+                    role="status"
+                    className={`m-0 text-body-sm ${testResult.kind === "success" || testResult.kind === "no-subscription" || testResult.kind === "retry" ? "text-ink-2" : "text-danger"}`}
+                  >
+                    {testResult.message}
+                  </p>
+                )}
+              </section>
+            )}
 
             {error && (
               <p className="m-0 rounded-control border border-rule bg-surface px-4 py-3 text-body-sm font-medium text-danger" role="alert">
