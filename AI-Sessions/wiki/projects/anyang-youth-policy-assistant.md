@@ -437,6 +437,7 @@ owner: pm
     - 확인 못 함: pg_net이 30초에 끊었을 때 Vercel 함수가 끝까지 도는지(끊겨 `pending`이 남으면 다음 날 창에서 다시 선점돼 하루 늦게 발송 — 첫 실행 응답 시간으로 확인), Supabase 무료 프로젝트 일시중지 정책 적용 여부, 운영 Vercel `VAPID_*` 3개 존재, 개발용 Supabase 프로젝트 존재.
     - **테스트 결과(2026-10-04, 메인 세션 실측)**: 테스트 계정(user `2646968e…`)이 알림을 켬 — notify_time 12:06, enabled_at 12:04 KST, 구독 1, 선호 6. 12:00·12:05 cron 200 `{"sent_count":0}`. 이 계정 선호(최근 5개 평균)와 14일 이내 공지 3건의 최대 유사도 0.728(일자리 박람회)·0.726(역량강화 특강)·0.633 — 모두 임계값 0.75 미만이라 `enabled_at`을 당겨도 0건 → 당기지 않음(운영 데이터 무변경). 푸시 실제 전달은 아직 미확인.
     - (n) **확인 필요(사용자 판단, 이번엔 바꾸지 않음)**: 유사도 임계값 0.75가 실제로는 거의 발송되지 않는 수준일 수 있다(테스트 계정 최댓값 0.728). 바꾸면 설계 변경(backend-api 7절).
+    - 갱신(2026-10-04): 58 테스트 알림으로 운영 웹 푸시 실제 전달이 확인됐다(사용자 실기기 수신). 알림 잡 경로 중 남은 미확인은 공지 매칭 발송뿐이며, 현재 임계값 0.75로는 테스트 계정 대상 공지가 0건이다. (n)은 사용자 결정 전이라 열린 항목 그대로.
 58. **새 요청(2026-10-04, user, 메인 세션 전달 — 테스트 알림 버튼, 사용자가 승인한 범위로 설계·구현, 재승인 없음)**:
     - backend: `POST /api/notify-settings/test` — 로그인 세션 인증, 본인 `push_subscriptions`에만 발송, payload 제목 "테스트 알림입니다"·누르면 `/settings/notifications`, 410·404 구독은 기존 규칙대로 삭제, `notify_logs` 미기록, 사용자당 1분 1회 제한(429), 응답 `{success_count, failed_count}`, 구독 0이면 409 `NO_SUBSCRIPTION`, 정지 사용자는 기존 정지 규칙.
     - frontend: 알림 설정 화면에 "테스트 알림 보내기" 버튼, 결과 안내 3가지(성공 n대 / 구독 없음 / 잠시 후 다시 시도), 기존 화면 스타일·taste-skill, 서비스 워커 알림 클릭 이동이 테스트 payload에서도 동작.
@@ -447,6 +448,7 @@ owner: pm
     - **구현(2026-10-04)**: backend `80258c3`(`web/lib/push-send.ts` `sendToUserDevices` 분리, `web/app/api/notify-settings/test/route.ts`, `auth-attempts.ts` `claimTestNotifySlot`, notify 라우트가 공용 함수 사용), frontend `eb08b31`(sw.js `url` 처리, `describeTestResult`, 알림 설정 화면 버튼; 스킬 `design-taste-frontend` 호출 — 제품 UI는 범위 밖이라 청안 설계 우선), database `edcdb4d`(schema status active, auth_attempts 값 반영). code-review 치명·주요 0, 경미 2 → frontend `57c84a1`(sw.js url에 제어 문자 있으면 거부 — `/\t/evil.com` 차단, `role="status"` 상시 렌더) → 재검수 0건. npm test 418·build 통과. 화면 실행·실기기 수신은 미확인.
       - 경미(문서, 설계 잠금): [[anyang-backend-api]] 8-1절 1431행 "운영 DB 실제 제약은 읽지 않았다"는 database 확인(check 없음, pkey만)과 어긋남 — 다음 설계 수정 때. 참고: 전부 실패(`{0,m}`)여도 1분 슬롯은 소비됨(설계대로).
     - **push·배포(2026-10-04)**: 기록 커밋 `30a22f7`, push `4950b33..30a22f7`. `vercel deploy --prod` 1회 성공(`dpl_B9V9L6N1xWfUVhMtzCJN7aeUstsB`, 별칭 `web-beta-smoky-16.vercel.app`). 로그인 없이 `/login` 200, `POST /api/notify-settings/test` 401, `POST /api/jobs/notify` 키 없이 401, `/sw.js` 200·새 `url` 검사 코드 포함, 배포 직후 error 로그 없음. 실기기 수신·클릭 이동 확인은 메인 세션·사용자(화면: `https://web-beta-smoky-16.vercel.app/settings/notifications`, 알림이 켜져 있어야 버튼이 보임).
+    - **실기기 수신 확인(2026-10-04, user, 메인 세션 전달 — "알람이 잘 왔어, 확인 완료")**: 테스트 알림이 실기기에 도착. 운영에서 웹 푸시 실제 전달이 처음 확인됐다(VAPID·구독·서비스워커 경로 동작). 58(a) 제안값 13건은 사용자 결정 전이라 열린 항목 그대로.
 
 ## 승인된 설계
 
