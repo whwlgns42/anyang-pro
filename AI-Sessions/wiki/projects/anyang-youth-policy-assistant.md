@@ -487,6 +487,9 @@ owner: pm
       - ② 서버 조회 실패 시 보관분 표시: frontend가 설계(5번 ③ "실패하면 빈 화면 유지") 밖으로 응답 실패(`!res.ok`) 때 보관분을 보여 주게 했다. 빈 화면보다 낫지만 삭제된 대화의 보관분이 404에도 보일 수 있고, 네트워크 예외 때는 보관분을 안 보여 처리가 다르다. 선택: (가) 채택하고 두 경우를 같게 맞추되 404는 보관분 삭제·빈 화면 (나) 설계대로 빈 화면으로 되돌림. pm 권장 (가).
       - ③ 문서 정리: 3-1절 제목·tasks 제목의 "설계 draft", 62·908행 "3-1절 값은 (미확정)", 마커 삭제로 깨진 괄호, 그리고 frontend가 잠금 범위 밖으로 고친 3-1절 문장 2곳(내용은 31차 승인과 일치)의 사후 인정.
       - 그래서 `anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(31차 이후). 결정 뒤 frontend 설계 반영 → 32차 → 구현 → 검수 → 커밋 → push → deploy. **push·배포는 이 결정 뒤로 멈춤**(로컬에 `31618df`·`36344a7`·`beb8a52` 미배포).
+    - **(b)·(c) 결정(2026-10-04 응답, 2026-10-05 전달, user "제안대로 진행")**: ① 안내("답변이 중간에 멈췄을 수 있어요")를 띄운 경우 `streaming: true` 유지 — 다음 복원 때 서버 재조회 ② (가) 채택 — 서버 응답 실패와 네트워크 예외 모두 보관분 표시, 404(삭제된 대화)는 보관분 삭제·빈 화면 ③ 문서 정리 승인, frontend가 잠금 범위 밖에서 고친 3-1절 문장 2곳은 내용이 31차 승인과 같아 사후 인정 ④ (c) 브라우저 뒤로가기 경로의 이전 조회 취소도 함께 고침. 진행: frontend 설계 반영(오류 문서 역링크 2건 포함) → 32차 → 구현 → test·build → code-review → 커밋 → push → deploy → 운영 확인.
+    - **(b)·(c) 구현(2026-10-05)**: frontend 설계 반영(3-1절 5·6번·취소 규칙·문서 정리·오류 문서 역링크·tasks S4) → 32차 → `a07eaf5`(interrupted 시 보관분 `streaming: true` 유지·`streamingRef`도 같은 값, 응답 오류·네트워크 예외 공통 `fail()`·404만 삭제·AbortError는 무시, 뒤로가기로 `/chat` 도착 시 이전 조회 취소와 ref 리셋) → code-review 주요 1(개발 모드 StrictMode 이중 effect가 URL id 복원을 취소 — 오류 문서 [[anyang-chat-restore-strictmode-abort]]) → 재위임 `cbf88ba`(`shouldCancelRestore(ready, location.search)` — URL에 id가 없을 때만 취소) → 재검수 0건. npm test 438·build 통과. 화면 실행 확인은 못 함.
+      - 남은 위험(경미, 기록만): 복원 중에도 입력창이 열려 있어 보낼 수 있음, prop이 처음부터 null인 경로에서 조회 중 `/chat`으로 돌아가면 취소 안 됨(짧은 구간), 복원 직후 초기 스크롤 값으로 보관분이 덮일 수 있다는 우려(실행 미확인), 컴포넌트 수준 자동 테스트 없음.
     - (c) 경미(검수 기록): 브라우저 뒤로가기로 `/chat`(prop null)에 도착하는 경로에서 진행 중이던 이전 조회를 취소하지 않아, 늦게 끝나면 messages를 덮어쓸 수 있다(기존 동작, 드묾). (b) 반영 때 함께 고칠지 결정.
 
 ## 승인된 설계
@@ -579,6 +582,11 @@ owner: pm
 
 2026-10-04(31차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 60(b) code-review "설계 변경 필요"(interrupted 시 보관분 streaming 플래그, 서버 실패 시 보관분 표시, 문서 정리). 결정 후 32차로 재기록한다.
 
+2026-10-05(32차): 확인 항목 60(b)·(c) 사용자 결정(2026-10-04 응답, "제안대로 진행")을 frontend가 반영(3-1절 5·6번, 취소 규칙, 문서 정리, 오류 문서 역링크, tasks S4)한 뒤 2종을 다시 기록한다. 3-1절 문장 2곳의 잠금 밖 수정은 사후 인정됨.
+
+- [[anyang-frontend-screens]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-05, 승인자 user
+
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
@@ -640,3 +648,4 @@ owner: pm
 - [[anyang-board-collector]]
 - [[anyang-board-collector-db]]
 - [[anyang-chat-snapshot-scroll-restore-order]]
+- [[anyang-chat-restore-strictmode-abort]]

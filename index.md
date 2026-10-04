@@ -83,6 +83,7 @@
 
 ## Errors / Lessons
 
+- [[anyang-chat-restore-strictmode-abort]] — 안양 비서: 개발 모드 StrictMode 이중 effect가 URL의 대화 번호 복원 조회를 취소해 빈 화면(해결 cbf88ba, URL에 id가 없을 때만 취소)
 - [[anyang-chat-snapshot-scroll-restore-order]] — 안양 비서: 채팅 보관분 복원 때 스크롤 효과가 빈 목록에서 복원 위치를 먼저 소모해 스크롤 복원 실패(해결 36344a7, scrollTarget 분리)
 - [[anyang-preferences-put-missing-mask-pii]] — 안양 비서: 선호 수정 API가 가림 없이 Gemini로 전송(해결 622962b, embedText 내부 강제 가림)
 - [[anyang-jobs-collect-missing-maxduration]] — 안양 비서: 수집·임베딩 잡 라우트에 maxDuration 누락으로 설계의 300초 전제 미적용(해결 992e01e)
