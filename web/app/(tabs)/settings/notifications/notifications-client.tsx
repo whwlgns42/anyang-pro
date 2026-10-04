@@ -212,14 +212,12 @@ export function NotificationsClient() {
                 <Button variant="secondary" onClick={sendTest} disabled={testing} aria-busy={testing}>
                   {testing ? "보내는 중..." : "테스트 알림 보내기"}
                 </Button>
-                {testResult && (
-                  <p
-                    role="status"
-                    className={`m-0 text-body-sm ${testResult.kind === "success" || testResult.kind === "no-subscription" || testResult.kind === "retry" ? "text-ink-2" : "text-danger"}`}
-                  >
-                    {testResult.message}
-                  </p>
-                )}
+                <p
+                  role="status"
+                  className={`m-0 text-body-sm ${!testResult || testResult.kind === "success" || testResult.kind === "no-subscription" || testResult.kind === "retry" ? "text-ink-2" : "text-danger"}`}
+                >
+                  {testResult?.message}
+                </p>
               </section>
             )}
 

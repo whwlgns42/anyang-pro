@@ -58,7 +58,7 @@ describe("parsePushPayload", () => {
   });
 
   it("ignores unsafe or malformed url and falls back to the existing rules", () => {
-    for (const url of ["//evil.com", "https://evil.com", "/\\evil.com", "settings", 5, ""]) {
+    for (const url of ["//evil.com", "https://evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "/\r/evil.com", "/a\tb", "settings", 5, ""]) {
       expect(parsePushPayload({ url }).url).toBe("/notices");
       expect(parsePushPayload({ url, notice_id: "n1" }).url).toBe("/notices/n1");
     }
