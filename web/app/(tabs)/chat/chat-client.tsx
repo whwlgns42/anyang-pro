@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
-import { browserStorage, mergeStreamingSnapshot, readSnapshot, scrollTarget, writeSnapshot } from "../../_lib/chat-snapshot";
+import { browserStorage, mergeStreamingSnapshot, onLoadFailure, removeSnapshot, readSnapshot, scrollTarget, writeSnapshot } from "../../_lib/chat-snapshot";
 import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
 import { AnswerBlock, Composer, MessageBubble, type AnswerState } from "../../_components/ui/chat";
 import { Icon, IconButton } from "../../_components/ui/icon";
@@ -65,7 +65,18 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     const fromUrl = firstRun.current ? new URLSearchParams(window.location.search).get("conversation_id") : null;
     firstRun.current = false;
     const id = initialConversationId ?? fromUrl;
-    if (!id || loadedIdRef.current === id) return;
+    if (!id) {
+      // 브라우저 뒤로가기로 /chat에 도착: 진행 중인 이전 조회를 취소하고 새 대화 상태로 둔다.
+      if (!readyRef.current) {
+        loadAbort.current?.abort();
+        loadedIdRef.current = null;
+        conversationIdRef.current = null;
+        readyRef.current = true;
+        setRestoring(false);
+      }
+      return;
+    }
+    if (loadedIdRef.current === id) return;
     loadedIdRef.current = id;
     conversationIdRef.current = id;
     readyRef.current = false;
@@ -86,13 +97,20 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
       done();
       return;
     }
+    // 서버 조회 실패(응답 오류·네트워크 예외 공통): 보관분을 보여 주되 404면 지우고 빈 화면으로 둔다.
+    const fail = (status: number | null) => {
+      if (ac.signal.aborted || !snap) return;
+      if (onLoadFailure(status) === "delete") {
+        if (userId) removeSnapshot(browserStorage(), userId, id);
+        return;
+      }
+      streamingRef.current = snap.streaming; // 이동 직전 쓰기가 streaming:true를 지우지 않게 한다
+      setMessages(snap.messages);
+    };
     apiFetch(`/api/conversations/${id}/messages`, { signal: ac.signal })
       .then(async (res) => {
         if (ac.signal.aborted) return;
-        if (!res.ok) {
-          if (snap) setMessages(snap.messages);
-          return;
-        }
+        if (!res.ok) return fail(res.status);
         const history = (await res.json()) as StoredMessage[];
         if (ac.signal.aborted) return;
         if (snap) {
@@ -100,7 +118,8 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
           pendingScroll.current = { scrollTop: snap.scrollTop, atBottom: snap.atBottom };
           setMessages(merged.messages);
           setInterrupted(merged.interrupted);
-          if (userId) {
+          streamingRef.current = merged.streaming;
+          if (userId && !merged.interrupted) {
             writeSnapshot(browserStorage(), userId, id, { ...snap, messages: merged.messages, streaming: false });
           }
           return;
@@ -111,7 +130,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
             .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         );
       })
-      .catch(() => {})
+      .catch(() => fail(null))
       .finally(done);
   }, [initialConversationId, userId]);
 

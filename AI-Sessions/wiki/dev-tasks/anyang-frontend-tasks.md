@@ -220,9 +220,9 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - 테스트 항목과 화면 확인 절차는 [[anyang-frontend-screens]] 테스트 방법의 "테스트 알림 보내기(확인 항목 58)"가 원본이다(여기에 복제하지 않는다). 실제 기기 수신·클릭 이동은 메인 세션·사용자 확인 몫이다.
 - 커밋: 단위(또는 T1~T3 묶음)마다 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
 
-### 채팅 뒤로가기 시 대화·인용 유지 (확인 항목 60, 신규, 설계 draft — 구현은 재승인 후)
+### 채팅 뒤로가기 시 대화·인용 유지 (확인 항목 60, 신규)
 
-공지 상세에서 뒤로 와도 대화·인용 카드·스크롤이 남게 한다. 설계 근거와 모든 값(대부분)은 [[anyang-frontend-screens#3-1. 채팅 뒤로가기 시 대화·인용 유지 (신규, 확인 항목 60, 설계 draft)]]이고 여기에 옮겨 적지 않는다. backend·DB 변경은 없다. UI를 새로 만들지 않고 기존 채팅 화면의 상태 처리만 바꾸므로 `design-taste-frontend` 스킬은 부르지 않는다(안내 한 줄만 추가).
+공지 상세에서 뒤로 와도 대화·인용 카드·스크롤이 남게 한다. 설계 근거와 모든 값은 [[anyang-frontend-screens#3-1. 채팅 뒤로가기 시 대화·인용 유지 (신규, 확인 항목 60)]]이고 여기에 옮겨 적지 않는다. backend·DB 변경은 없다. UI를 새로 만들지 않고 기존 채팅 화면의 상태 처리만 바꾸므로 `design-taste-frontend` 스킬은 부르지 않는다(안내 한 줄만 추가).
 
 | 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
 |---|---|---|---|
@@ -234,6 +234,14 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - 구현 시작 때 승인된 설계 문서의 확정 여부를 확인한다. 특히 URL 교체 수단은 응답 헤더 수신 직후 `window.history.replaceState`(제안 안 A)이고, 실행 확인에서 의도대로 안 되면 설계 변경으로 보고한다.
 - 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "채팅 뒤로가기 유지(확인 항목 60, 3-1절)"가 원본이다(여기에 복제하지 않는다).
 - 커밋: S1 → S2 → S3 순으로 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다(S1·S2는 묶어도 된다). push는 사용자 승인 전 보류.
+
+#### 60(b)·(c) 후속 (S4, 32차 재승인 후 구현)
+
+S1~S3 구현 뒤 사용자가 정한 세 가지를 코드에 반영한다. 근거는 [[anyang-frontend-screens]] 3-1절 5번 ③·이전 조회 취소, 6번이고 값은 옮겨 적지 않는다. 오류 문서 [[anyang-chat-snapshot-scroll-restore-order]]도 참고한다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| S4 | ① 안내를 띄운 경우 보관분 `streaming: true` 유지(다음 복원에서 재조회) ② 서버 조회 실패·네트워크 예외 때 보관분 표시, 404면 보관분 삭제·빈 화면 ③ 브라우저 뒤로가기로 `/chat`(prop `null`) 도착 때도 진행 중 이전 조회 취소. 단위 테스트에 ①·② 케이스 추가 | `web/app/(tabs)/chat/chat-client.tsx`, `web/app/_lib/chat-snapshot.ts`, `web/test/frontend-chat-snapshot.test.ts` | 32차 재승인 |
 
 ## 테스트 방법
 
@@ -247,3 +255,4 @@ C5로 이미 구현된 공지 목록·상세에 별표 고정 공지, "이미지
 - [[anyang-youth-policy-assistant]]
 - [[anyang-cheongan-design-adoption]]
 - [[anyang-board-collector]] — 보드 수집기·직접 수집 스위치(K1의 근거)
+- [[anyang-chat-snapshot-scroll-restore-order]] — 채팅 보관분 스크롤 복원 효과 순서 오류 기록(S4 참고)

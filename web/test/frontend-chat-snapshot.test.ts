@@ -3,6 +3,8 @@ import {
   PREFIX,
   clearAllChatSnapshots,
   mergeStreamingSnapshot,
+  onLoadFailure,
+  removeSnapshot,
   scrollTarget,
   readSnapshot,
   snapshotKey,
@@ -139,10 +141,20 @@ describe("chat-snapshot", () => {
       { role: "assistant", content: "partial saved" },
     ]);
     expect(full.interrupted).toBe(false);
+    expect(full.streaming).toBe(false);
     expect(full.messages[1]).toEqual({ role: "assistant", content: "partial saved", citations: [cit] });
 
     const less = mergeStreamingSnapshot(snap, [{ role: "user", content: "q" }]);
-    expect(less).toEqual({ messages: snap, interrupted: true });
+    expect(less).toEqual({ messages: snap, interrupted: true, streaming: true });
+  });
+
+  it("onLoadFailure: 404 deletes the snapshot, other errors and network exceptions show it", () => {
+    expect(onLoadFailure(404)).toBe("delete");
+    for (const st of [500, 401, 403, null]) expect(onLoadFailure(st)).toBe("show");
+    const { s, map } = fakeStorage();
+    writeSnapshot(s, "u1", "c1", data());
+    removeSnapshot(s, "u1", "c1");
+    expect(map.size).toBe(0);
   });
 
   it("mergeStreamingSnapshot: trimmed snapshot aligns citations by tail", () => {

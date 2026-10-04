@@ -133,6 +133,10 @@ export function writeSnapshot(
   }, undefined);
 }
 
+export function removeSnapshot(storage: SnapshotStorage | null, userId: string, conversationId: string): void {
+  if (storage) safe(() => storage.removeItem(snapshotKey(userId, conversationId)), undefined);
+}
+
 // 로그아웃·탈퇴 때 같은 탭의 모든 채팅 보관분을 지운다(다른 키는 남긴다).
 export function clearAllChatSnapshots(storage: SnapshotStorage | null): void {
   if (!storage) return;
@@ -150,9 +154,9 @@ export function browserStorage(): SnapshotStorage | null {
 export function mergeStreamingSnapshot(
   snap: SnapshotMessage[],
   server: { role: string; content: string }[],
-): { messages: SnapshotMessage[]; interrupted: boolean } {
+): { messages: SnapshotMessage[]; interrupted: boolean; streaming: boolean } {
   const rows = server.filter((m) => m.role === "user" || m.role === "assistant") as SnapshotMessage[];
-  if (rows.length < snap.length) return { messages: snap, interrupted: true };
+  if (rows.length < snap.length) return { messages: snap, interrupted: true, streaming: true }; // 서버가 나중에 답변을 남길 수 있어 다음 복원 때 다시 조회한다
   // 보관분은 상한으로 앞쪽이 잘렸을 수 있어 꼬리 기준으로 맞춘다(서버가 같은 끝을 가진다).
   const offset = rows.length - snap.length;
   const messages = rows.map((m, i) => {
@@ -160,7 +164,12 @@ export function mergeStreamingSnapshot(
     const citations = s?.role === "assistant" && m.role === "assistant" ? s.citations : undefined;
     return citations ? { role: m.role, content: m.content, citations } : { role: m.role, content: m.content };
   });
-  return { messages, interrupted: false };
+  return { messages, interrupted: false, streaming: false };
+}
+
+// 서버 조회 실패 분기(3-1절 5번 ③): status가 null이면 네트워크 예외. 404(삭제된 대화)만 보관분을 지운다.
+export function onLoadFailure(status: number | null): "show" | "delete" {
+  return status === 404 ? "delete" : "show";
 }
 
 // 스크롤 효과 판정: 복원 대기값(pending)은 목록이 채워진 뒤에만 소모한다(errors/anyang-chat-snapshot-scroll-restore-order).
