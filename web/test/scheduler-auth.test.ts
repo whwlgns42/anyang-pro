@@ -8,6 +8,12 @@ import {
 } from "@/lib/scheduler-auth";
 import { verifySchedulerSecret } from "@/lib/scheduler-auth";
 
+// undefined를 대입하면 문자열 "undefined"가 되므로 delete로 복원한다.
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}
+
 describe("scheduler shared secret", () => {
   const original = process.env.SCHEDULER_SHARED_SECRET;
 
@@ -16,7 +22,7 @@ describe("scheduler shared secret", () => {
   });
 
   afterEach(() => {
-    process.env.SCHEDULER_SHARED_SECRET = original;
+    restoreEnv("SCHEDULER_SHARED_SECRET", original);
   });
 
   it("rejects missing header", () => {
@@ -49,8 +55,8 @@ describe("notify trigger secret", () => {
     process.env.SCHEDULER_SHARED_SECRET = "sched-key";
   });
   afterEach(() => {
-    process.env.NOTIFY_TRIGGER_SECRET = saved.n;
-    process.env.SCHEDULER_SHARED_SECRET = saved.s;
+    restoreEnv("NOTIFY_TRIGGER_SECRET", saved.n);
+    restoreEnv("SCHEDULER_SHARED_SECRET", saved.s);
   });
 
   it("notify accepts x-notify-secret and still accepts x-scheduler-secret", () => {

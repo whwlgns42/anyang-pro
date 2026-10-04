@@ -387,6 +387,24 @@ describe("POST /api/jobs/notify", () => {
     expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("result = 'failed'"))).toBe(false);
   });
 
+  it("partial success (one device ok, one fails): marks success, never deletes the pending row", async () => {
+    zeroDeviceMock([{ endpoint: "ok" }, { endpoint: "bad" }]);
+    sendPushMock.mockImplementation(async (d: { endpoint: string }) => {
+      if (d.endpoint === "bad") throw new Error("network error");
+    });
+    await POST(makeRequest("secret"));
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("result = 'success'"))).toBe(true);
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("delete from notify_logs"))).toBe(false);
+  });
+
+  it("all devices fail (non-gone): stays failed, pending row is not deleted", async () => {
+    zeroDeviceMock([{ endpoint: "a" }, { endpoint: "b" }]);
+    sendPushMock.mockRejectedValue(new Error("network error"));
+    await POST(makeRequest("secret"));
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("result = 'failed'"))).toBe(true);
+    expect(queryMock.mock.calls.some(([sql]) => String(sql).includes("delete from notify_logs"))).toBe(false);
+  });
+
   it("accepts x-notify-secret and rejects it when NOTIFY_TRIGGER_SECRET is empty", async () => {
     process.env.NOTIFY_TRIGGER_SECRET = "nk";
     queryMock.mockResolvedValue({ rows: [] });
