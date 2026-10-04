@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
-import { browserStorage, mergeStreamingSnapshot, readSnapshot, writeSnapshot } from "../../_lib/chat-snapshot";
+import { browserStorage, mergeStreamingSnapshot, readSnapshot, scrollTarget, writeSnapshot } from "../../_lib/chat-snapshot";
 import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
 import { AnswerBlock, Composer, MessageBubble, type AnswerState } from "../../_components/ui/chat";
 import { Icon, IconButton } from "../../_components/ui/icon";
@@ -46,6 +46,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   const streamingRef = useRef(false);
   const lastCitations = useRef<Citation[] | undefined>(undefined);
   const pendingScroll = useRef<{ scrollTop: number; atBottom: boolean } | null>(null);
+  const firstRun = useRef(true);
   const scrollState = useRef({ scrollTop: 0, atBottom: true });
 
   useEffect(() => {
@@ -59,7 +60,10 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   // 3-1절 복원: 보관분(sessionStorage) -> 서버 순. loadedIdRef가 이미 쓰는 대화 id를 기록해,
   // 스트리밍 중 URL이 바뀌어 prop이 새 id가 되어도 messages를 덮어쓰지 않는다.
   useLayoutEffect(() => {
-    const id = initialConversationId;
+    // 뒤로가기 복원 시 prop이 이전 검색값으로 null일 수 있어, 첫 마운트에서는 실제 URL로 대체한다.
+    const fromUrl = firstRun.current ? new URLSearchParams(window.location.search).get("conversation_id") : null;
+    firstRun.current = false;
+    const id = initialConversationId ?? fromUrl;
     if (!id || loadedIdRef.current === id) return;
     loadedIdRef.current = id;
     conversationIdRef.current = id;
@@ -122,7 +126,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   useEffect(() => {
     messagesRef.current = messages;
     const last = messages[messages.length - 1];
-    if (!streamingRef.current || last?.citations !== lastCitations.current) {
+    if (!streamingRef.current || last?.role === "user" || last?.citations !== lastCitations.current) {
       lastCitations.current = last?.citations;
       flushRef.current();
       return;
@@ -148,9 +152,9 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const p = pendingScroll.current;
-    pendingScroll.current = null;
-    el.scrollTo({ top: p && !p.atBottom ? p.scrollTop : el.scrollHeight });
+    const { top, consumed } = scrollTarget(pendingScroll.current, messages.length, el.scrollHeight);
+    if (consumed) pendingScroll.current = null;
+    el.scrollTo({ top });
   }, [messages.length, sending]);
 
   function handleScroll() {

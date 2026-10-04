@@ -3,6 +3,7 @@ import {
   PREFIX,
   clearAllChatSnapshots,
   mergeStreamingSnapshot,
+  scrollTarget,
   readSnapshot,
   snapshotKey,
   writeSnapshot,
@@ -142,5 +143,24 @@ describe("chat-snapshot", () => {
 
     const less = mergeStreamingSnapshot(snap, [{ role: "user", content: "q" }]);
     expect(less).toEqual({ messages: snap, interrupted: true });
+  });
+
+  it("mergeStreamingSnapshot: trimmed snapshot aligns citations by tail", () => {
+    const cit = [{ title: "t" }] as never;
+    const snap = [{ role: "assistant" as const, content: "a", citations: cit }];
+    const r = mergeStreamingSnapshot(snap, [
+      { role: "user", content: "q" },
+      { role: "assistant", content: "a2" },
+    ]);
+    expect(r.messages[0].citations).toBeUndefined();
+    expect(r.messages[1].citations).toBe(cit);
+  });
+
+  it("scrollTarget: pending is kept while the list is empty, consumed once filled", () => {
+    const p = { scrollTop: 120, atBottom: false };
+    expect(scrollTarget(p, 0, 900)).toEqual({ top: 900, consumed: false });
+    expect(scrollTarget(p, 3, 900)).toEqual({ top: 120, consumed: true });
+    expect(scrollTarget({ scrollTop: 5, atBottom: true }, 3, 900)).toEqual({ top: 900, consumed: true });
+    expect(scrollTarget(null, 0, 900)).toEqual({ top: 900, consumed: true });
   });
 });

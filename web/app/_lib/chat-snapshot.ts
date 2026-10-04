@@ -153,9 +153,22 @@ export function mergeStreamingSnapshot(
 ): { messages: SnapshotMessage[]; interrupted: boolean } {
   const rows = server.filter((m) => m.role === "user" || m.role === "assistant") as SnapshotMessage[];
   if (rows.length < snap.length) return { messages: snap, interrupted: true };
+  // 보관분은 상한으로 앞쪽이 잘렸을 수 있어 꼬리 기준으로 맞춘다(서버가 같은 끝을 가진다).
+  const offset = rows.length - snap.length;
   const messages = rows.map((m, i) => {
-    const citations = snap[i]?.role === "assistant" && m.role === "assistant" ? snap[i].citations : undefined;
+    const s = snap[i - offset];
+    const citations = s?.role === "assistant" && m.role === "assistant" ? s.citations : undefined;
     return citations ? { role: m.role, content: m.content, citations } : { role: m.role, content: m.content };
   });
   return { messages, interrupted: false };
+}
+
+// 스크롤 효과 판정: 복원 대기값(pending)은 목록이 채워진 뒤에만 소모한다(errors/anyang-chat-snapshot-scroll-restore-order).
+export function scrollTarget(
+  pending: { scrollTop: number; atBottom: boolean } | null,
+  messageCount: number,
+  scrollHeight: number,
+): { top: number; consumed: boolean } {
+  if (pending && messageCount === 0) return { top: scrollHeight, consumed: false };
+  return { top: pending && !pending.atBottom ? pending.scrollTop : scrollHeight, consumed: true };
 }
