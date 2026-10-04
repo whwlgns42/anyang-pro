@@ -402,6 +402,7 @@ owner: pm
       - 배포 완료(2026-10-04, 메인 세션): `web/`에서 `vercel deploy --prod --yes` 재실행 성공(앞선 Not authorized는 일시적 오류로 봄). HEAD `d1c21a0`(코드는 `3fc656c`와 같음), 미커밋 변경 없음. `web-62gj53c2b-whwlgns42-1220s-projects.vercel.app` production Ready, 별칭 `web-beta-smoky-16.vercel.app`. 키 없이 `POST /api/ingest/notices` 401 — 받기 API 운영 반영.
     - (c) 완료(2026-10-04, database, 운영 Supabase): `collect_runs` 전체 1행(id `68023809-1be2-45fe-9dbf-510e3f781b78`, trigger_type scheduled, started_at 2026-10-03 18:19 UTC)을 status success → failed, error_summary null → `ip_blocked`. 다른 컬럼 그대로, 갱신 1행.
     - (l) **설계 변경 필요(2026-10-04, database — 보드 설치 직전 멈춤)**: 설계 B-1·B-4는 새 클러스터를 OS 사용자 `arduino`로 실행하고 소켓을 `/var/run/postgresql`에 두는데, 보드에서 이 폴더는 `postgres:postgres` 2775이고 `arduino`는 `postgres` 그룹이 아니라 쓸 수 없다(`test -w` 실패). 그대로 실행하면 `.s.PGSQL.5433`을 못 만들어 기동이 실패한다(main 영향은 없음). 보드 변경 없음(SSH 읽기만, 설치 전 스냅샷: 실행 중 서비스 34개, 5433 미사용, `pg_lsclusters` main만, main 설정 파일 해시 기록, available 2809MB). 선택지: (a) `arduino`를 `postgres` 그룹에 추가 — 설계 그대로지만 설계 밖 사용자 권한 변경·재로그인 필요 (b) 소켓 폴더를 새 위치로(유닛 `RuntimeDirectory`) — 수집기 접속 문자열까지 바뀜(board-collector-db B-1·B-4·F-1 + [[anyang-board-collector]]) (c) 클러스터 OS 사용자를 `postgres`로(`pg_createcluster -u postgres`) — 수집기(`arduino`)는 pg_ident 맵(`arduino`→`anyang_collector`)으로 그대로 peer 접속, 관리 행은 `local all postgres peer`, 관리는 `sudo -u postgres psql -p 5433`, 새 OS 사용자 없음, 소켓·접속 문자열 불변, 바뀌는 곳은 B-1(실행 사용자·데이터 폴더 소유자)·B-4·`setup-cluster.sh`. database 권장 (c)(가장 작은 변경), pm도 (c) 권장. 그래서 `anyang-board-collector-db`를 승인된 설계에서 뺐다(24차 이후). 결정 뒤 database 설계 반영 → 25차 → setup-cluster.sh 수정·재검수 → 보드 설치부터 재개.
+    - **(l) 결정(2026-10-04, user, 메인 세션 전달)**: (c) — 클러스터 OS 사용자 `postgres`(`pg_createcluster -u postgres`), 수집기(`arduino`)는 pg_ident 맵(`arduino`→`anyang_collector`) peer, 관리 접속 `sudo -u postgres psql -p 5433`, 소켓 위치·접속 문자열 불변, 기존 권한 확장 없음. 변경 범위 B-1·B-4·`setup-cluster.sh`로 승인. 이어서 25차 → 스크립트 수정 → code-review → 커밋 → 보드 설치(전후 비교, main 설정 해시 불변) → 시험 ①·③ → backfill → 462건 → timer.
     - (k) 경미(검수 기록, 조치 불필요): 같은 새 글이 동시에 두 번 들어오면 두 번째 처리에서 청크 삭제가 빠질 수 있으나 보드 락이 단일 실행을 보장해 사실상 발생하지 않음(`lib/notice-store.ts:24-53`).
     - (h) **보드 보안(사용자 판단 대기, 이번 범위 밖)**: 보드 `pg_hba.conf` local·127.0.0.1·::1 trust, 이전 psql 기록 파일에 비밀번호 문자열 잔존. 변경하지 않음.
     - (i) **알림 잡 등록 전 확인 필요**: 백필 462건이 `collected_at=now()`로 들어가 알림 잡 등록 후 과거 공지가 일괄 발송될 위험.
@@ -470,6 +471,10 @@ owner: pm
 - [[anyang-board-collector]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(24차 이어서): `anyang-board-collector-db`를 뺀다 — 사유: 확인 항목 56(l) database "설계 변경 필요"(보드 소켓 폴더에 `arduino` 쓰기 권한 없음, 클러스터 실행 사용자 변경 필요). 사용자 결정 후 25차로 재기록한다.
+
+2026-10-04(25차): 56(l) (c)안(user, 메인 세션 전달)을 database가 반영(B-1·B-4, 같은 값이 적힌 F-1·F-2·인프라 문장·확인 항목 2를 함께 정합, 164행 낡은 문장 정정)한 뒤 다시 기록한다.
+
+- [[anyang-board-collector-db]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 

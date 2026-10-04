@@ -11,7 +11,7 @@ owner: database
 
 안양시 사이트가 클라우드 IP를 막아(확인 항목 56) 공지 수집은 UNO Q 보드가 맡는다. 보드의 USB(`/mnt/usb`)에 **별도 PostgreSQL 17 클러스터**
 (B안, 사용자 확정 2026-10-04)를 하나 더 만들어 "수집 보관함 + 전송 대기열"로 쓴다. 기존 클러스터(`postgresql@17-main`, 포트 5432)와 그 DB·설정·
-비밀번호는 한 글자도 바꾸지 않는다. 새 클러스터는 포트 5433, 소켓 전용, `local peer` 인증(OS 사용자 `arduino` -> 롤 `anyang_collector`), systemd 유닛
+비밀번호는 한 글자도 바꾸지 않는다. 새 클러스터는 포트 5433, 소켓 전용, `local peer` 인증(수집기 OS 사용자 `arduino` -> pg_ident 맵 -> 롤 `anyang_collector`, 클러스터 실행·관리는 OS 사용자 `postgres`), systemd 유닛
 `postgresql@17-collector`(Debian `pg_createcluster`)로 띄우고 USB가 없으면 기동하지 않는다. 앱 주 DB(Supabase)는 바뀌지 않는다. 테이블은 둘이다.
 `collected_notices`(원문 HTML + 정리 값 + `sync_status` 대기열)와 `collector_runs`(보드 수집·전송 실행 이력). Supabase 쪽 스키마 변경은 필요 없다.
 이 문서의 값은 56 제안값 전부 사용자가 확정했다. 구현은 설계 승인 기록 뒤에만 한다.
@@ -59,11 +59,11 @@ USB에 별도 클러스터를 만든다. 기존 클러스터와 프로세스·�
 | 항목 | 값 |
 |---|---|
 | 버전·이름 | PostgreSQL 17, 클러스터 이름 `collector` (`pg_lsclusters`에 `17 collector`) |
-| 데이터 디렉터리 | `/mnt/usb/anyang-collector/pg` (새 폴더, 모드 700, 소유 `arduino`). 기존 `/mnt/usb/postgresql`·`/mnt/usb/data`와 겹치지 않고 건드리지 않는다 |
+| 데이터 디렉터리 | `/mnt/usb/anyang-collector/pg` (새 폴더, 모드 700, 소유 `postgres`). 기존 `/mnt/usb/postgresql`·`/mnt/usb/data`와 겹치지 않고 건드리지 않는다 |
 | 설정 파일 위치 | `/etc/postgresql/17/collector/`(Debian 관례, **새 폴더**; `/etc/postgresql/17/main/`은 건드리지 않는다). 설정은 eMMC, 데이터·WAL은 USB |
 | 포트 | **5433** (보드에서 비어 있음을 확인. 기존 5432와 겹치지 않음) |
 | 접속 범위 | `listen_addresses = ''` — TCP 없이 유닉스 소켓 전용. 소켓 폴더 `/var/run/postgresql`(파일명이 포트별이라 `.s.PGSQL.5433`, 기존 `.s.PGSQL.5432`와 충돌 없음) |
-| 서버 실행 OS 사용자 | `arduino` (`pg_createcluster -u arduino`). 수집기도 `arduino`로 돌므로 `sudo` 없이 관리·접속된다. 새 OS 사용자를 만들지 않는다 |
+| 서버 실행 OS 사용자 | `postgres` (`pg_createcluster -u postgres`, 사용자 확정 56(l) (c)). 관리 접속은 `sudo -u postgres psql -p 5433`. 수집기(`arduino`)는 B-4 pg_ident 맵 peer로 접속한다. 새 OS 사용자를 만들지 않는다 |
 | 인코딩 | `UTF8`, 로케일은 기존 `template1`에서 확인한 값과 같게 한다 |
 | 자원 상한 | `shared_buffers=32MB`, `max_connections=10`, `work_mem=4MB`, `maintenance_work_mem=32MB`, `effective_cache_size=256MB`, `max_wal_size=256MB`, `autovacuum_max_workers=2`. 합계 예상 약 50~60MB(추정, 근거: 위 값의 합과 빈 인스턴스 오버헤드, 보드 미측정) |
 | 임시 정렬 파일 | 데이터 디렉터리 안(USB). 규모가 작아 문제 없다 |
@@ -161,7 +161,7 @@ ConditionPathIsMountPoint=/mnt/usb
   시험 호출이 "success 0건"을 남긴 것과 같은 실수를 보드에서 반복하지 않기 위함이다.
 - 시작 때 `running`이 10분 넘게 남은 행은 `failed`('stale')로 바꾼다(Supabase `collect_runs`의 N=10분과 같은 방식).
 - 겹침 방지: 보드 DB의 advisory lock(`pg_try_advisory_lock`, 키 상수는 구현 때 정한다)으로 한 번에 하나만 돈다. 잡히지 않으면 조용히 끝낸다.
-- 보존: 90일(Supabase `collect_runs`와 같은 값). **자동 삭제 확정**(사용자 승인 56(j)): 수집기가 실행을 시작할 때 `delete from collector_runs where started_at < now() - interval '90 days' and status <> 'running'` 한 줄을 돌린다(기존 제안 "수집기 시작 때 정리 쿼리"를 확정, 별도 잡 없음). 지우는 것은 **실행 기록뿐**이다. `collected_notices`(원문 `raw_html` 포함)는 이 삭제의 대상이 아니다. `raw_html` 비우기 등 `collected_notices` 정리는 이번 승인 범위가 아니다(B-6, 무제한 보관 유지). 삭제 구현은 backend 몫이며 현재 `web/collector` 코드에는 아직 없다.
+- 보존: 90일(Supabase `collect_runs`와 같은 값). **자동 삭제 확정**(사용자 승인 56(j)): 수집기가 실행을 시작할 때 `delete from collector_runs where started_at < now() - interval '90 days' and status <> 'running'` 한 줄을 돌린다(기존 제안 "수집기 시작 때 정리 쿼리"를 확정, 별도 잡 없음). 지우는 것은 **실행 기록뿐**이다. `collected_notices`(원문 `raw_html` 포함)는 이 삭제의 대상이 아니다. `raw_html` 비우기 등 `collected_notices` 정리는 이번 승인 범위가 아니다(B-6, 무제한 보관 유지). 삭제는 커밋 6f0608d로 구현됐다.
 
 #### 대기열 상태 전이 (backend가 알아야 할 점)
 
@@ -189,12 +189,12 @@ ConditionPathIsMountPoint=/mnt/usb
 - 새 클러스터의 `pg_hba.conf`(새 파일)는 로컬 소켓 peer만 둔다.
 
   ```text
+  local  all               postgres          peer
   local  anyang_collector  anyang_collector  peer  map=collector
-  local  all               arduino           peer
   ```
 
   `pg_ident.conf`(새 파일)에 `collector  arduino  anyang_collector` 한 줄. 다른 줄(host, replication 등)은 두지 않는다. 기존 클러스터의 `pg_hba.conf`·`pg_ident.conf`는 무변경이다.
-- 롤 `anyang_collector`: `LOGIN`, 슈퍼유저·`CREATEDB`·`CREATEROLE` 없음, **비밀번호 설정 안 함**. DB `anyang_collector`의 소유자다. 클러스터 부트스트랩 슈퍼유저는 OS 사용자 이름과 같은 `arduino`(관리용, peer)다.
+- 롤 `anyang_collector`: `LOGIN`, 슈퍼유저·`CREATEDB`·`CREATEROLE` 없음, **비밀번호 설정 안 함**. DB `anyang_collector`의 소유자다. 클러스터 부트스트랩 슈퍼유저는 OS 사용자 이름과 같은 `postgres`(관리용, peer, `sudo -u postgres psql -p 5433`)다. 소켓 위치·포트·접속 문자열은 그대로이며 기존 권한은 늘리지 않는다.
 - 접속: `psql -h /var/run/postgresql -p 5433 -U anyang_collector anyang_collector`. 연결 문자열 형태 `postgres:///anyang_collector?host=/var/run/postgresql&port=5433&user=anyang_collector`
   (값 없는 형태일 뿐 비밀 아님). `DATABASE_URL`에 비밀 값이 필요 없다.
 - 새 클러스터는 peer 인증이라 같은 컴퓨터의 다른 OS 사용자는 `anyang_collector`로 붙지 못한다. 기존 클러스터가 `trust`인 것과 다르다(기존은 이미 있는 상태이고 이 설계가 바꾸지 않는다).
@@ -231,7 +231,7 @@ ConditionPathIsMountPoint=/mnt/usb
 - `collector_schema_migrations(version text primary key, applied_at timestamptz default now())` 한 테이블로 적용 여부를 기록한다. 도구는 `psql -f`이면 충분하다(별도 도구 없음).
 - **0001_init up**(`anyang_collector` 롤로 새 DB 안에서 실행): 위 테이블 3개(`collected_notices`, `collector_runs`, `collector_schema_migrations`). 단일 트랜잭션.
 - **0001_init down**: `drop table` 3개. **되돌릴 수 없다**(수집 데이터 삭제). 사용자 승인 필요. 수집이 시작되기 전(행 0개)이면 손실이 없다.
-- **인프라 단계(마이그레이션 파일이 아니라 일회성 절차)**: ① `/mnt/usb/anyang-collector/pg` 폴더 생성(소유 `arduino`, 700) ② `sudo pg_createcluster 17 collector -u arduino -d /mnt/usb/anyang-collector/pg -p 5433 --start-conf=auto -- --encoding=UTF8` ③ `/etc/postgresql/17/collector/`의 `postgresql.conf`(포트·`listen_addresses`·자원 상한)·`pg_hba.conf`·`pg_ident.conf` 작성 ④ 유닛 드롭인 `usb.conf`(B-2)와 `daemon-reload` ⑤ `sudo systemctl enable --now postgresql@17-collector` ⑥ `arduino`로 `create role anyang_collector login` · `create database anyang_collector owner anyang_collector` · `revoke connect ... from public` / `grant connect ... to anyang_collector`. 기존 클러스터에는 어떤 명령도 내리지 않는다.
+- **인프라 단계(마이그레이션 파일이 아니라 일회성 절차)**: ① `/mnt/usb/anyang-collector/pg` 폴더 생성(소유 `postgres`, 700) ② `sudo pg_createcluster 17 collector -u postgres -d /mnt/usb/anyang-collector/pg -p 5433 --start-conf=auto -- --encoding=UTF8` ③ `/etc/postgresql/17/collector/`의 `postgresql.conf`(포트·`listen_addresses`·자원 상한)·`pg_hba.conf`·`pg_ident.conf` 작성 ④ 유닛 드롭인 `usb.conf`(B-2)와 `daemon-reload` ⑤ `sudo systemctl enable --now postgresql@17-collector` ⑥ `arduino`로 `create role anyang_collector login` · `create database anyang_collector owner anyang_collector` · `revoke connect ... from public` / `grant connect ... to anyang_collector`. 기존 클러스터에는 어떤 명령도 내리지 않는다.
 - **되돌릴 수 없는 작업 표**(구현 단계 지시서에 항목별 사용자 승인이 있어야 실행):
 
   | 작업 | 이유 |
@@ -283,7 +283,7 @@ ConditionPathIsMountPoint=/mnt/usb
 
 1. 적용 전 스냅샷(읽기 전용): `pg_lsclusters`, `pg_database`(이름·크기·`datacl`), `pg_roles`, main의 `pg_hba.conf`·`postgresql.conf`·`pg_ident.conf` sha256, `/etc/postgresql/17/` 목록, `ss -tlnH`, `systemctl is-active`(agentvault-api, agentvault-public, exam-server,
    unoq-monitor, anyang-docs, nginx, postgresql@17-main), `pg_stat_activity` 수, 최근 `journalctl -u postgresql@17-main`, `/mnt/usb` 목록(`postgresql`·`data` 폴더의 소유·수정 시각).
-2. 마운트 확인: `mountpoint -q /mnt/usb`, 여유 용량. 새 폴더 `/mnt/usb/anyang-collector/pg` 생성. 기존 `/mnt/usb/postgresql`·`/mnt/usb/data` 비접촉.
+2. 마운트 확인: `mountpoint -q /mnt/usb`, 여유 용량. 새 폴더 `/mnt/usb/anyang-collector/pg` 생성(소유 `postgres`, 모드 700). 기존 `/mnt/usb/postgresql`·`/mnt/usb/data` 비접촉.
 3. 인프라 단계(B-8): `pg_createcluster` -> 설정 파일 -> 드롭인 -> `enable --now` -> 롤·DB·권한. 서버 재시작·reload는 새 인스턴스에만 한다. 하나 실패하면 거기서 멈추고 보고한다(자동 되돌림 없음).
 4. `anyang_collector` 롤로 0001 up 적용. `collector_schema_migrations`에 기록.
 5. 적용 후 스냅샷 비교: 1번의 main 설정 해시·`datacl`·기존 DB 크기·서비스 상태·USB 두 폴더 정보가 같아야 한다(차이는 새 클러스터·포트 5433·새 폴더뿐). `journalctl`에 새 오류 없음.
@@ -292,13 +292,13 @@ ConditionPathIsMountPoint=/mnt/usb
 #### F-2. 시험
 
 - **격리 시험(라이브 클러스터를 건드리지 않음)**: 보드에서 임시 클러스터(`initdb -D <임시 폴더>`, 다른 포트·소켓 폴더, `postgres` OS 사용자)를 만들어 아래를 확인한다. 끝나면 임시 폴더를 지운다(자기가 만든 임시 폴더만, 사용자 승인된 정리 범위로 지시서에 적는다).
-  0. 새 클러스터 설정 시험: 임시 클러스터에 B-4의 `pg_hba`·`pg_ident`를 적용해 `arduino`로 접속 성공, 다른 OS 사용자로 거부됨을 확인한다.
+  0. 새 클러스터 설정 시험: 임시 클러스터에 B-4의 `pg_hba`·`pg_ident`를 적용해 `arduino`(맵 경유 `anyang_collector`)와 `postgres`(관리)로 접속 성공, 다른 OS 사용자로 거부됨을 확인한다.
   1. 0001 up이 오류 없이 적용되고, 테이블 제약(check, unique, not null)이 동작한다.
   2. 대기열 전이 SQL(B-3 표 전체, 401/400 횟수 미소모 포함)을 `insert`/`update`로 재현해 기대 상태가 나온다. 같은 값 재수집은 `synced`를 유지하고, 값이 달라지면 `pending`+`retry_count=0`이 된다.
   3. 백오프·상한: `retry_count` 4→5에서 `failed`.
   4. **USB 미마운트 모사**: 임시 데이터 폴더를 일시 이름 변경하거나 마운트 조건을 거짓으로 만든 뒤 임시 인스턴스의 기동 거부(`ConditionPathIsMountPoint`)와 오류 동작을 확인한다. 라이브 `main`은 건드리지 않으므로 R1이 번지지 않는다는 근거는 프로세스 분리로 설명하고, 확인 결과를 이 문서에 반영한다.
   5. 동시 실행: advisory lock이 두 번째 세션을 막는다.
-- **라이브 확인(F-1 5~6번)**: 새 DB 접속 `select 1`, 테이블 존재, 소켓·`arduino` 사용자로 비밀번호 없이 접속, 기존 DB 접속·쿼리가 그대로.
+- **라이브 확인(F-1 5~6번)**: 새 DB 접속 `select 1`, 테이블 존재, 소켓·`arduino` 사용자(맵 경유 `anyang_collector`)로 비밀번호 없이 접속, `sudo -u postgres psql -p 5433` 관리 접속, 기존 DB 접속·쿼리가 그대로.
 - Supabase 쪽(`notices` 컬럼, `collect_runs`)은 바꾸지 않으므로 이 문서 범위의 Supabase 시험은 없다. 시험 호출 행 처리(D) 적용 시 해당 1행만 조회로 확인한다.
 - 받기 API와의 결합 시험(보드 `pending` → Vercel → `synced`)은 [[anyang-backend-api]] 시험 방법이 원본이다.
 
@@ -330,7 +330,7 @@ ConditionPathIsMountPoint=/mnt/usb
 (사용자가 확정한 항목은 결과를 적었다. pm이 프로젝트 문서에 반영한다)
 
 1. (확정) 구성안: B안(USB 별도 클러스터, 포트 5433, 소켓 전용, peer, `postgresql@17-collector`). A안은 채택하지 않음(R1).
-2. (확정) 폴더 `/mnt/usb/anyang-collector/pg`, 실행 OS 사용자 `arduino`. **미해결**: 기존 `/mnt/usb/postgresql`(미사용 데이터 디렉터리 복사본)·`/mnt/usb/data`(빈 폴더)의 용도는 모른다. 둘 다 건드리지 않는다(확정).
+2. (확정) 폴더 `/mnt/usb/anyang-collector/pg`, 클러스터 실행 OS 사용자 `postgres`(56(l) (c), 2026-10-04 사용자 결정. 수집기 `arduino`는 맵 peer). **미해결**: 기존 `/mnt/usb/postgresql`(미사용 데이터 디렉터리 복사본)·`/mnt/usb/data`(빈 폴더)의 용도는 모른다. 둘 다 건드리지 않는다(확정).
 3. (확정) `retry_count` 상한 5, 백오프 10분×2^n, `collector_runs` 보존 90일. `raw_html`은 무제한 보관 + 500MB 넘으면 사람이 판단(1년 후 비우기는 두지 않음).
 4. (확정) Supabase `collect_runs` 시험 호출 1행은 (가) failed 갱신으로 간다(D절). 실행은 구현 단계 지시서에 별도 사용자 승인이 적힐 때 한다.
 5. (확정) Supabase 스키마 변경 없음, `collect_runs.mode`(0022) 추가 안 함.
