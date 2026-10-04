@@ -172,6 +172,12 @@ export function onLoadFailure(status: number | null): "show" | "delete" {
   return status === 404 ? "delete" : "show";
 }
 
+// id 없는 effect 실행에서 진행 중 조회를 취소할지: 실제 URL에도 conversation_id가 없을 때만(실제 /chat 도착).
+// StrictMode 이중 effect의 두 번째 실행은 prop이 null이어도 URL에 id가 남아 있어 취소하지 않는다.
+export function shouldCancelRestore(ready: boolean, search: string): boolean {
+  return !ready && !new URLSearchParams(search).get("conversation_id");
+}
+
 // 스크롤 효과 판정: 복원 대기값(pending)은 목록이 채워진 뒤에만 소모한다(errors/anyang-chat-snapshot-scroll-restore-order).
 export function scrollTarget(
   pending: { scrollTop: number; atBottom: boolean } | null,

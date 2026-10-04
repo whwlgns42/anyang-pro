@@ -4,6 +4,7 @@ import {
   clearAllChatSnapshots,
   mergeStreamingSnapshot,
   onLoadFailure,
+  shouldCancelRestore,
   removeSnapshot,
   scrollTarget,
   readSnapshot,
@@ -146,6 +147,13 @@ describe("chat-snapshot", () => {
 
     const less = mergeStreamingSnapshot(snap, [{ role: "user", content: "q" }]);
     expect(less).toEqual({ messages: snap, interrupted: true, streaming: true });
+  });
+
+  it("shouldCancelRestore: cancels only when not ready and the real URL has no conversation_id", () => {
+    expect(shouldCancelRestore(false, "")).toBe(true);
+    expect(shouldCancelRestore(false, "?x=1")).toBe(true);
+    expect(shouldCancelRestore(false, "?conversation_id=abc")).toBe(false); // StrictMode 두 번째 실행
+    expect(shouldCancelRestore(true, "")).toBe(false);
   });
 
   it("onLoadFailure: 404 deletes the snapshot, other errors and network exceptions show it", () => {

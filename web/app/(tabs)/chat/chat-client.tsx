@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
-import { browserStorage, mergeStreamingSnapshot, onLoadFailure, removeSnapshot, readSnapshot, scrollTarget, writeSnapshot } from "../../_lib/chat-snapshot";
+import { browserStorage, mergeStreamingSnapshot, onLoadFailure, removeSnapshot, readSnapshot, scrollTarget, shouldCancelRestore, writeSnapshot } from "../../_lib/chat-snapshot";
 import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
 import { AnswerBlock, Composer, MessageBubble, type AnswerState } from "../../_components/ui/chat";
 import { Icon, IconButton } from "../../_components/ui/icon";
@@ -67,7 +67,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     const id = initialConversationId ?? fromUrl;
     if (!id) {
       // 브라우저 뒤로가기로 /chat에 도착: 진행 중인 이전 조회를 취소하고 새 대화 상태로 둔다.
-      if (!readyRef.current) {
+      if (shouldCancelRestore(readyRef.current, window.location.search)) {
         loadAbort.current?.abort();
         loadedIdRef.current = null;
         conversationIdRef.current = null;
