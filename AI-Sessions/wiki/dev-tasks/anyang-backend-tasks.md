@@ -237,12 +237,22 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
       구현 지시서에 사용자 승인이 적혀 있어야 한다. 승인이 없으면 멈추고 보고한다. 롤백은 7-1절 C 7번.
     - 의존: 3·7·9번(구현 완료분). 별도 단위로 독립 커밋 가능.
 
+19. **테스트 알림(신규, 확인 항목 58, 사용자 승인 범위)** — [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]] 기준. 스키마 변경 없음(database 작업 없음).
+    - 19-1. `web/lib/auth-attempts.ts`: `AttemptType`·`IdentifierType`에 `test_notify`·`user` 추가, 1분 1회 선점 함수 1개(`insert … where not exists`, 해시는 기존 `normalizedHash`). `isBlocked`·`recordAttempt` 불변.
+    - 19-2. 발송 루프 공용화: `web/app/api/jobs/notify/route.ts`의 `sendToAllDevices` 로직(전 기기 시도·410/404 삭제·성공/실패 집계)을 payload를 인자로 받는 함수로 분리(동작 불변, 분리 위치 `(미확정)`).
+      notify 라우트가 그 함수를 쓰게 하고 기존 `jobs-notify` 테스트가 그대로 통과함을 확인한다.
+    - 19-3. `web/app/api/notify-settings/test/route.ts`(`POST`): `requireUser()` 기본 → 구독 조회(0행 409) → 선점(실패 429 `TOO_MANY_ATTEMPTS`) → 발송 → 200 `{success_count, failed_count}`. `notify_logs` 미기록.
+    - 19-4. frontend 계약(frontend 소관, 이 작업 단위에서 backend가 고치지 않음): `web/public/sw.js` `parsePushPayload`가 `payload.url`(같은 출처 `/` 상대 경로만)을 읽게 한다. 8-1절. 테스트 `web/test/frontend-push.test.ts`는 frontend가 갱신한다.
+    - 테스트: [[anyang-backend-api#테스트 방법]] "테스트 알림(8-1절)" ①~⑩. 운영 확인 ⑪(401)은 배포 뒤 pm·메인 세션.
+    - 순서: 19-1 → 19-2 → 19-3(독립 커밋 가능). 19-4는 frontend 구현과 같은 배포에 나가야 한다(서버가 `url`을 보내는데 서비스워커가 모르면 클릭이 `/notices`로 간다 — 서비스워커가 먼저 나가도 해가 없고 서버가 먼저 나가도 푸시는 오지만 이동이 틀린다).
+    - 의존: 7(발송 루프)·8(`web-push`)·1-5(`auth_attempts`) 구현 완료분.
+
 ### 순서 제안
 
 3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 확인 항목 55는 database 0021 적용 →
 5-1 → 5-2 → 5-4 → 5-3 순서(5-5 트리거 등록은 사용자 승인 뒤 database)이며 다른 단위와 독립이다. 11은 나머지가 끝난 뒤
-여유 있을 때. 확인 항목 57은 18-1 → 18-2 → 18-3(사용자) → 배포 → 18-4 순서이며 다른 단위와 독립이다. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
+여유 있을 때. 확인 항목 57은 18-1 → 18-2 → 18-3(사용자) → 배포 → 18-4 순서이며 다른 단위와 독립이다. 확인 항목 58은 19-1 → 19-2 → 19-3이며 19-4(서비스워커)는 frontend와 함께 배포한다. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
 적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨).
 
 ## 테스트 방법

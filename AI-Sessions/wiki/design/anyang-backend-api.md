@@ -58,11 +58,16 @@ status는 draft이며 pm이 승인 기록 후 구현 단계에서 active로 바�
 새 문서 [[anyang-board-collector]]가 원본이다. 이 문서에서는 5-1절(아래 56 개정 단락), 7절, 9절, 12절, 13-1절에 포인터만 단다. 5-1절의 파서·저장 규칙·해시·`image_count`는 그대로 유효하고 보드와
 Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모두 ``이며 설계 승인으로 확정된다.
 
-**2026-10-04 개정(확인 항목 57, 재승인 대기)**: 알림 잡(`/api/jobs/notify`)을 실제로 돌린다. 새 7-1절이 A 일괄 발송 방지
+**2026-10-04 개정(확인 항목 57, 승인 27차, 구현·배포 완료)**: 알림 잡(`/api/jobs/notify`)을 실제로 돌린다. 새 7-1절이 A 일괄 발송 방지
 (`published_at` 14일 상한, 알림 쿼리 한 곳), B 트리거(Supabase pg_cron + pg_net + 새 키), C 첫 활성화·롤백·구독 0개
 사용자 처리를 정한다. 새 키 `NOTIFY_TRIGGER_SECRET`(헤더 `x-notify-secret`)은 notify 라우트에서만 통한다(9절). 스키마
 변경 없음, DB 몫(확장 설치·Vault·잡 등록 SQL)은 [[anyang-database-schema#알림 잡 활성화 — DB 몫 (확인 항목 57, 2026-10-04, 설계 draft)]]
 가 소유한다. 모든 값은 사용자 승인으로 확정됐다.
+
+**2026-10-04 개정(확인 항목 58, 사용자 승인 범위, 재승인 없음)**: 알림 설정 화면의 "테스트 알림 보내기" 버튼용
+`POST /api/notify-settings/test`(새 8-1절). 1분 1회 제한은 기존 `auth_attempts`에 새 값(`test_notify`/`user`)을 쓰는
+방식이라 스키마 변경이 없다. 8절 payload `{title, notice_id}`에 선택 필드 `url`을 더하고 서비스워커가 이를 읽게 하는 변경이
+frontend 계약에 포함된다. 승인값에서 직접 나오지 않는 값은 `(미확정)`이다. status는 draft이며 pm이 28차 기록 후 구현 단계에서 active로 바꾼다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -1379,6 +1384,73 @@ database에 요청한다).
   `{ title, notice_id }` 고정 형식이다. `title`은 새로 매칭된 공지 제목, `notice_id`는
   `notices.id`(식별정보 미포함). 서비스워커([[anyang-frontend-screens]] 소관)가 알림 클릭
   시 이 `notice_id`로 `/notices/[id]`(공지 상세)로 이동한다.
+- **테스트 알림 payload(확인 항목 58)**: 위 스키마에 선택 필드 `url`을 더한 `{ title, url }`이 테스트 알림에만 쓰인다. 공지 알림 payload는 바뀌지 않는다. 8-1절.
+
+### 8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)
+
+사용자가 알림 설정 화면에서 "지금 이 기기로 알림이 오는지"를 눌러 확인하는 버튼용 API다. 값은 사용자가 승인한 범위(확인 항목 58,
+재승인 없음)이고, 거기서 직접 따라 나오지 않는 값만 `(미확정)`으로 표시한다.
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/notify-settings/test` | 로그인 사용자 본인 `push_subscriptions` 전체에 테스트 푸시 1건 발송 |
+
+- **인증·정지**: `requireUser()` 기본 옵션(세션 없으면 401 빈 본문, 정지 사용자는 403 `ACCOUNT_SUSPENDED`, 재동의 미완료는 403 `CONSENT_REQUIRED`).
+  `skipSuspended`·`skipConsent`를 켜지 않는다 — 1-2절 기존 정지 규칙 그대로다. 요청 body는 쓰지 않는다. 수신 대상은 세션의 `userId`로만 정한다.
+- **발송**: `push_subscriptions where user_id = 세션 userId`의 모든 기기에 순서대로 보낸다. 기기 하나가 실패해도 나머지를 계속 시도하고, 410/404
+  (`isGoneSubscriptionError`)는 7절과 같이 그 구독을 지우며 성공·실패 어느 쪽으로도 세지 않는다. 발송 루프는 7절 `sendToAllDevices`의 로직을
+  재사용한다(코드 복제 금지). payload를 인자로 받는 공용 함수로 분리하되 동작 불변이어야 하며 기존 `jobs-notify` 테스트가 그대로 통과해야 한다
+  (분리 위치·함수명은 구현 때 정한다, `(미확정)`). `notify_logs`에는 쓰지 않는다. `api_usage_logs`와 무관하다.
+- **Payload와 서비스워커 계약(frontend가 알아야 할 것)**: 8절 기존 payload `{ title, notice_id }`로는 테스트 알림을 표현할 수 없다. 현재 서비스워커
+  (`web/public/sw.js`의 `parsePushPayload`)는 `notice_id`가 없으면 클릭 시 `/notices`로 보내고, `/settings/notifications`로 보낼 방법이 없기 때문이다.
+  그래서 payload에 선택 필드 `url`을 추가한다.
+  - 테스트 payload: `{ "title": "테스트 알림입니다", "url": "/settings/notifications" }`(`title`·`url` 값은 승인값). `notice_id`는 없다. 식별정보도 담지 않는다.
+  - 기존 공지 알림 payload `{ title, notice_id }`는 바뀌지 않는다.
+  - **서비스워커 변경 필요(frontend 소관, `(미확정)` 필드명 `url`)**: `parsePushPayload`가 `payload.url`이 문자열이고 `/`로 시작하며 `//`로 시작하지 않으면
+    그 값을 이동 대상으로 쓰고(같은 출처 상대 경로만 허용), 아니면 기존대로 `notice_id` → `/notices/[id]` → 기본 `/notices` 순서로 정한다. `notificationclick`
+    핸들러는 `event.notification.data.url`을 이미 쓰므로 바꾸지 않는다. 다른 서비스워커 동작(알림 표시·포커스)은 그대로다. 필드명 `url`이 마음에 들지 않으면
+    frontend가 backend와 맞춰 바꿀 수 있으나, 서버와 서비스워커가 같은 이름을 써야 하고 8절 payload 스키마 확정 항목(31)의 확장이므로 바꾸면 이 절을 먼저 고친다.
+  - 알림 `body` 문구는 보내지 않는다(요청 범위에 없음).
+- **응답 계약(frontend)**:
+
+  | 상태 | body | 의미 | frontend 안내(문구는 frontend 소관) |
+  |---|---|---|---|
+  | 200 | `{ "success_count": n, "failed_count": m }` | 발송을 시도했다. 성공 n대, 실패 m대(410/404로 삭제된 기기는 어느 쪽에도 안 센다) | `success_count ≥ 1`이면 "성공 n대" |
+  | 409 | `{ "error": "NO_SUBSCRIPTION" }` | 이 사용자의 `push_subscriptions`가 0행이다(발송 시도 없음, 제한 슬롯도 쓰지 않음) | "구독 없음" |
+  | 429 | `{ "error": "TOO_MANY_ATTEMPTS" }` | 같은 사용자가 1분 안에 이미 테스트 알림을 보냈다 | "잠시 후 다시 시도" |
+  | 401 | 없음 | 세션 없음 | 기존 처리 |
+  | 403 | `{ "error": "ACCOUNT_SUSPENDED" }` 또는 `CONSENT_REQUIRED` | 정지·재동의(1-2절·1절 기존 규칙) | 기존 처리 |
+
+  - 429 코드명은 1-6절 기존 `TOO_MANY_ATTEMPTS`를 재사용한다(YAGNI, `(미확정)`). frontend는 상태 코드 429만으로 분기해도 된다. `Retry-After` 헤더는 보내지 않는다(요청 범위에 없음).
+  - **200인데 `success_count`가 0인 경우(`(미확정)` 처리, 사용자 확정 값에서 직접 나오지 않는다)**: ① `failed_count ≥ 1`(모든 기기 전송이 오류, VAPID 키 누락 포함)이면
+    200 `{0, m}`으로 돌려준다. 승인된 3가지 안내에 없는 경우이므로 frontend가 "잠시 후 다시 시도"에 준하는 안내를 쓸지 정해야 한다. ② 모든 기기가 410/404여서 방금 전부 삭제된
+    경우는 200 `{0, 0}`이다. 사실상 구독이 사라진 것이므로 frontend가 "구독 없음"과 같은 안내로 처리하게 하는 안(위 `(미확정)`)을 권한다. 서버가 409로 바꾸는 안은 채택하지
+    않았다(이미 발송을 시도한 요청이고 제한 슬롯을 쓴 뒤라 응답 의미가 어긋난다).
+- **1분 1회 제한 저장 방식 — 스키마 변경 없음**: 기존 `auth_attempts`([[anyang-database-schema#auth_attempts]])에 새 값을 쓴다.
+  - 확인: `0017_auth_attempts.up.sql`의 `attempt_type`·`identifier_type`은 `text not null`뿐이고 check 제약·enum이 없다(`web/db/migrations/` 전체에서 이 테이블을 바꾸는 마이그레이션도
+    0017뿐이다). 값 셋(`login_failure`/`signup_attempt`, `email`/`ip`)은 database 문서의 "제안"일 뿐 DB가 강제하지 않는다. 운영 DB의 실제 제약은 이번에 직접 읽지 않았다(마이그레이션 파일 기준).
+    새 마이그레이션·인덱스가 필요 없다(기존 인덱스 `(attempt_type, identifier_type, identifier_hash, created_at)`가 그대로 조회에 맞는다).
+  - 값(`(미확정)`): `attempt_type = 'test_notify'`, `identifier_type = 'user'`, `identifier_hash = sha256(user_id)`(1-6절과 같은 해시 방식, 원본 id 미저장). 이메일·IP는 쓰지 않는다.
+  - 순서: 인증 → 구독 조회(0행이면 409, 기록 안 함) → 슬롯 선점 → 발송. 구독이 없을 때 슬롯을 쓰지 않는 이유는 구독 직후 바로 누르는 첫 시도가 429가 되지 않게 하기 위해서다.
+  - 선점은 SQL 한 문장이다. `rowCount`가 0이면 429이다.
+    ```sql
+    insert into auth_attempts (attempt_type, identifier_type, identifier_hash)
+    select 'test_notify', 'user', $1
+     where not exists (
+       select 1 from auth_attempts
+        where attempt_type = 'test_notify' and identifier_type = 'user' and identifier_hash = $1
+          and created_at > now() - interval '1 minute')
+    ```
+    발송이 실패해도 슬롯은 돌려주지 않는다(발송을 시도한 것이므로 제한에 센다).
+  - 코드 영향: `web/lib/auth-attempts.ts`의 `IdentifierType`·`AttemptType` 타입에 새 값을 더하고 위 선점 함수 1개를 추가한다. 기존 `isBlocked`(15분·5회 고정)는 건드리지 않는다.
+  - 한계(수용): 같은 사용자의 동시 두 요청이 동시에 `not exists`를 통과하면 두 행이 들어가 2회가 나갈 수 있다(READ COMMITTED, 락 없음). 테스트 푸시 1건 남용 상한이 2배가 되는 정도라 직렬화(advisory lock)는 넣지 않는다.
+    프런트가 전송 중 버튼을 막는다.
+  - 정리: `auth_attempts` 1일 보존 정리 잡(`UNAPPLIED_cleanup-auth-attempts.sql`, 미등록)이 등록되면 이 행도 함께 지워진다. 1분 창에는 영향이 없다. 미등록이어도 행은 사용자당 분당 최대 1건이다.
+  - database 문서가 `attempt_type`·`identifier_type` 값 셋을 적어 두므로(`login_failure`/`signup_attempt`, `email`/`ip`) 새 값 `test_notify`·`user` 추가 한 줄은 database 소유 문서에서 해야 한다(역링크·값 목록 갱신 필요,
+    이 문서에서는 고치지 않는다).
+- **frontend 계약 요약**: 서비스워커의 `payload.url` 처리, 응답 코드 4종(200/409/429 + 기존 401/403)과 body 키(`success_count`, `failed_count`, `error`). 화면 문구·버튼은 [[anyang-frontend-screens]] 소관이다.
+
+테스트 방법은 [[anyang-backend-api#테스트 방법]]의 "테스트 알림(8-1절)" 항목이다.
 
 ### 9. 환경변수 목록
 
@@ -1681,6 +1753,15 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   (임계값 픽스처, [[anyang-database-schema#user_preferences — 대화에서 추출한 선호,
   벡터. "AI가 기억하는 내 정보" 화면의 데이터]] 테스트와 연계).
 - **알림 잡 활성화(7-1절, 확인 항목 57)**: `web/test/jobs-notify.test.ts`·`scheduler-auth.test.ts`에 추가한다. ① `x-notify-secret`이 맞으면 notify 200, `x-scheduler-secret`도 그대로 200, 둘 다 없거나 틀리면 401, `NOTIFY_TRIGGER_SECRET`이 비어 있으면 그 헤더는 401. ② `x-notify-secret`은 `collect`·`embed`·`ingest`에서 401, notify가 `x-backfill-secret`·`x-collector-secret`을 받지 않는 기존 동작 유지. ③ 공지 조회 쿼리에 `coalesce(n.published_at, n.collected_at)` 조건과 14일 인자가 들어가는지(쿼리 문자열·파라미터 캡처), 목 DB로 `published_at`이 15일 전·수정 재수집으로 `collected_at`만 최근인 글이 매칭에서 빠지고 13일 전 글은 남는지. ④ 구독 0개 사용자는 `notify_logs`가 `failed`로 남지 않고 선점 행이 지워지며 이후 구독 뒤 같은 공지가 발송되는지, 구독 있는데 전부 실패하면 `failed`로 남는지. ⑤ `maxDuration` export 확인. 운영 확인은 7-1절 C 절차이며 실제 푸시 전달은 테스트 계정으로만 확인된다.
+- **테스트 알림(8-1절, 확인 항목 58)**: `web/test/notify-settings-test.test.ts`(신규), `web/test/auth-attempts.test.ts` 추가, `web/test/frontend-push.test.ts` 갱신. DB·`web-push`는 목으로 한다.
+  ① 인증: 세션 없음 401, 정지 사용자 403 `ACCOUNT_SUSPENDED`(발송·선점 쿼리 미호출). ② 본인만: 구독 조회 쿼리가 세션 `userId`로만 걸리고 body·쿼리스트링의 user id는 쓰이지 않는다.
+  ③ 구독 0행이면 409 `NO_SUBSCRIPTION`, `sendPushNotification`·선점 insert 모두 미호출. ④ 정상: 구독 2행 → 두 기기에 payload `{title:"테스트 알림입니다", url:"/settings/notifications"}`(JSON 문자열)로
+  발송, 200 `{success_count:2, failed_count:0}`. ⑤ 한 기기 일반 오류 + 한 기기 성공이면 `{1,1}`이고 나머지 기기도 시도된다. 전부 오류면 `{0,n}`. ⑥ 410/404 기기는 `delete from push_subscriptions where endpoint`가
+  호출되고 성공·실패에 세지 않는다. 전부 410이면 200 `{0,0}`. ⑦ `notify_logs` 대상 쿼리(insert·update·delete)가 한 번도 호출되지 않는다. ⑧ 제한: 선점 insert의 `rowCount`가 0이면 429
+  `{error:"TOO_MANY_ATTEMPTS"}`이고 발송 미호출, 1이면 발송. 선점 쿼리 파라미터가 `sha256(user_id)` 1개이고 `'test_notify'`·`'user'`·`interval '1 minute'`를 포함하는지. 구독 0행 409일 때는 선점 쿼리가
+  호출되지 않는지. ⑨ 서비스워커: `frontend-push.test.ts`가 `sw.js`의 `parsePushPayload`에 `{title, url:"/settings/notifications"}`를 넣으면 이동 대상이 그 경로이고, `url`이 `//evil.example`·`https://…`·
+  비문자열이면 무시되고 `notice_id` → `/notices/[id]` → `/notices` 순서로 돌아가며, 기존 `{title, notice_id}` 케이스가 그대로 통과하는지. ⑩ 공용 발송 함수로 분리한 뒤에도 기존 `jobs-notify` 테스트가 그대로 통과한다
+  (동작 불변). ⑪ 운영 확인(구현·배포 뒤, 세션이 필요해 에이전트는 못 한다): 로그인 안 한 상태 `POST`가 401. 실제 기기 수신과 클릭 시 `/settings/notifications` 이동은 사용자가 확인한다.
 - **기억 주입(3-3절, 확인 항목 43, 핵심)**: `user_preferences` 픽스처가 있는 사용자로
   채팅 요청 시 DeepSeek로 보내는 payload의 시스템 메시지에 `기억하는 사용자 정보:` 절과
   그 문장들이 포함되는지 확인(페이로드 캡처, 기존 데이터 최소화 테스트와 같은 방식).
@@ -1856,7 +1937,11 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
 
-- **알림 잡 활성화(7-1절, 확인 항목 57, 신규, 재승인 대기)** — 사용자 결정·`(미확정)` 목록은 7-1절 D(8개). 확정 전 모든 값이 제안이다. 확인하지 못한 것:
+- **테스트 알림(8-1절, 확인 항목 58, 신규)** — 확정(사용자 승인 범위): 경로·메서드, 세션 인증·정지 규칙, 본인 구독에만 발송, 제목·클릭 이동 경로, 410/404 삭제, `notify_logs`
+  미기록, 사용자당 1분 1회·429, 응답 `{success_count, failed_count}`, 구독 0이면 409 `NO_SUBSCRIPTION`. `(미확정)`: ① payload 필드명 `url`과 서비스워커 변경(경로 검증 규칙)
+  ② 제한 저장 값 `attempt_type='test_notify'`·`identifier_type='user'`·해시 방식 ③ 429 코드명 `TOO_MANY_ATTEMPTS` 재사용 ④ 200이면서 `success_count` 0인 경우(전부 실패 / 전부 410·404 삭제)의 응답·
+  frontend 안내 ⑤ 발송 루프 공용 함수 분리 위치·이름 ⑥ 동시 요청 시 2회 허용(락 없음) 수용. 확인하지 못한 것: 운영 DB `auth_attempts`의 실제 제약(마이그레이션 파일만 읽음), 실제 기기 수신.
+- **알림 잡 활성화(7-1절, 확인 항목 57, 승인 27차)** — 사용자 결정 8개는 승인으로 확정됐고 구현·배포됐다(7-1절 D). 확인하지 못한 것:
   pg_net이 끊은 뒤 Vercel 함수가 끝까지 실행되는지, Supabase 무료 프로젝트 일시중지 정책의 적용 여부, 운영 Vercel에 `VAPID_*`가 들어 있는지, 실제 기기 푸시 전달.
 
 - **보드 수집기·받기 API(확인 항목 56, 신규, 재승인 대기)** — 모든 값 ``, 목록과 이유는 [[anyang-board-collector]] "확인이 필요한 항목" 1~8번:

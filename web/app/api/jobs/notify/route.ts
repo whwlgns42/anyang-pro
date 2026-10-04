@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requireNotifyJobSecret } from "@/lib/scheduler-auth";
-import { sendPushNotification, isGoneSubscriptionError } from "@/lib/web-push";
+import { sendToUserDevices } from "@/lib/push-send";
 
 // anyang-backend-api 7절 — 알림 잡. 시각 창 매칭 + 코사인 유사도 + notify_logs pending 선점.
 const SIMILARITY_THRESHOLD = 0.75; // 설계 승인값(2026-09-27 승인으로 확정)
@@ -63,42 +63,12 @@ async function tryReserve(userId: string, noticeId: string): Promise<boolean> {
   return (reclaimed.rowCount ?? 0) > 0;
 }
 
-type SendResult = { successCount: number; failedCount: number; lastError?: unknown };
-
-// anyang-backend-api 7절(확인 항목 30) — 다중 기기 발송 판정: 한 대라도 성공하면 전체
-// success, failed_device_count에 성공하지 못한 기기 수를 기록한다(만료 구독 삭제분 제외).
-async function sendToAllDevices(userId: string, noticeId: string): Promise<SendResult> {
-  const { rows: devices } = await pool.query<{ endpoint: string; p256dh: string; auth: string }>(
-    `select endpoint, p256dh, auth from push_subscriptions where user_id = $1`,
-    [userId],
-  );
-  if (devices.length === 0) {
-    return { successCount: 0, failedCount: 0 };
-  }
-  const { rows: noticeRows } = await pool.query<{ title: string }>(`select title from notices where id = $1`, [
-    noticeId,
-  ]);
-  const payload = JSON.stringify({ title: noticeRows[0]?.title ?? "새 공지", notice_id: noticeId });
-
-  // 기기 1대 실패로 나머지 기기 전송 시도가 막히지 않게 모든 기기를 끝까지 시도한다. 410/404
-  // (Gone/Not Found)는 표준 Web Push 처리로 구독을 지우고 성공·실패 어느 쪽으로도 세지 않는다.
-  let successCount = 0;
-  let failedCount = 0;
-  let lastError: unknown;
-  for (const device of devices) {
-    try {
-      await sendPushNotification(device, payload);
-      successCount++;
-    } catch (err) {
-      if (isGoneSubscriptionError(err)) {
-        await pool.query(`delete from push_subscriptions where endpoint = $1`, [device.endpoint]);
-        continue;
-      }
-      failedCount++;
-      lastError = err;
-    }
-  }
-  return { successCount, failedCount, lastError };
+// anyang-backend-api 7절(확인 항목 30) — 다중 기기 발송 판정은 공용 sendToUserDevices(8-1절 공용화).
+function sendToAllDevices(userId: string, noticeId: string) {
+  return sendToUserDevices(userId, async () => {
+    const { rows } = await pool.query<{ title: string }>(`select title from notices where id = $1`, [noticeId]);
+    return JSON.stringify({ title: rows[0]?.title ?? "새 공지", notice_id: noticeId });
+  });
 }
 
 export async function POST(request: Request) {
