@@ -396,6 +396,7 @@ owner: pm
       - ④ `collector.env` 변수 목록(A-3)에 `PGPORT=5433` 추가(없으면 기존 main 5432에 붙을 수 있어 구현이 막음, `.env.example`에는 있음).
       - ⑤ 보드 `collector_runs` 90일 삭제 쿼리 미구현 — 삭제라 승인 대상. 승인하면 backend 구현.
       - 그래서 `anyang-board-collector`·`anyang-board-collector-db`를 승인된 설계에서 뺐다(23차 이후). 결정 뒤 backend·database가 문서 반영 → 24차 → (나)면 backend 수정·재검수 → push → 배포 → (c) → 보드 설치 → 시험.
+    - **(j) 결정(2026-10-04, user, 메인 세션 전달)**: ① (나) — full은 성공·실패 모두 보고, 매일 1행 기록(backend 수정·재검수). ②③④ 코드 값 5종 표 추가, 응답표 문구 정리, `collector.env`에 `PGPORT=5433` — 문서만 코드에 맞춤, 승인. ⑤ 보드 `collector_runs` 90일 자동 삭제 승인(실행 기록만, `collected_notices` 원문은 지우지 않음). 이어서 24차 → backend 수정·재검수 → push → deploy → (c) → 보드 설치 → 시험 ①·③ → backfill → 462건 → timer.
     - (k) 경미(검수 기록, 조치 불필요): 같은 새 글이 동시에 두 번 들어오면 두 번째 처리에서 청크 삭제가 빠질 수 있으나 보드 락이 단일 실행을 보장해 사실상 발생하지 않음(`lib/notice-store.ts:24-53`).
     - (h) **보드 보안(사용자 판단 대기, 이번 범위 밖)**: 보드 `pg_hba.conf` local·127.0.0.1·::1 trust, 이전 psql 기록 파일에 비밀번호 문자열 잔존. 변경하지 않음.
     - (i) **알림 잡 등록 전 확인 필요**: 백필 462건이 `collected_at=now()`로 들어가 알림 잡 등록 후 과거 공지가 일괄 발송될 위험.
@@ -458,6 +459,11 @@ owner: pm
 - [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 2026-10-04(23차 이어서): `anyang-board-collector`·`anyang-board-collector-db`를 뺀다 — 사유: 확인 항목 56(j) code-review "설계 변경 필요"(full 성공 보고 충돌, 표에 없는 코드 값, 응답표 문구, PGPORT, 90일 삭제). 사용자 결정 후 24차로 재기록한다.
+
+2026-10-04(24차): 56(j) 사용자 결정(메인 세션 전달 — (나) full 일일 보고, 코드 값 5종·응답표·PGPORT 문서 정합, collector_runs 90일 삭제)을 database·backend가 반영한 뒤 2종을 다시 기록한다. success 보고 행은 `error_summary=null`(frontend 변경 불필요)로 정한 것은 (나)에서 직접 따라 나온 값으로 본다.
+
+- [[anyang-board-collector-db]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-board-collector]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 

@@ -256,6 +256,7 @@ function trimToBytes(rows: PendingRow[]): PendingRow[] {
 }
 
 async function runLocked(args: Args, deps: Deps, db: Db, cfg: { url: string; secret: string }): Promise<number> {
+  await store.pruneRuns(db).catch(() => deps.log("prune: failed")); // 실패해도 실행은 계속한다.
   await store.failStale(db);
   const prev = await store.previousRun(db);
   const blockedRest = args.kind === "sync" ? false : await store.recentlyBlocked(db);
@@ -278,12 +279,20 @@ async function runLocked(args: Args, deps: Deps, db: Db, cfg: { url: string; sec
     // 수집이 실패했어도 대기열 전송은 한다. --no-sync만 건너뛴다.
     if (!args.noSync) await transmit(c, ingest);
 
-    // 0건·실패 보고(항목 없는 호출): full은 실패 때마다, quick은 직전이 실패가 아니었는데 이번에 실패했을 때만.
+    // 보고(항목 없는 호출): full은 성공·실패 모두 매일 한 번(보고 대상이 아닌 실패는 보내지 않음),
+    // quick은 직전이 실패가 아니었는데 이번에 실패했을 때만(성공 보고 없음).
     const { reportCode } = c.st;
-    if (reportCode && (args.kind === "full" || (args.kind === "quick" && !c.previousFailed))) {
+    const report = reportCode
+      ? args.kind === "full" || (args.kind === "quick" && !c.previousFailed)
+        ? { status: "failed", error_code: reportCode }
+        : null
+      : args.kind === "full" && !c.st.failure
+        ? { status: "success" }
+        : null;
+    if (report) {
       try {
-        const r = await ingest.notices({ kind: args.kind, items: [], report: { status: "failed", error_code: reportCode } });
-        deps.log(`report: ${reportCode} status=${r.status}`);
+        const r = await ingest.notices({ kind: args.kind, items: [], report });
+        deps.log(`report: ${report.status} status=${r.status}`);
       } catch {
         deps.log("report: not delivered");
       }

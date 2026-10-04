@@ -99,7 +99,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 | `COLLECTOR_INGEST_SECRET` | 예 | C의 인증 키. Vercel 쪽과 같은 값. 사용자가 만든 임의 문자열(길이 32자 이상 권장). 에이전트는 값을 만들지도 보지도 않는다. |
 | `COLLECTOR_INGEST_URL` | 아니오 | 받기 API 기준 주소(Vercel 운영 주소). 코드에 하드코딩하지 않는다(이전 가능성). |
 | `COLLECTOR_CONTACT` | 아니오 | 요청 User-Agent의 문의 연락처. **값은 사용자가 정한다**. 비어 있으면 연락처 없는 UA `anyang-youth-policy-bot/1.0`(5-1절 8번과 같은 동작). |
-| `PGHOST` · `PGDATABASE` · `PGUSER` | 아니오 | 위 DB 접속. |
+| `PGHOST` · `PGPORT` · `PGDATABASE` · `PGUSER` | 아니오 | 위 DB 접속(값은 문서에 쓰지 않는다). `PGPORT`는 보드 수집 DB 전용 클러스터 포트 `5433`이다. `PGPORT`·`PGDATABASE`가 없으면 libpq 기본값(5432, 기존 클러스터)으로 붙게 되므로 구현은 둘 중 하나라도 비면 실행하지 않는다(`config missing`, 종료 코드 1). 구현이 읽는 키는 이 표의 전부다(`COLLECTOR_INGEST_SECRET`·`COLLECTOR_INGEST_URL`·`COLLECTOR_CONTACT`·`PG*` 4개). |
 
 #### A-4. 흐름·성공 판정·겹침 방지
 
@@ -107,7 +107,9 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 파싱 결과만 출력하고 아무것도 저장·전송하지 않음, F-3 시험용).
 
 1. **겹침 방지**: 보드 DB에 접속해 `pg_try_advisory_lock`(세션 락. 보드는 소켓 직결이라 풀러 문제가 없다)을 잡는다. 못 잡으면 로그 한 줄 남기고 종료 코드 0.
-   `running`으로 10분 넘게 남은 행은 `failed('stale')`로 바꾼다([[anyang-board-collector-db]]). systemd 쪽의 "같은 유닛 중복 시작 안 함"이 1차, 이 락이 2차(quick·full·backfill 사이)다.
+   `running`으로 10분 넘게 남은 행은 `failed('stale')`로 바꾼다([[anyang-board-collector-db]]). 같은 시점(락을 잡은 직후)에 **90일 지난 실행 기록을 지운다**
+   (확정, 사용자 승인 56(j)): `delete from collector_runs where started_at < now() - interval '90 days' and status <> 'running'`. 지우는 것은 `collector_runs`뿐이고
+   `collected_notices`(`raw_html` 포함)는 건드리지 않는다. 쿼리·근거는 [[anyang-board-collector-db#collector_runs — 보드 수집·전송 실행 이력]]가 원본이다. 삭제 실패는 실행을 막지 않는다(로그만). systemd 쪽의 "같은 유닛 중복 시작 안 함"이 1차, 이 락이 2차(quick·full·backfill 사이)다.
 2. **수집**(모드별 범위·상세 대상은 [[anyang-backend-api#5-1. 전체 수집·모드·겹침 방지·백필 (신규, 2026-10-04, 확인 항목 55, 사용자 확정 반영)]] 2번 표와 같다. 다른 점:
    "DB에 이미 있음" 판정은 **보드 `collected_notices`** 기준이고, `backfill`은 한 호출 5페이지 제한이 없다(보드에는 300초 한도가 없다) — `--from 1 --to 47`을 한 번에 돌 수 있고,
    이미 보드에 있는 `source_url`은 건너뛴다(중간에 끊겨도 같은 명령으로 이어진다)).
@@ -123,6 +125,10 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
    | 상세에 본문 칸 `td.p-table__content`가 없음 | 그 항목은 저장하지 않고 건너뜀, 실행은 끝까지 간 뒤 `failed` | `parse_failed` |
    | HTTP 오류·시간 초과 | 그 요청에서 중단, `failed` | `fetch_failed` |
    | `robots.txt` Disallow | `failed` | `robots_disallowed` |
+
+   위 표 밖에서 구현이 쓰는 코드 5종(`ip_blocked_skipped`, `unexpected`, `bad_item`, `ingest_unavailable`, `ingest_bad_request`)과 `ingest_auth`·`usb_not_mounted`·`stale`의 뜻은
+   [[anyang-board-collector-db#collector_runs — 보드 수집·전송 실행 이력]]의 코드 값 표가 원본이다(여기에 복제하지 않는다). 관련 동작만 적는다: `ip_blocked_skipped`는 4번의 쉬기 실행에 붙는다(쉬기 판정은 이 값을 건너뛰고
+   사이트에 실제로 닿은 마지막 실행만 본다). `unexpected`·`ip_blocked_skipped`·`ingest_*`는 보드 `collector_runs`에만 남고 6번의 `report`로 Vercel에 보내지 않는다(`report.error_code`는 C-3의 5개뿐).
 
    `isBlockedPage`는 `meta description`의 문구와 `p-subject` 부재로 판정한다. 문구가 사이트에서 바뀌면 `empty_list`로 떨어지므로 어느 쪽이든 성공으로 기록되지 않는다.
    본문이 빈 공지(이미지만 있는 글)는 정상이라 본문 길이로는 판정하지 않는다.
@@ -143,8 +149,9 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
    재시도 상한·백오프 값은 database 문서([[anyang-board-collector-db]] 대기열 상태 전이)가 원본이다. 401/400의 "횟수 미소모"는 그 표에 없는 보강이라 database에 반영을 요청한다(미해결 질문 2).
    요청 타임아웃은 280초 ``(함수 한도 300초 안).
 6. **0건·실패 보고**: Supabase 관리자 화면이 "수집 실패"를 볼 수 있도록, 아래 경우에 **항목 없는 호출**(`items: []`, `report` 포함)을 보낸다.
-   - `full` 실행은 성공이든 실패든 끝에 한 번 보고한다(하루 1행의 "살아 있음" 신호).
-   - `quick`은 **직전 실행이 실패가 아니었는데 이번에 실패했을 때만** 보고한다(차단이 계속돼도 10분마다 행이 쌓이지 않고, 연속 실패의 첫 번째만 남는다).
+   - `full` 실행은 **성공이든 실패든 끝에 한 번 보고한다**(확정, 사용자 56(j)) — 하루 1행의 "살아 있음" 신호. 성공이면 `report: {status:"success"}`, 실패면 `report: {status:"failed", error_code}`(C-2).
+     보고는 그 실행의 전송이 끝난 뒤 보내는 별도 호출이고 `items`는 비어 있다. 단 `ip_blocked_skipped`·`unexpected`·`ingest_*` 같은 Vercel 보고 대상이 아닌 실패는 `failed` 보고를 보내지 않는다(성공 보고도 아님 — 그날 `full` 행이 없는 것이 이상 신호다).
+   - `quick`은 기존대로 **직전 실행이 실패가 아니었는데 이번에 실패했을 때만** `failed` 보고한다(차단이 계속돼도 10분마다 행이 쌓이지 않고, 연속 실패의 첫 번째만 남는다). `quick`은 성공 보고를 보내지 않는다.
    - 새 글이 없는 정상 `quick`은 호출하지 않는다(Supabase `collect_runs`가 10분마다 쌓이지 않게. 하루 144행 방지).
 7. **남은 임베딩**: 받기 API 응답의 `remaining_unembedded`가 0보다 크면 보드가 `POST /api/jobs/embed`(헤더 `x-collector-secret`)를 부른다.
    `embedded_chunks === 0`이 나오거나 한 실행당 10회에 닿으면 멈춘다(다음 실행이 이어간다). 임베딩 실패는 수집·전송 결과에 영향을 주지 않는다(5-1절 5번과 같음).
@@ -180,7 +187,8 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
       "is_pinned": boolean, "image_count": 정수,
       "attachments": [ { "name": string, "url": string } ]
   } ],                                                    // 0~20건
-  "report": { "status": "failed", "error_code": "ip_blocked" | "empty_list" | "parse_failed" | "fetch_failed" | "robots_disallowed" }  // 선택
+  "report": { "status": "success" }                                                      // 선택. 둘 중 하나:
+          | { "status": "failed", "error_code": "ip_blocked" | "empty_list" | "parse_failed" | "fetch_failed" | "robots_disallowed" }
 }
 ```
 
@@ -192,7 +200,9 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 |---|---|---|
 | 정상 처리(일부 항목 거부·오류 포함) | 200 | `{ "results": [ { "source_url", "result": "created" \| "updated" \| "unchanged" \| "rejected" \| "error", "code"?: string } ], "collected_count": number, "remaining_unembedded": number \| null }` |
 | 인증 실패 | 401 | 빈 body |
-| JSON이 아님, 항목 21건 이상, 필드 누락 등 **요청 전체 형식 오류** | 400 | `{ "error": "INVALID_BODY" }` |
+| **최상위 형식 오류**만: JSON이 아님, `kind` 값 오류, `items`가 배열이 아니거나 21건 이상, `report` 형식 오류, `items`·`report` 둘 다 없음 | 400 | `{ "error": "INVALID_BODY" }` |
+
+항목 안의 필드 오류(필드 누락·타입 오류·길이·URL·날짜·첨부 등)는 400이 아니다. 그 항목만 `rejected`(`code: INVALID_FIELD` 등)로 응답하고 나머지는 처리한다.
 | 본문 총 크기 초과 | 413 | `{ "error": "PAYLOAD_TOO_LARGE" }` |
 | 서버 오류 | 500 | `{ "error": "INGEST_FAILED" }` |
 
@@ -213,7 +223,7 @@ A 보드 수집기, C 받기 API, D Vercel 직접 수집 경로 정리, F 테스
 | `published_at` | `null` 또는 실제 달력 날짜 `YYYY-MM-DD`. |
 | `is_pinned` | boolean. `image_count`: 0~1000 정수. |
 | `attachments` | 최대 50개, 각 `name` 1~300자, `url`은 `https://www.anyang.go.kr/` 아래이고 경로에 `downloadBbsFile.do` 포함, 같은 `url` 중복 거부. |
-| `report` | `status`는 `failed`만, `error_code`는 위 5개 중 하나. 아니면 400. `report`가 있으면 `items`가 비어 있어도 된다. |
+| `report` | `status`는 `success` 또는 `failed`. `failed`면 `error_code`가 위 5개 중 하나여야 하고, `success`면 `error_code`가 없어야 한다. `success`는 `items`가 비어 있을 때만 허용한다(보고 전용 호출). 어긋나면 400. `report`가 있으면 `items`가 비어 있어도 된다. |
 
 SQL은 모두 매개변수 바인딩이다(문자열 이어붙이기 없음). 응답·로그에 본문을 되돌려 보내지 않는다.
 
@@ -225,10 +235,14 @@ SQL은 모두 매개변수 바인딩이다(문자열 이어붙이기 없음). �
    수집용 대기 시간(2초 간격 × 요청 수)이 서버에 없으므로 5-1절 때처럼 수집이 시간을 먹지 않는다. 대기열이 비면(`embedded_chunks === 0`) 끝낸다. 임베딩 실패는 응답을 실패로 바꾸지 않는다(로그만).
    응답 직전에 `countUnembedded()`로 `remaining_unembedded`를 채운다(실패하면 `null`, 응답은 200).
    보드 요청 타임아웃(280초)은 이 200초 + 마지막 묶음 여유보다 길다.
-3. 항목이 하나도 없고 `report`도 없으면(보드 버그) 400 `INVALID_BODY`.
+3. 항목이 하나도 없고 `report`도 없으면(보드 버그) 400 `INVALID_BODY`. 항목 없이 `report`(`success` 또는 `failed`)만 있는 호출은 정상(200, `results: []`, `collected_count: 0`).
 4. **`collect_runs` 호출 1회당 1행**(database 권고와 같음, [[anyang-database-schema]] 56 단락): `trigger_type='scheduled'`, `triggered_by=null`, `started_at`=요청 시작, `finished_at`=응답 직전.
    - `report` 없음 → `status='success'`, `collected_count`=위 합계. 항목이 전부 `rejected`/`error`여도 호출 자체는 처리됐으므로 `success`이되 `error_summary`에 `rejected=<n>, error=<n>`을 적는다.
-   - `report` 있음 → `status='failed'`, `error_summary`=`<error_code>` (+ `kind`). 임베딩은 부르지 않는다.
+   - `report.status='failed'` → `status='failed'`, `error_summary`=`<error_code> kind=<kind>`. 임베딩은 부르지 않는다.
+   - `report.status='success'`(항목 없는 호출, `full`의 일일 보고) → `status='success'`, `collected_count=0`, **`error_summary=null`**, 임베딩은 부르지 않는다(남은 임베딩은 A-4 7번이 따로 이어간다).
+     `error_summary`를 비우는 이유: frontend 이력 문구([[anyang-frontend-screens]] 11절, `describeRun`)가 `error_summary`의 **첫 단어**를 코드로 해석하고, 코드가 아닌 문자열은 오류 톤의 원문으로 그대로 보인다.
+     성공 행에 `ok`·`full` 같은 단어를 넣으면 성공 행이 오류 문구처럼 뜨므로 코드 단어를 쓰지 않고 null로 둔다. null이면 문구 칸은 표시되지 않고 "성공 · 새 글·바뀐 글 0건"만 보인다. frontend 변경은 필요 없다(`rejected=<n>, error=<n>` 힌트 형식도 그대로).
+     성공 행과 일반 `quick` 성공 행은 모두 `trigger_type='scheduled'`라 이력에서 구분되지 않는다(구분은 보드 이력, 위 `collect_runs.mode` 불필요 결정과 같음).
    - 행은 **끝에 한 번 insert**한다(`running` 행을 만들지 않는다). 그래서 5-1절 4번의 `running` 기반 겹침 방지·stale 정리와 얽히지 않는다 — 받기 API는 멱등이라 겹쳐도 안전하고, 겹침 방지는 보드의 락이 맡는다. 함수가 도중에 죽으면 행이 안 남는데, 그 사실은 보드 `collector_runs`와 `pending` 잔류로 보인다.
    - `collect_runs.mode` 컬럼 추가(0022)는 필요 없다(권고: 추가하지 않음, 구분은 보드 이력). 결정은 database 문서 확인 항목 5.
 5. 로그: 건수·결과 코드만. 본문·키·요청 헤더 금지.
@@ -326,7 +340,7 @@ database 확인(`pg_cron` 미설치, 수집 잡 등록된 적 없음 — [[anyan
 
 | 질문 | 답 (제안) |
 |---|---|
-| 0건·차단 상태 보고를 받아 `failed` 행을 남기는가 | 예. `items: []` + `report`(C-2), 보고 시점은 A-4 6번(`full`은 매번, `quick`은 연속 실패의 첫 번째만) |
+| 0건·차단 상태 보고를 받아 `failed` 행을 남기는가 | 예. `items: []` + `report`(C-2), 보고 시점은 A-4 6번(`full`은 성공·실패 모두 매일, `quick`은 연속 실패의 첫 번째만) |
 | 보드 `collected_at`을 보내는가 | 아니오. 서버가 받은 시각을 쓴다(C-2 이유) |
 | `/api/jobs/collect`를 지우는가 | 아니오. 유지하되 `DIRECT_COLLECT_ENABLED` 스위치로 닫는다(D) |
 | 호출 1회당 `collect_runs` 1행 | 예(C-4) |

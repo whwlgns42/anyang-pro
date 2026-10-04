@@ -35,6 +35,11 @@ export async function failStale(db: Db): Promise<void> {
   );
 }
 
+// 실행 기록 90일 보존(설계 56(j)). collector_runs만 지운다 - collected_notices·raw_html은 건드리지 않는다.
+export async function pruneRuns(db: Db): Promise<void> {
+  await db.query(`delete from collector_runs where started_at < now() - interval '90 days' and status <> 'running'`);
+}
+
 // 직전 수집 실행(sync 제외). 보고 여부(직전이 실패였는가) 판단에 쓴다.
 export async function previousRun(db: Db): Promise<{ status: string; error_summary: string | null } | null> {
   const { rows } = await db.query(

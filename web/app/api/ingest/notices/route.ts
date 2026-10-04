@@ -88,8 +88,9 @@ export async function POST(request: Request) {
     // 호출 1회당 collect_runs 1행(끝에 한 번 insert, C-4 4번).
     const rejected = results.filter((r) => r.result === "rejected").length;
     const errored = results.filter((r) => r.result === "error").length;
-    const summary = req.report
-      ? `${req.report.error_code} kind=${req.kind}`
+    const failedReport = req.report?.status === "failed" ? req.report : null;
+    const summary = failedReport
+      ? `${failedReport.error_code} kind=${req.kind}`
       : rejected + errored > 0
         ? `rejected=${rejected}, error=${errored}`
         : null;
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
       await pool.query(
         `insert into collect_runs (trigger_type, status, started_at, finished_at, collected_count, error_summary, triggered_by)
          values ('scheduled', $1, $2, now(), $3, $4, null)`,
-        [req.report ? "failed" : "success", new Date(startedAt).toISOString(), collected, summary],
+        [failedReport ? "failed" : "success", new Date(startedAt).toISOString(), collected, summary],
       );
     } catch (err) {
       console.error("ingest/notices: collect_runs insert failed", msg(err));

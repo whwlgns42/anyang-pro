@@ -146,11 +146,22 @@ ConditionPathIsMountPoint=/mnt/usb
 | sync_failed_count | int, not null, default 0 | 이번 실행에서 전송 실패한 행 수 |
 | error_summary | text, null 허용 | 실패 요약. 차단 페이지는 `ip_blocked`, 마운트 없음은 `usb_not_mounted` 같은 짧은 코드로 시작(코드 값은 A 몫) |
 
+- 구현이 `error_summary`(실행)·`last_error`(항목)에 쓰는 값(사용자 승인 56(j), 뜻은 `web/collector/main.ts`·`store.ts` 코드에서 확인):
+
+  | 값 | 쓰이는 곳 | 뜻 |
+  |---|---|---|
+  | `ip_blocked_skipped` | 실행 `error_summary`, `failed` | 직전 실행이 차단당한 지 60분(`BLOCK_REST_MINUTES`)이 안 지나 사이트에 요청하지 않고 쉰 실행. 쉬기 판정은 이 값의 행을 건너뛰고 "사이트에 실제로 닿은 마지막 실행"만 본다 |
+  | `unexpected` | 실행 `error_summary`, `failed` | 사이트 요청 실패가 아닌 예외(보드 DB 오류 등). Vercel에 보고하지 않고 보드 `collector_runs`에만 남는다 |
+  | `bad_item` | 항목 `last_error` | 받기 API 응답의 그 항목 형식이 어긋남(null 등). 일시 오류로 `retry_count`+1(백오프·상한 5는 B-3 표와 같음) |
+  | `ingest_unavailable` | 실행 `error_summary`, `failed` | 네트워크 오류, 5xx, 응답 `results` 형식·개수 불일치. 항목은 일시 실패로 `retry_count`+1 |
+  | `ingest_bad_request` | 실행 `error_summary`, `failed` | 받기 API가 400/413 등 200이 아닌 응답. 보드 버그 신호이며 항목 상태는 바꾸지 않는다(B-3 표 401/400 행) |
+
+  그 밖의 코드(`ip_blocked`, `usb_not_mounted`, `ingest_auth`, `stale` 등)는 위 설명과 [[anyang-board-collector]]가 원본이다.
 - 규칙(A와 같이 적용): 차단 안내 페이지(`p-subject` 0개)이거나 목록 0건이면 `status='success'`로 쓰지 않고 `failed`로 쓴다. Supabase
   시험 호출이 "success 0건"을 남긴 것과 같은 실수를 보드에서 반복하지 않기 위함이다.
 - 시작 때 `running`이 10분 넘게 남은 행은 `failed`('stale')로 바꾼다(Supabase `collect_runs`의 N=10분과 같은 방식).
 - 겹침 방지: 보드 DB의 advisory lock(`pg_try_advisory_lock`, 키 상수는 구현 때 정한다)으로 한 번에 하나만 돈다. 잡히지 않으면 조용히 끝낸다.
-- 보존: 90일(Supabase `collect_runs`와 같은 값). 삭제는 수집기 시작 때 하는 정리 쿼리이며 승인 대상(B-8).
+- 보존: 90일(Supabase `collect_runs`와 같은 값). **자동 삭제 확정**(사용자 승인 56(j)): 수집기가 실행을 시작할 때 `delete from collector_runs where started_at < now() - interval '90 days' and status <> 'running'` 한 줄을 돌린다(기존 제안 "수집기 시작 때 정리 쿼리"를 확정, 별도 잡 없음). 지우는 것은 **실행 기록뿐**이다. `collected_notices`(원문 `raw_html` 포함)는 이 삭제의 대상이 아니다. `raw_html` 비우기 등 `collected_notices` 정리는 이번 승인 범위가 아니다(B-6, 무제한 보관 유지). 삭제 구현은 backend 몫이며 현재 `web/collector` 코드에는 아직 없다.
 
 #### 대기열 상태 전이 (backend가 알아야 할 점)
 
@@ -227,7 +238,8 @@ ConditionPathIsMountPoint=/mnt/usb
   |---|---|
   | 0001 down | 수집 데이터 삭제 |
   | `pg_dropcluster 17 collector` · 데이터 폴더 `/mnt/usb/anyang-collector/pg` 삭제 · 유닛 드롭인 삭제 | 데이터·인프라 삭제 |
-  | `collector_runs` 90일 정리 쿼리 실행, `raw_html` 비우기 | 데이터 삭제·변경 |
+  | `raw_html` 비우기 등 `collected_notices` 정리 | 데이터 삭제·변경 (승인 범위 밖) |
+  | `collector_runs` 90일 자동 삭제 | 사용자 승인됨(56(j)). 수집기가 시작 때 자동 실행하며 실행 기록만 지운다. 수동으로 더 넓게 지우는 것은 별도 승인 |
   | `failed` 행 일괄 삭제 | 데이터 삭제 |
 
   클러스터·DB·롤 **생성**과 0001 up은 되돌릴 수 없는 작업이 아니다(제거하면 되돌릴 수 있고, 제거 자체가 승인 대상).

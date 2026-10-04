@@ -114,6 +114,27 @@ describe("board collector run", () => {
     expect(e.find("insert into collector_runs")).toHaveLength(0);
   });
 
+  it("prunes collector_runs older than 90 days right after the lock; a failure does not stop the run", async () => {
+    const e = makeEnv({ site: () => new Response(listHtml(ROW(1)), { status: 200 }) }, { existing: { [urlFor(1)]: "h" } });
+    const q = e.db.query.getMockImplementation()!;
+    e.db.query.mockImplementation(async (sql: string, p?: unknown[]) => {
+      if (sql.includes("delete from collector_runs")) {
+        e.calls.push({ sql, params: p });
+        throw new Error("boom");
+      }
+      return q(sql, p);
+    });
+    expect(await run(args("quick"), e.deps)).toBe(0);
+    const order = e.calls.map((c) => c.sql);
+    const del = order.findIndex((q) => q.includes("delete from collector_runs"));
+    expect(del).toBeGreaterThan(order.findIndex((q) => q.includes("pg_try_advisory_lock")));
+    expect(del).toBeLessThan(order.findIndex((q) => q.includes("insert into collector_runs")));
+    expect(order[del]).toContain("interval '90 days'");
+    expect(order[del]).toContain("status <> 'running'");
+    expect(order.some((q) => /delete from collected_notices/.test(q))).toBe(false);
+    expect(e.finish()?.status).toBe("success");
+  });
+
   it("refuses to start when config (incl. PGPORT) is missing, touching nothing", async () => {
     const e = makeEnv({});
     delete e.deps.env.PGPORT;
@@ -350,6 +371,28 @@ describe("board collector run", () => {
       const again = makeEnv({ site: blocked }, { prev: { status: "failed", error_summary: "ip_blocked" } });
       await run(args("quick"), again.deps);
       expect(again.ingestReqs()).toHaveLength(0);
+    });
+
+    it("full: a successful run reports success once (items empty); quick success reports nothing", async () => {
+      const site = (u: string) => new Response(u.includes("selectBbsNttList") ? listHtml(ROW(1)) : detailHtml(), { status: 200 });
+      const full = makeEnv({ site });
+      expect(await run(args("full"), full.deps)).toBe(0);
+      expect(full.ingestReqs().map((r) => r.body)).toEqual([{ kind: "full", items: [], report: { status: "success" } }]);
+      const quick = makeEnv({ site }, { existing: { [urlFor(1)]: "h" } });
+      expect(await run(args("quick"), quick.deps)).toBe(0);
+      expect(quick.ingestReqs()).toHaveLength(0);
+    });
+
+    it("full: failures that are not Vercel-report codes send no report at all (no success either)", async () => {
+      const e = makeEnv({ site: (u) => new Response(u.includes("selectBbsNttList") ? listHtml(ROW(1)) : detailHtml(), { status: 200 }) });
+      e.db.query.mockImplementation(async (sql: string) => {
+        if (sql.includes("insert into collected_notices")) throw new Error("db down");
+        if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+        if (sql.includes("insert into collector_runs")) return { rows: [{ id: 7 }] };
+        return { rows: [] };
+      });
+      expect(await run(args("full"), e.deps)).toBe(1);
+      expect(e.ingestReqs().filter((r) => r.body?.report)).toHaveLength(0);
     });
 
     it("a healthy quick with no new posts makes no ingest call at all", async () => {

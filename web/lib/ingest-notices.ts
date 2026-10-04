@@ -66,7 +66,7 @@ export function validateItem(raw: unknown): { ok: true; item: NoticeInput } | { 
 export type ParsedRequest = {
   kind: Kind;
   items: unknown[];
-  report: { error_code: ReportCode } | null;
+  report: { status: "success" } | { status: "failed"; error_code: ReportCode } | null;
 };
 
 // 요청 전체 형식 검사. 실패하면 null(400 INVALID_BODY).
@@ -76,10 +76,14 @@ export function parseRequest(json: unknown): ParsedRequest | null {
   if (!KINDS.includes(kind as Kind) || !Array.isArray(items) || items.length > MAX_ITEMS) return null;
   let rep: ParsedRequest["report"] = null;
   if (report !== undefined) {
-    if (!isObj(report) || report.status !== "failed" || !REPORT_CODES.includes(report.error_code as ReportCode)) {
-      return null;
-    }
-    rep = { error_code: report.error_code as ReportCode };
+    if (!isObj(report)) return null;
+    if (report.status === "success") {
+      // 보고 전용 호출(full의 일일 보고)만 허용: error_code 없음, items 비어 있음.
+      if (report.error_code !== undefined || items.length > 0) return null;
+      rep = { status: "success" };
+    } else if (report.status === "failed" && REPORT_CODES.includes(report.error_code as ReportCode)) {
+      rep = { status: "failed", error_code: report.error_code as ReportCode };
+    } else return null;
   }
   if (items.length === 0 && !rep) return null; // 보드 버그
   return { kind: kind as Kind, items, report: rep };

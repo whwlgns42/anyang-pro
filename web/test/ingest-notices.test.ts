@@ -137,6 +137,7 @@ describe("POST /api/ingest/notices", () => {
       await bad(req({ kind: "quick", items: [], report: { status: "success", error_code: "ip_blocked" } }));
       await bad(req({ kind: "quick", items: [], report: { status: "failed", error_code: "other" } }));
       await bad(req({ kind: "quick", items: [] }));
+      await bad(req({ kind: "full", items: [item(1)], report: { status: "success" } }));
       expect(sql("insert into collect_runs")).toHaveLength(0);
     });
 
@@ -268,6 +269,16 @@ describe("POST /api/ingest/notices", () => {
       expect(runs).toHaveLength(1);
       expect(runs[0].params![0]).toBe("failed");
       expect(runs[0].params![3]).toBe("ip_blocked kind=full");
+      expect(runEmbedJobMock).not.toHaveBeenCalled();
+    });
+
+    it("success report with no items: 200, success row, collected 0, no summary, embed job never called", async () => {
+      const { res, json } = await post([], { kind: "full", report: { status: "success" } });
+      expect(res.status).toBe(200);
+      expect(json.results).toEqual([]);
+      const runs = sql("insert into collect_runs");
+      expect(runs).toHaveLength(1);
+      expect([runs[0].params![0], runs[0].params![2], runs[0].params![3]]).toEqual(["success", 0, null]);
       expect(runEmbedJobMock).not.toHaveBeenCalled();
     });
 
