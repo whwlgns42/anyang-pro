@@ -945,3 +945,4 @@ frontend 영향은 두 가지다.
 - [[anyang-cheongan-design-adoption]] — 청안 토큰·공존·글꼴·반응형·공통 컴포넌트
 - [[anyang-board-collector]] — 보드 수집기·받기 API·직접 수집 스위치(11절 56 개정의 근거)
 - [[anyang-chat-snapshot-scroll-restore-order]] — 3-1절 5번 스크롤 복원 효과 순서 오류 기록
+- [[anyang-chat-restore-strictmode-abort]] — 서버 조회 복원이 StrictMode 이중 effect에서 취소되던 오류 기록

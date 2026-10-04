@@ -256,3 +256,4 @@ S1~S3 구현 뒤 사용자가 정한 세 가지를 코드에 반영한다. 근�
 - [[anyang-cheongan-design-adoption]]
 - [[anyang-board-collector]] — 보드 수집기·직접 수집 스위치(K1의 근거)
 - [[anyang-chat-snapshot-scroll-restore-order]] — 채팅 보관분 스크롤 복원 효과 순서 오류 기록(S4 참고)
+- [[anyang-chat-restore-strictmode-abort]] — StrictMode 이중 effect 조회 취소 오류 기록(S4 참고)
