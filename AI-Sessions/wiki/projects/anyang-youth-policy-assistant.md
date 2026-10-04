@@ -438,6 +438,7 @@ owner: pm
     - **테스트 결과(2026-10-04, 메인 세션 실측)**: 테스트 계정(user `2646968e…`)이 알림을 켬 — notify_time 12:06, enabled_at 12:04 KST, 구독 1, 선호 6. 12:00·12:05 cron 200 `{"sent_count":0}`. 이 계정 선호(최근 5개 평균)와 14일 이내 공지 3건의 최대 유사도 0.728(일자리 박람회)·0.726(역량강화 특강)·0.633 — 모두 임계값 0.75 미만이라 `enabled_at`을 당겨도 0건 → 당기지 않음(운영 데이터 무변경). 푸시 실제 전달은 아직 미확인.
     - (n) **확인 필요(사용자 판단, 이번엔 바꾸지 않음)**: 유사도 임계값 0.75가 실제로는 거의 발송되지 않는 수준일 수 있다(테스트 계정 최댓값 0.728). 바꾸면 설계 변경(backend-api 7절).
     - 갱신(2026-10-04): 58 테스트 알림으로 운영 웹 푸시 실제 전달이 확인됐다(사용자 실기기 수신). 알림 잡 경로 중 남은 미확인은 공지 매칭 발송뿐이며, 현재 임계값 0.75로는 테스트 계정 대상 공지가 0건이다. (n)은 사용자 결정 전이라 열린 항목 그대로.
+    - **(n) 결정(2026-10-04, user "좀 낮춰줘", 메인 세션이 0.70 제안·전달)**: 알림 매칭 유사도 임계값 0.75 → **0.70**. 범위는 `web/app/api/jobs/notify/route.ts` `SIMILARITY_THRESHOLD`와 그 값을 적은 설계 문서(backend-api 7절 등, database-schema)뿐. 추천 정렬·다른 값 불변, 운영 데이터 불변. 실측(메인 세션): 테스트 계정 최근 14일 공지 최대 유사도 0.728·0.726 → 0.70이면 2건이 매칭 대상이나 `enabled_at`(12:04) 이후 수집된 공지가 0건이라 당장 발송은 없음. 그래서 `anyang-database-schema`·`anyang-backend-api`를 승인된 설계에서 뺐다(29차 전 단계). overview 문서(`AI-Sessions/wiki/overview/` html·json)에도 0.75가 있으나 overview는 요청 시에만 갱신 — "overview 최신화 필요".
 58. **새 요청(2026-10-04, user, 메인 세션 전달 — 테스트 알림 버튼, 사용자가 승인한 범위로 설계·구현, 재승인 없음)**:
     - backend: `POST /api/notify-settings/test` — 로그인 세션 인증, 본인 `push_subscriptions`에만 발송, payload 제목 "테스트 알림입니다"·누르면 `/settings/notifications`, 410·404 구독은 기존 규칙대로 삭제, `notify_logs` 미기록, 사용자당 1분 1회 제한(429), 응답 `{success_count, failed_count}`, 구독 0이면 409 `NO_SUBSCRIPTION`, 정지 사용자는 기존 정지 규칙.
     - frontend: 알림 설정 화면에 "테스트 알림 보내기" 버튼, 결과 안내 3가지(성공 n대 / 구독 없음 / 잠시 후 다시 시도), 기존 화면 스타일·taste-skill, 서비스 워커 알림 클릭 이동이 테스트 payload에서도 동작.
@@ -521,11 +522,16 @@ owner: pm
 
 2026-10-04(28차): 확인 항목 58 — 사용자가 메인 세션을 통해 승인한 값(경로·인증·본인 구독·제목·클릭 이동·410/404 삭제·notify_logs 미기록·1분 1회 429·응답·409 `NO_SUBSCRIPTION`·정지 규칙·버튼·안내 3종·서비스워커 이동, "재승인 없음")을 backend·frontend·database가 반영한 뒤 4종을 다시 기록한다. 승인 범위는 그 값들이다. 에이전트가 새로 정한 값은 `(미확정)` 그대로 승인 범위 밖이며, 확인 항목 58 (a)에 모아 사용자 확인을 받는다(20차와 같은 처리 — 제안값대로 구현한다).
 
-- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(28차 이어서): `anyang-database-schema`·`anyang-backend-api`를 뺀다 — 사유: 확인 항목 57(n) 알림 임계값 0.75 → 0.70(user 결정). 값 반영 후 29차로 재기록한다.
+
+2026-10-04(29차): 57(n) 사용자 결정(0.70)을 database(2곳)·backend(4곳, 겸해서 8-1절 제약 확인 사실 정정)가 반영한 뒤 2종을 다시 기록한다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 

@@ -1041,7 +1041,7 @@ select cron.schedule(
 
 #### A. 과거 공지 일괄 발송 방지
 
-**현재 조건 검토**(코드 `web/app/api/jobs/notify/route.ts`): ① 후보 = `enabled=true`, 미정지, 서울 시각 5분 창 `(notify_time, +5분]`. ② `enabled_at` null이면 건너뜀. ③ 선호 없으면 건너뜀. ④ 공지 = 숨김 아님 + `collected_at > enabled_at`, 코사인 유사도 상위 20청크 중 0.75 이상. ⑤ `notify_logs unique(user_id, notice_id)` 선점으로 중복 방지.
+**현재 조건 검토**(코드 `web/app/api/jobs/notify/route.ts`): ① 후보 = `enabled=true`, 미정지, 서울 시각 5분 창 `(notify_time, +5분]`. ② `enabled_at` null이면 건너뜀. ③ 선호 없으면 건너뜀. ④ 공지 = 숨김 아님 + `collected_at > enabled_at`, 코사인 유사도 상위 20청크 중 0.70 이상(임계값 0.75→0.70: 확인 항목 57(n), 사용자 결정 user 2026-10-04). ⑤ `notify_logs unique(user_id, notice_id)` 선점으로 중복 방지.
 
 **결론**: 현 상태에서 백필 462건이 발송될 사용자는 **0명**이다. notify_settings가 비어 있고, 앞으로 알림을 켜는 사용자의 `enabled_at`은 PUT 시점(`now()`)이라 백필 구간보다 뒤여서 `collected_at > enabled_at`이 백필분을 모두 막는다. 별도 데이터 변경 없이 안전하다. 남는 틈은 두 가지다.
 - **수정 재수집**: `lib/notice-store.ts`는 본문이 바뀐 글을 upsert할 때 `collected_at = now()`로 올린다(line 45). 보드 full 모드가 오래된 글의 본문 수정을 감지하면 그 글이 "새 공지"로 알림 후보가 된다.
@@ -1102,7 +1102,7 @@ select cron.schedule(
 
 1. **사전 점검**(읽기 전용): `select count(*) from notify_settings where enabled;` — 현재 0. 0이면 잡을 등록해도 아무도 대상이 아니다. 1 이상이면 누구인지 확인하고 멈춘다.
 2. **테스트 계정 1개만 대상**: 현재 notify_settings가 비어 있으므로 별도 설정 변경 없이, 테스트 계정이 앱 화면에서 알림을 켜는 순간(`enabled_at=now()`) 그 계정 하나만 후보가 된다. 필요 조건: 선호 보유(7행·사용자 2명 있음), 푸시 구독 1건 이상(현재 0), 알림 시각이 5분 창 안(PUT으로 지금+10분 정도). 다른 사용자가 중간에 알림을 켜면 대상이 늘어나므로 잡 등록 직전에 1번을 다시 센다.
-3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 사항이다(이 문서가 정하지 않는다). 안 쓰면 새 공지를 기다린다.
+3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.70 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 사항이다(이 문서가 정하지 않는다). 안 쓰면 새 공지를 기다린다.
 4. **확인**: `cron.job_run_details`에서 5분마다 실행, `net._http_response`에서 상태 200, `notify_logs`에 그 계정 행의 `result`가 `success`인지 본다.
 
 롤백(잡 중지·해제, 승인 불필요한 쪽부터):

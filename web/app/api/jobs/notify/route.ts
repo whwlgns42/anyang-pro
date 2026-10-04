@@ -4,7 +4,7 @@ import { requireNotifyJobSecret } from "@/lib/scheduler-auth";
 import { sendToUserDevices } from "@/lib/push-send";
 
 // anyang-backend-api 7절 — 알림 잡. 시각 창 매칭 + 코사인 유사도 + notify_logs pending 선점.
-const SIMILARITY_THRESHOLD = 0.75; // 설계 승인값(2026-09-27 승인으로 확정)
+const SIMILARITY_THRESHOLD = 0.70; // 확인 항목 57(n) 사용자 결정(2026-10-04, 승인된 설계 29차)으로 0.75에서 변경
 // anyang-backend-api 7-1절 — 일괄 발송 방지: 게시일 기준 14일 상한.
 const NOTIFY_MAX_AGE_DAYS = 14;
 
