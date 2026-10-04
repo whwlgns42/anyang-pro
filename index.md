@@ -48,8 +48,8 @@
 
 ## Design
 
-- [[anyang-database-schema]] — 안양 비서 DB 설계(draft — 57 알림 잡 활성화 DB 몫(pg_cron+Vault, 일괄 발송 방지 실측) 재승인 대기; 56 수집 pg_cron 잡 미등록; 55 공지 첨부·고정·이미지 수 컬럼, content_hash unique 해제(0021 운영 적용)): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
-- [[anyang-backend-api]] — 안양 비서 API 계약(draft — 57 알림 잡 7-1절(14일 상한, NOTIFY_TRIGGER_SECRET) 재승인 대기; 56 받기 API·직접 수집 스위치 운영 배포; 55 수집 모드·서버 분할 백필·공지 응답 필드, 실측 셀렉터·image_count 제외 규칙): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
+- [[anyang-database-schema]] — 안양 비서 DB 설계(active — 57 알림 잡 운영 활성화: pg_cron notify-job-trigger */5 + Vault; 56 수집 pg_cron 잡 미등록; 55 공지 첨부·고정·이미지 수 컬럼, content_hash unique 해제(0021 운영 적용)): 테이블, HNSW, 동의 기록, 관리자용 로그, pg_cron+pg_net 잡(알림·수집·정리), 재임베딩 절차, RLS·anon 권한 회수(0019)
+- [[anyang-backend-api]] — 안양 비서 API 계약(active — 57 알림 잡 7-1절(14일 상한, NOTIFY_TRIGGER_SECRET) 운영 배포; 56 받기 API·직접 수집 스위치 운영 배포; 55 수집 모드·서버 분할 백필·공지 응답 필드, 실측 셀렉터·image_count 제외 규칙): 인증·동의·정지, 채팅 RAG·인용 공지 SSE, 임베딩, 수집기, Web Push, 관리자 API, 배포, UNO Q runbook
 - [[anyang-board-collector]] — 안양 비서: UNO Q 보드 수집기·Vercel 받기 API 설계(active, 운영 중 — 2026-10-04 보드 설치·백필 462건·quick/full 타이머 활성화): 파서 공유(notice-parser.ts), systemd timer quick/full/backfill, 차단 페이지·0건 실패 처리, POST /api/ingest/notices(COLLECTOR_INGEST_SECRET), 직접 수집 스위치, 배포·롤백
 - [[anyang-board-collector-db]] — 안양 비서: UNO Q 보드 수집 보관함·전송 대기열 DB 설계(active, 보드 설치 완료 — 56 B안 별도 클러스터 17 collector 포트 5433, OS 사용자 postgres·수집기 arduino peer 맵): 보드 PostgreSQL USB 저장, collected_notices(원문 HTML·정리 값·sync_status), collector_runs, 로컬 소켓 접속, 배포·롤백
 - [[anyang-cheongan-design-adoption]] — 안양 비서: 팀원 디자인 소스 cheongan(Tailwind v4 + 토큰) 웹 적용 설계(active — 52·55 구현 완료, 본문 이미지 배지 포함): 토큰·globals.css 이행, 공통 컴포넌트, 화면 매핑표
@@ -58,7 +58,7 @@
 
 ## Dev Tasks
 
-- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(draft — 57 알림 잡 18 추가 재승인 대기; 56 보드 수집기·받기 API 5-6~5-9; 55 수집기 5-1~5-5)
+- [[anyang-backend-tasks]] — 안양 비서 backend 구현 작업 단위(active — 57 알림 잡 18; 56 보드 수집기·받기 API 5-6~5-9; 55 수집기 5-1~5-5)
 - [[anyang-frontend-tasks]] — 안양 비서 frontend 구현 작업 단위(active — 56 관리자 수집 이력 K1; 55 공지 화면 N1~N3)
 
 ## Concepts
