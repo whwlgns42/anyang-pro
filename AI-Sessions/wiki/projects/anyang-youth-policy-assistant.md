@@ -480,6 +480,14 @@ owner: pm
     - **설계 draft(2026-10-04, frontend)**: [[anyang-frontend-screens]] 3-1절·테스트 방법(단위 ①~⑧, 수동 가~자)·확인 항목 8, [[anyang-frontend-tasks]] S1(순수 함수)·S2(`chat-client.tsx`·`page.tsx`)·S3(로그아웃·탈퇴 정리). backend 영향 없음(기존 `GET /api/conversations/:id/messages`와 43-b 부분 답변 저장만 사용). 공지 상세 뒤로 버튼은 이미 히스토리 있으면 `router.back()`·없으면 `/notices`라 변경 없이 브라우저 뒤로가기와 같은 결과가 된다.
     - (a) **사용자 결정 필요 — 결정 문구와 다른 제안**: URL 동기화 수단. 결정은 `router.replace`인데 frontend 확인 결과 위험이 두 가지다. ① 지금 `chat-client.tsx`는 `initialConversationId`가 바뀌면 서버 대화를 다시 불러와 스트리밍 중인 messages를 덮어쓴다(설계는 `loadedIdRef`로 막음) ② Next.js 16.3.6에서 페이지 세그먼트 캐시 키에 검색 파라미터가 들어가, 스트리밍 중 `router.replace`가 재마운트·스트림 중단을 일으키는지 확정하지 못했다(실행 미확인). 제안: 응답 헤더로 conversation_id를 받는 즉시 `window.history.replaceState`(Next.js 문서상 라우터와 연동, 서버 요청·재렌더 없음, 히스토리 추가 없음 — 결정의 목적과 같음). 대안: 스트림 완료 후 `router.replace`(첫 대화에서 답변 도중 이동하면 URL에 id가 없어 서버 복원 불가). 구현 중 제안 안이 안 되면 설계 변경으로 보고.
     - 에이전트 제안값(`(미확정)`, 제안대로 구현 예정): 키 `anyang:chat:v1:{userId}:{conversationId}`, 보관 JSON 필드·모양 검사, 크기 상한(content 합 200,000자, 같은 탭 대화 10개, 용량 오류 시 1회 재시도), 저장 지연 500ms·즉시 저장 시점, 스트리밍 중 이동 후 복귀는 서버 1회 조회해 병합하고 답이 없으면 "답변이 중간에 멈췄을 수 있어요…" 한 줄, 스크롤 `atBottom` 8px, 복원 전 빈 대화 안내 숨김, 로그아웃 정리 3곳(`profile-section.tsx`·`suspended-actions.tsx`·탈퇴 성공 후 `account-client.tsx`; 세션 만료로 밀려나는 경우는 정리 안 함), 새 대화 시 이전 보관분은 지우지 않음.
+    - **(a) 결정(2026-10-04, user, 메인 세션 전달)**: URL 동기화는 conversation_id를 받는 즉시 `window.history.replaceState`. 앞의 "router.replace"는 메인 세션이 적은 수단이었고 사용자 결정의 본뜻은 "주소에 대화 번호를 붙여 복원 가능하게"다(메인 세션이 체감 차이 — 답변 끊김 없음, 답변 도중 이동해도 복원 — 를 설명, 사용자 동의). 에이전트 제안값 전부 제안대로 확정(상한 200,000자·대화 10개, 저장 지연 500ms, 스트리밍 중 이동 시 서버 1회 조회 병합·안내 한 줄, 하단 판정 8px, 세션 만료 시 미정리, 새 대화 시 이전 보관분 유지).
+    - **구현(2026-10-04)**: frontend `31618df`(S1 `web/app/_lib/chat-snapshot.ts`·테스트, S2 `chat-client.tsx`·`page.tsx` — userId 전달, 보관분→서버 복원, `x-conversation-id` 수신 즉시 `replaceState`, `loadedIdRef`, S3 로그아웃·탈퇴 3곳 정리; design-taste-frontend는 새 UI가 없어 범위 밖). code-review 1차: 치명 0·주요 3·경미 7 → 재위임 1회 `36344a7`(스크롤 복원 순서 — 오류 문서 [[anyang-chat-snapshot-scroll-restore-order]], 뒤로가기 시 prop null이면 `location.search` 대체, 사용자 메시지 즉시 저장, 인용 병합 꼬리 기준) → 재검수 경미 3 → 재위임 2회 `beb8a52`(스트림 종료 즉시 저장, id 전환 시 `pendingScroll` 초기화, 이전 조회 AbortController 취소) → 재검수 치명·주요 0. npm test 436·build 통과. 화면 실행 확인은 못 함(브라우저 도구·로그인 없음).
+    - (b) **사용자 결정 필요 — 설계 변경(code-review)**:
+      - ① (주요) "답변이 중간에 멈췄을 수 있어요" 문구가 거짓이 될 수 있다: 설계 3-1절 6번은 복원 직후 보관분을 `streaming: false`로 다시 쓰는데, 서버 메시지가 보관분보다 적어 안내를 띄운 경우 사용자가 안내대로 새로고침하면 `streaming: false` 보관분이 읽혀 서버 조회 없이 같은 부분 답변만 나온다(서버에 나중에 저장된 답은 계속 안 보임). 제안: 안내를 띄운 경우(interrupted)는 `streaming: true`를 유지해 다음 복원 때 서버를 다시 조회. pm 권장: 제안대로.
+      - ② 서버 조회 실패 시 보관분 표시: frontend가 설계(5번 ③ "실패하면 빈 화면 유지") 밖으로 응답 실패(`!res.ok`) 때 보관분을 보여 주게 했다. 빈 화면보다 낫지만 삭제된 대화의 보관분이 404에도 보일 수 있고, 네트워크 예외 때는 보관분을 안 보여 처리가 다르다. 선택: (가) 채택하고 두 경우를 같게 맞추되 404는 보관분 삭제·빈 화면 (나) 설계대로 빈 화면으로 되돌림. pm 권장 (가).
+      - ③ 문서 정리: 3-1절 제목·tasks 제목의 "설계 draft", 62·908행 "3-1절 값은 (미확정)", 마커 삭제로 깨진 괄호, 그리고 frontend가 잠금 범위 밖으로 고친 3-1절 문장 2곳(내용은 31차 승인과 일치)의 사후 인정.
+      - 그래서 `anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(31차 이후). 결정 뒤 frontend 설계 반영 → 32차 → 구현 → 검수 → 커밋 → push → deploy. **push·배포는 이 결정 뒤로 멈춤**(로컬에 `31618df`·`36344a7`·`beb8a52` 미배포).
+    - (c) 경미(검수 기록): 브라우저 뒤로가기로 `/chat`(prop null)에 도착하는 경로에서 진행 중이던 이전 조회를 취소하지 않아, 늦게 끝나면 messages를 덮어쓸 수 있다(기존 동작, 드묾). (b) 반영 때 함께 고칠지 결정.
 
 ## 승인된 설계
 
@@ -567,6 +575,10 @@ owner: pm
 
 2026-10-04(30차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 60(채팅 뒤로가기 시 대화·인용 유지, 새 요청). 반영 후 31차로 재기록한다.
 
+2026-10-04(31차): 확인 항목 60 사용자 결정·승인(①②, (a) `history.replaceState`, 에이전트 제안값 전부 확정)으로 2종을 다시 기록한다. frontend가 구현 단계에서 `(미확정)` 표시를 지운다.
+
+2026-10-04(31차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 60(b) code-review "설계 변경 필요"(interrupted 시 보관분 streaming 플래그, 서버 실패 시 보관분 표시, 문서 정리). 결정 후 32차로 재기록한다.
+
 - [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
@@ -627,3 +639,4 @@ owner: pm
 - [[anyang-cheongan-design-adoption]]
 - [[anyang-board-collector]]
 - [[anyang-board-collector-db]]
+- [[anyang-chat-snapshot-scroll-restore-order]]
