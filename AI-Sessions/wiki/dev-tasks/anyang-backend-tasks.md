@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -226,12 +226,23 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     16번과 대상 테이블·보존 기간이 달라 별도 작업 단위로 둔다(YAGNI에 위배되지 않음 —
     합치면 오히려 조건 분기가 늘어난다).
 
+18. **알림 잡 활성화(신규, 확인 항목 57, 재승인 대기, 값 `(미확정)`)** — [[anyang-backend-api#7-1. 알림 잡 활성화 (신규, 2026-10-04, 확인 항목 57, 설계 draft — 모든 값 `(미확정)`)]]
+    기준. 7번(알림 잡)·9번(공유 시크릿) 수정이다. 스키마 변경 없음.
+    - 18-1. `web/lib/scheduler-auth.ts`: `verifyNotifyTriggerSecret`(`x-notify-secret` ↔ `NOTIFY_TRIGGER_SECRET`)·`requireNotifyJobSecret`(scheduler 또는 새 키) 추가.
+      notify 라우트만 교체, `collect`·`embed`·`ingest`·`requireAnyJobSecret`은 그대로. 테스트: 새 키 통과·기존 키 유지·타 라우트 401.
+    - 18-2. `web/app/api/jobs/notify/route.ts`: 공지 조회에 `coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $3)`
+      (상수 `NOTIFY_MAX_AGE_DAYS = 14`), `export const maxDuration = 60`, 성공 0·실패 0이면 선점 행 삭제 후 넘어감(`failed` 미기록). 테스트는 7-1절 테스트 항목 ③④⑤.
+    - 18-3. 9절 환경변수 `NOTIFY_TRIGGER_SECRET` 값은 사용자가 만들어 Vercel에 넣는다(에이전트는 만들지 않는다). 새 배포 필요.
+    - 18-4. 운영 활성화는 7-1절 C 순서(사전 점검 → 코드 배포 → database 잡 등록 → 테스트 계정 → 확인). 확장 설치·Vault·잡 등록·`enabled_at` 변경은 database 소관이며
+      구현 지시서에 사용자 승인이 적혀 있어야 한다. 승인이 없으면 멈추고 보고한다. 롤백은 7-1절 C 7번.
+    - 의존: 3·7·9번(구현 완료분). 별도 단위로 독립 커밋 가능.
+
 ### 순서 제안
 
 3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
 robots.txt·HTML 구조 확인이 끝나는 대로 별도로 끼워 넣고, 13은 5 이후. 확인 항목 55는 database 0021 적용 →
 5-1 → 5-2 → 5-4 → 5-3 순서(5-5 트리거 등록은 사용자 승인 뒤 database)이며 다른 단위와 독립이다. 11은 나머지가 끝난 뒤
-여유 있을 때. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
+여유 있을 때. 확인 항목 57은 18-1 → 18-2 → 18-3(사용자) → 배포 → 18-4 순서이며 다른 단위와 독립이다. 16·17은 각 정리 잡 등록에 대한 별도 사용자 승인이 구현 단계 지시서에 먼저
 적혀 있어야 착수한다(보존 기간 자체는 둘 다 이미 확정됨).
 
 ## 테스트 방법

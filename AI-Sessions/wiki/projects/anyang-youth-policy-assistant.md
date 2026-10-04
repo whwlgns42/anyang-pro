@@ -418,6 +418,17 @@ owner: pm
     - (h) **보드 보안(사용자 판단 대기, 이번 범위 밖)**: 보드 `pg_hba.conf` local·127.0.0.1·::1 trust, 이전 psql 기록 파일에 비밀번호 문자열 잔존. 변경하지 않음.
     - (i) **알림 잡 등록 전 확인 필요**: 백필 462건이 `collected_at=now()`로 들어가 알림 잡 등록 후 과거 공지가 일괄 발송될 위험.
     - 역링크 남음(WARN): [[anyang-board-collector]] ← [[anyang-frontend-tasks]](backend 소유), [[anyang-database-schema]] ← [[anyang-board-collector]](database 소유). 다음 수정 때.
+57. **설계(2026-10-04, 새 요청 — 56(i) 알림 잡 활성화, 사용자 "진행해")**: 사용자별 알림 시각에 새 공지 푸시가 실제로 나가게 한다. 과거 공지(백필 462건)는 일괄 발송하지 않는다. 제약(계속 유효): 기존 비밀번호·키·환경변수(`SCHEDULER_SHARED_SECRET` 포함) 변경 금지·새 키 추가 가능, `DATABASE_URL` 로컬 미보관, 안양시 수집은 보드만(Vercel·Supabase가 Vercel 자기 API를 부르는 것은 차단과 무관).
+    - 설계 요구: A 과거 공지 일괄 발송 방지(현재 조건 실측 검토, 대안 비교 — 백필분 발송 완료 표시/published_at 상한/알림 컷오프 등, 권장안 1개, 운영 데이터 변경이면 대상 행 수·롤백). B 트리거(값을 모르는 `SCHEDULER_SHARED_SECRET` 조건에서 5분 주기 — (1) pg_cron + pg_net + 새 키(Vault) (2) 보드 timer + 새 키 또는 `COLLECTOR_INGEST_SECRET` (3) 기타; 가동률·보안·변경 범위 비교, 권장안, 키 분리 원칙). C 첫 활성화(테스트 계정 1개 검증, 사용자 수·알림 설정 수 읽기 전용 실측, 롤백). D 사용자 결정·(미확정) 목록.
+    - 진행: `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 승인된 설계에서 뺐다(26차). 설계 database → backend → (필요하면) frontend draft. 코드·운영 변경·잡 등록 없음.
+    - **실측(2026-10-04, database, 운영 Supabase 읽기 전용, 건수만)**: users 4(정지 0), `notify_settings` 0행(알림 켠 사용자 없음), `push_subscriptions` 0, `notify_logs` 0, `user_preferences` 7행/2명, notices 462 전부 백필 구간(01:43:52~02:17:42 UTC), published_at 최근 7일 2건·30일 5건, `supabase_vault` 0.3.1 설치(secrets 0), `pg_cron` 1.6.4 설치 가능·미설치, `pg_net` 설치.
+    - **설계 draft 완료(2026-10-04)**: database [[anyang-database-schema]] "알림 잡 활성화 — DB 몫" 절, backend [[anyang-backend-api]] 7-1절·7·9절·테스트 방법, [[anyang-backend-tasks]] 18(18-1~18-4). frontend 영향 없음(API 계약 불변, 기존 알림 설정 화면 사용). 두 문서 사이 어긋남 없음.
+      - A 권장 (나): 기존 `collected_at > enabled_at`은 그대로 두고 후보 쿼리(`web/app/api/jobs/notify/route.ts` 한 곳)에 `coalesce(published_at, collected_at) >= now() - 14일`(N 미확정)을 더한다. 지금은 알림 켠 사용자가 0명이라 앞으로 켜는 사용자의 `enabled_at`이 백필보다 뒤여서 백필 462건은 이미 막히지만, 남는 틈 두 가지(본문 수정된 옛 글은 `collected_at`이 now로 바뀜, 보드가 처음 수집하는 옛 글)를 막는다. 운영 데이터 변경 없음, 롤백은 코드 되돌리기. 비교: (가) 백필분 `notify_logs` 사전 기록은 4명×462=1,848행이고 미래 가입자를 못 덮음, (다) 컷오프는 `enabled_at` 규칙과 중복. 비용: 보드가 14일 넘게 멈췄다 복구되면 그 사이 글은 푸시 안 됨.
+      - B 권장 (1) pg_cron + pg_net + 새 키: 환경변수 `NOTIFY_TRIGGER_SECRET`, 헤더 `x-notify-secret`, Vault `notify_trigger_secret`·`app_base_url`, 잡 `notify-job-trigger` `*/5 * * * *`, pg_net 타임아웃 30초. Vault에서 읽어 `cron.job.command`에 키가 남지 않음. 인증은 notify 라우트만 `requireNotifyJobSecret`(scheduler 키 또는 새 키), 다른 라우트는 새 키 불허, 기존 `x-scheduler-secret` 경로 유지. 이유: 알림은 5분 창이라 놓친 실행은 복구 안 됨 — Supabase·Vercel에만 의존하는 (1)이 보드 전원·회선에도 의존하는 (2)보다 낫다. `COLLECTOR_INGEST_SECRET` 재사용은 비권장(공지 쓰기·임베딩 권한과 겹침). Vercel Cron은 Hobby 하루 1회라 불가(기존 결정).
+      - C 첫 활성화: 사전 점검(알림 켠 사용자 0 재확인, Vercel `VAPID_*` 이름만 확인) → 코드 배포 → database 잡 등록 → 테스트 계정(앱에서 푸시 구독·알림 켜기, 선호 보유) → 확인. 새 공지를 기다리지 않으려면 database가 그 계정이 받을 공지 수를 읽기 전용으로 세어 1건 이상이면 그 계정 `enabled_at`만 백필 이전으로 당김(운영 1행, 롤백은 원래 값), 0건이면 새 공지 대기. 운영에서 푸시 실제 전달은 아직 확인된 적 없음. 롤백: `cron.alter_job(active:=false)`/`cron.unschedule`, 새 키 삭제 후 재배포, 코드 되돌리기.
+      - 추가 수정 제안: 구독 0개 사용자는 성공 0·실패 0이면 `failed`로 남기지 않고 `pending` 선점 행을 지움(나중에 구독하면 다시 대상). notify 라우트에 `maxDuration` 없음 → 60초(미확정) 추가([[anyang-jobs-collect-missing-maxduration]]와 같은 유형).
+    - 사용자 결정 필요(D): ① A (나) 채택과 N일(제안 14) ② B pg_cron + pg_net 채택, 주기 5분 ③ 새 키 이름(`NOTIFY_TRIGGER_SECRET`·`x-notify-secret`), 값 생성·Vercel·Vault 입력(사용자 또는 메인 세션 — 값 비노출, `SCHEDULER_SHARED_SECRET` 불변) ④ `maxDuration` 60초, pg_net 타임아웃 30초 ⑤ 구독 0개 처리 방식 ⑥ 테스트 방법(사전 조회 후 `enabled_at` 당기기 또는 새 공지 대기, 운영 1행 변경 허용 여부) ⑦ 운영 작업 승인: `pg_cron` 확장 설치, Vault 2건, 잡 등록, 코드 배포, Vercel 환경변수 추가 ⑧ 보드 14일 이상 정지 시 그 사이 글 미발송 수용 여부.
+    - 확인 못 함: pg_net이 30초에 끊었을 때 Vercel 함수가 끝까지 도는지(끊겨 `pending`이 남으면 다음 날 창에서 다시 선점돼 하루 늦게 발송 — 첫 실행 응답 시간으로 확인), Supabase 무료 프로젝트 일시중지 정책 적용 여부, 운영 Vercel `VAPID_*` 3개 존재, 개발용 Supabase 프로젝트 존재.
 
 ## 승인된 설계
 
@@ -469,9 +480,6 @@ owner: pm
 
 2026-10-04(23차): 확인 항목 56 사용자 결정·승인(메인 세션 전달 — B안, 스위치, 제안값 전부 확정, "제안대로 승인"). database가 B안을 본문 기준으로 정리(별도 클러스터 `17 collector`, 포트 5433, `pg_createcluster`, 소켓 전용·peer, USB 가드 드롭인)한 뒤 7종을 기록한다. 포트 5433·클러스터 구성 세부는 B안 승인에서 직접 따라 나온 값으로 본다. 나머지 문서의 `(미확정)` 표시는 구현 단계에서 각 소유자가 지운다.
 
-- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-04, 승인자 user
 
@@ -486,6 +494,8 @@ owner: pm
 2026-10-04(25차): 56(l) (c)안(user, 메인 세션 전달)을 database가 반영(B-1·B-4, 같은 값이 적힌 F-1·F-2·인프라 문장·확인 항목 2를 함께 정합, 164행 낡은 문장 정정)한 뒤 다시 기록한다.
 
 - [[anyang-board-collector-db]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-04(26차): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`를 뺀다 — 사유: 확인 항목 57(알림 잡 활성화·과거 공지 일괄 발송 방지, 새 요청). 재승인 뒤 다시 기록한다. 남은 승인된 설계: `anyang-cheongan-design-adoption`, `anyang-frontend-screens`, `anyang-frontend-tasks`, `anyang-board-collector`, `anyang-board-collector-db`.
 
 ## Jev 도입 제안
 

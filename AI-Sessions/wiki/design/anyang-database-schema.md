@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: database
 ---
 
@@ -1011,6 +1011,106 @@ select cron.schedule(
     본다(테스트 방법 참고). pg_net 응답 테이블 보존 기간은 기본값을 쓴다(제안).
 - UNO Q 전환 시 트리거만 `리눅스 cron + curl`로 교체하고 잡 로직(앱 API)은 그대로 둔다
   ([[anyang-deployment-portability#이전 가능성 원칙 (Vercel+Supabase ↔ UNO Q)]]).
+
+### 알림 잡 활성화 — DB 몫 (확인 항목 57, 2026-10-04, 설계 draft)
+
+이 절은 [[anyang-youth-policy-assistant]] 확인 항목 57의 database 몫(A 일괄 발송 방지, B pg_cron 안, C 첫 활성화·롤백)이다.
+이 절의 값은 모두 `(미확정)`이며 코드·운영 DB 변경은 하지 않았다. 실측은 2026-10-04 운영 Supabase를 읽기 전용으로 조회했다(건수만, 개인정보 값 없음).
+
+#### 실측 (건수)
+
+| 항목 | 값 |
+|---|---|
+| users | 4 (정지 0) |
+| notify_settings 행 | **0** (알림 켠 사용자 0, enabled_at 분포 해당 없음) |
+| push_subscriptions | 0 (구독 사용자 0) |
+| notify_logs | 0 |
+| user_preferences | 7행, 사용자 2명 |
+| notices | 462 (숨김 0) |
+| notices.collected_at | 전부 백필 구간(2026-10-04 01:43:52~02:17:42 UTC) 462건, 구간 앞·뒤 0건 |
+| notices.published_at | 2021-06-02 ~ 2026-10-01, 최근 7일 2건·30일 5건 |
+| supabase_vault | 설치됨(0.3.1), `vault.secrets` 0건 |
+| pg_cron | 설치 가능(1.6.4), 미설치. pg_net 0.20.4 설치됨, `net.http_request_queue` 0건 |
+
+#### A. 과거 공지 일괄 발송 방지
+
+**현재 조건 검토**(코드 `web/app/api/jobs/notify/route.ts`): ① 후보 = `enabled=true`, 미정지, 서울 시각 5분 창 `(notify_time, +5분]`. ② `enabled_at` null이면 건너뜀. ③ 선호 없으면 건너뜀. ④ 공지 = 숨김 아님 + `collected_at > enabled_at`, 코사인 유사도 상위 20청크 중 0.75 이상. ⑤ `notify_logs unique(user_id, notice_id)` 선점으로 중복 방지.
+
+**결론**: 현 상태에서 백필 462건이 발송될 사용자는 **0명**이다. notify_settings가 비어 있고, 앞으로 알림을 켜는 사용자의 `enabled_at`은 PUT 시점(`now()`)이라 백필 구간보다 뒤여서 `collected_at > enabled_at`이 백필분을 모두 막는다. 별도 데이터 변경 없이 안전하다. 남는 틈은 두 가지다.
+- **수정 재수집**: `lib/notice-store.ts`는 본문이 바뀐 글을 upsert할 때 `collected_at = now()`로 올린다(line 45). 보드 full 모드가 오래된 글의 본문 수정을 감지하면 그 글이 "새 공지"로 알림 후보가 된다.
+- **뒤늦게 발견된 옛 글**: 보드가 처음 수집하는 과거 글은 `published_at`이 오래돼도 `collected_at`이 지금이다.
+- 부수 발견(backend 확인): 구독이 없는 사용자는 `sendToAllDevices`가 성공 0·실패 0을 돌려줘 `notify_logs`가 `failed`(error `unknown`)로 남고, unique 제약 때문에 나중에 구독해도 그 공지는 다시 보내지 않는다.
+
+| 안 | 내용 | 운영 데이터 변경 | 평가 |
+|---|---|---|---|
+| (가) 발송 완료 사전 기록 | 백필분을 `notify_logs`에 `success`로 미리 기록 | 대상 알림 사용자 × 462행. 지금은 알림 사용자 0이라 0행, 전체 4명으로 하면 1,848행이며 앞으로 가입할 사용자는 못 덮는다. 롤백: 그 행 delete | 지금 효과 없음, 의미 없는 행이 쌓이고 미래 사용자에 무력. 비추천 |
+| (나) `published_at` 상한 | 알림 후보를 `coalesce(published_at, collected_at) >= now() - N일`로 제한 | 없음(쿼리 조건 1줄, backend) | 수정 재수집·뒤늦게 발견된 옛 글 둘 다 막는다. 데이터 불변. `published_at`은 날짜만(00:00 UTC)이라 N은 일 단위 |
+| (다) 컷오프 시각 | `collected_at > greatest(enabled_at, cutoff)` | 상수 또는 설정 행 | `enabled_at` 규칙과 중복. 백필 방어는 이미 되어 있어 새 효과 없음 |
+| (라) 현행 유지 | 조건 변경 없음 | 없음 | 현재 위험 0이나 위 두 틈이 남음 |
+
+**권장안 (미확정)**: (나) — 현행 `collected_at > enabled_at` 조건은 그대로 두고, `published_at` 기준 최근 N일 제한을 후보 쿼리에 더한다. N=14일 `(미확정)`(근거: 최근 7일 2건·30일 5건으로 공지 빈도가 낮아 짧으면 알림이 거의 안 나가고, 너무 길면 옛 글이 섞임. 값은 사용자 결정). 운영 데이터 변경 없음, 롤백은 코드 되돌리기뿐. `published_at`이 null이면 `collected_at`으로 대체한다. 스키마 변경 없음(인덱스도 462행이라 불필요).
+
+#### B. pg_cron 안 (미확정)
+
+- **확장**: `create extension pg_cron;`(Supabase는 `cron` 스키마 생성). `pg_net`·`supabase_vault`는 이미 설치됨. 운영 DB 변경이므로 구현 지시서에 사용자 승인이 별도로 있어야 실행한다.
+- **키**: 새 키 하나를 Vault에 둔다(`SCHEDULER_SHARED_SECRET`은 값을 모르고 바꾸지도 않는다). 값은 문서·로그·SQL 기록에 남기지 않는다. 잡 명령은 값을 문자열로 넣지 않고 Vault에서 읽어 `cron.job.command`에 값이 남지 않게 한다.
+- **헤더명·검증**: 새 키를 받는 헤더(예: `x-notify-secret`)와 서버 환경변수명은 backend 몫 `(미확정)`. 현재 `lib/scheduler-auth.ts`는 `x-scheduler-secret` 하나만 알며, 새 키를 인정하는 코드 변경이 필요하다.
+
+```sql
+-- 1회 설정(값은 실행 시점에 입력, 문서에 기록하지 않음)
+create extension if not exists pg_cron;
+select vault.create_secret('<새 키 값>', 'notify_trigger_secret', 'notify job trigger key');
+select vault.create_secret('<앱 기준 주소, 경로 없이>', 'app_base_url', 'vercel app base url');
+
+-- 잡 등록(이름·주기: */5, UTC 기준이라 5분 간격에는 영향 없음)
+select cron.schedule(
+  'notify-job-trigger',
+  '*/5 * * * *',
+  $$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'app_base_url') || '/api/jobs/notify',
+    body := '{}'::jsonb,
+    headers := jsonb_build_object(
+      'content-type', 'application/json',
+      'x-notify-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'notify_trigger_secret')
+    ),
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+```
+- 헤더명 `x-notify-secret`(backend 확정 전 가칭), 타임아웃 30000ms는 `(미확정)`. pg_net 기본 5000ms는 사용자 루프(발송)가 길어지면 끊길 수 있어 늘렸다. 끊겨도 서버 쪽 처리가 계속되는지는 Vercel 동작이라 database가 확인할 수 없다(backend 확인).
+- `net.http_post`는 비동기다. 응답은 `net._http_response`, 실행 이력은 `cron.job_run_details`에서 본다.
+
+**보드 timer 안과 비교 (database가 아는 사실)**
+| 항목 | pg_cron(Supabase) | 보드 timer |
+|---|---|---|
+| 키 보관 | Vault(DB 안 암호화 저장). 접근은 DB 관리 권한이 있는 쪽 | 보드 파일(환경 파일). 보드 로컬 trust 접속 이슈(확인 항목 56-h)와 같은 장비 |
+| 이력 | `cron.job_run_details`·`net._http_response`로 SQL 조회 | systemd journal, 보드 접속 필요 |
+| 가동률 | database가 측정할 수 없다. Supabase 무료 프로젝트는 일정 기간 미사용 시 일시중지 정책이 있는 것으로 알고 있으나 이 프로젝트에 적용되는지는 확인하지 못했다(추정, 근거: 기억, 미확인) | 보드 정전·네트워크 단절 시 중단. 수집 타이머와 같은 장비라 수집·알림이 함께 멈춤 |
+| 변경 범위 | 확장 설치·Vault 2건·잡 1건(DB), 서버 헤더 검증 1개 추가 | 보드 유닛·키 파일, 서버 헤더 검증 1개 추가 |
+권장은 backend와 함께 정한다. 미해결 질문으로 남긴다.
+
+#### C. 첫 활성화 절차 (DB 쪽, 미확정)
+
+1. **사전 점검**(읽기 전용): `select count(*) from notify_settings where enabled;` — 현재 0. 0이면 잡을 등록해도 아무도 대상이 아니다. 1 이상이면 누구인지 확인하고 멈춘다.
+2. **테스트 계정 1개만 대상**: 현재 notify_settings가 비어 있으므로 별도 설정 변경 없이, 테스트 계정이 앱 화면에서 알림을 켜는 순간(`enabled_at=now()`) 그 계정 하나만 후보가 된다. 필요 조건: 선호 보유(7행·사용자 2명 있음), 푸시 구독 1건 이상(현재 0), 알림 시각이 5분 창 안(PUT으로 지금+10분 정도). 다른 사용자가 중간에 알림을 켜면 대상이 늘어나므로 잡 등록 직전에 1번을 다시 센다.
+3. **받을 공지**: `collected_at > enabled_at`이라 실제 새 공지가 들어와야 한다. 기다리기 싫으면 테스트 계정 한 행의 `enabled_at`만 백필 구간 이전으로 당겨 백필분을 받게 할 수 있다(운영 데이터 1행 변경, 상위 20청크·유사도 0.75 이상으로 건수는 제한). 롤백: 그 행 `enabled_at`을 원래 값으로 되돌리고, 생긴 `notify_logs` 행은 그대로 둬도 무방하다. 이 방법을 쓸지는 사용자 결정 `(미확정)`. 안 쓰면 새 공지를 기다린다.
+4. **확인**: `cron.job_run_details`에서 5분마다 실행, `net._http_response`에서 상태 200, `notify_logs`에 그 계정 행의 `result`가 `success`인지 본다.
+
+롤백(잡 중지·해제, 승인 불필요한 쪽부터):
+```sql
+-- 일시 중지(재개 가능)
+select cron.alter_job((select jobid from cron.job where jobname = 'notify-job-trigger'), active := false);
+-- 완전 해제
+select cron.unschedule('notify-job-trigger');
+-- 키 삭제(값은 되돌릴 수 없음, 새 키로 다시 만들면 됨)
+delete from vault.secrets where name in ('notify_trigger_secret', 'app_base_url');
+```
+확장(`pg_cron`) 제거는 다른 잡이 없을 때만 `drop extension pg_cron;`이며 이전 상태(미설치)로 돌아가는 것이다. 되돌릴 수 없는 마이그레이션은 없다(테이블·컬럼 변경 없음).
+
+#### 테스트 방법
+- 위 C 절차로 확인한다(개발용 Supabase 프로젝트 존재 여부는 이번에 확인하지 못했다). 쿼리 조건 (나)는 backend 단위 테스트가 맡는다.
 
 ### 마이그레이션 도구
 
