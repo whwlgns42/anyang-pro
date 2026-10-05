@@ -310,6 +310,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | messages | id uuid PK, conversation_id uuid FK→conversations.id, role text(user/assistant), content text, created_at | 개별 발화 |
 
 - 인덱스: `(user_id, updated_at desc)` — 대화 목록을 최근 순으로 조회할 때 사용.
+- **대화 삭제(확인 항목 62, [[anyang-service-scope]] "대화 히스토리 삭제")**: `delete from conversations`는 `messages`를 cascade(0008, 운영 `messages_conversation_id_fkey` `confdeltype = 'c'` 확인)로 함께 지우고, `user_preferences.source_conversation_id`는 0023 이후 null로 바뀐다(기억 행 유지). 탈퇴(`users` 삭제) cascade 경로는 영향 없다.
 - DeepSeek로 보내는 값은 조건(나이대·성별·직군)뿐이라는 원칙([[anyang-ai-models-data-transfer]])은
   앱 코드에서 지킨다. `messages.content`에 식별정보를 넣지 않는 것은 스키마가 아니라 애플리케이션
   책임이므로 이 설계에서 강제하지 않는다(참고로 남김).
@@ -335,7 +336,7 @@ user가 2026-09-27에 확정했다 — 값 목록은 그 결정 문서를 원본
 | preference_text | text, not null | 추출(또는 사용자 수정)된 선호 문장. Gemini 임베딩 입력(식별정보 없이 문장만) |
 | embedding | VECTOR(768) | notice_chunks와 같은 모델·차원을 따른다 |
 | embedding_model | text, not null | |
-| source_conversation_id | uuid, FK → conversations.id, null 허용 | 어느 대화에서 추출됐는지 추적. 사용자가 직접 추가한 항목이면 null |
+| source_conversation_id | uuid, FK → conversations.id, null 허용, **on delete set null (0023, 미확정)** | 어느 대화에서 추출됐는지 추적. 사용자가 직접 추가한 항목이면 null. 출처 대화를 지우면(대화 기록 삭제, 확인 항목 62) 기억 행은 남고 이 값만 null이 된다. 0023 이전에는 on delete 없음(NO ACTION)이라 기억이 있는 대화를 지울 수 없었다 |
 | created_at | timestamptz, default now() | |
 | updated_at | timestamptz, default now() | 사용자가 `preference_text`를 수정할 때마다 갱신 |
 | previous_fact | text, null 허용 (0020) | 모순으로 대체되기 직전의 `preference_text` 1단계. null이면 대체된 적 없음. 아래 "이력 보관 구조" |
@@ -1647,8 +1648,38 @@ OR 신규 후보의 직군 적합 판단(제목 기준, 위 3의 기준과 같�
 4. 문장 원본은 코드 상수, 테이블 `sentence`는 기록용.
 5. 추천 목록(나에게 맞는 공지)에는 반영하지 않는다(알림만).
 
+### 마이그레이션 계획 (0023, 확인 항목 62, 설계 draft)
+
+대화 기록 삭제를 위해 `user_preferences.source_conversation_id` FK를 `on delete set null`로 바꾼다(사용자 결정 2026-10-05: 기억은 남김). 확인한 사실(읽기 전용):
+컬럼은 null 허용(`is_nullable = YES`), 제약 이름은 `user_preferences_source_conversation_id_fkey`(운영 `pg_constraint` 확인, `confdeltype = 'a'` NO ACTION, `web/db/migrations/0009_user_preferences.up.sql`의 인라인 `references`가 만든 기본 이름). `web/db/migrations/`의 마지막은 `0022_occupation_embeddings`라 0023은 비어 있다. 파일은 구현 단계에서 만든다(이번에 만들지 않았고 운영에도 적용하지 않았다).
+
+- **0023_user_preferences_source_conversation_set_null** (`web/db/migrations/0023_...{up,down}.sql`, 이름은 제안 (미확정))
+  - up:
+    ```sql
+    begin;
+    alter table user_preferences
+      drop constraint user_preferences_source_conversation_id_fkey,
+      add constraint user_preferences_source_conversation_id_fkey
+        foreign key (source_conversation_id) references conversations(id) on delete set null;
+    commit;
+    ```
+  - down:
+    ```sql
+    begin;
+    -- 원래 FK(NO ACTION)로 복원. up 이후 대화 삭제로 null이 된 행은 복원되지 않는다(출처 정보가 이미 사라짐)
+    alter table user_preferences
+      drop constraint user_preferences_source_conversation_id_fkey,
+      add constraint user_preferences_source_conversation_id_fkey
+        foreign key (source_conversation_id) references conversations(id);
+    commit;
+    ```
+  - **롤백 한계**: down은 제약만 되돌린다. 0023 적용 중 지운 대화 때문에 null이 된 `source_conversation_id`는 되돌릴 방법이 없다(어느 대화였는지 기록이 없음). 기억 행과 `preference_text`는 그대로이고 출처 추적만 잃는다.
+  - 데이터를 지우거나 타입을 줄이지 않는다. 기존 행은 모두 유효한 FK이거나 null이라 add constraint가 실패하지 않는다. 한 트랜잭션이라 중간 상태가 없다.
+  - 적용 경로: 운영은 Supabase MCP `apply_migration`(로컬 파일과 같은 SQL), 로컬은 `migrate.sh up/down`.
+
 ### 되돌릴 수 없는 마이그레이션 표시
 
+- 0023(위 "마이그레이션 계획 (0023)", 확인 항목 62)의 up은 제약 교체뿐이라 되돌릴 수 없는 마이그레이션이 아니다. down도 제약 복원이라 실패하지 않으나, up 이후 대화 삭제로 null이 된 출처 값은 복원되지 않는다. 이는 데이터 삭제가 아니라 출처 추적 정보의 자연 소실이므로 별도 승인 대상으로 보지 않는다(보수적으로 승인을 받고 싶으면 pm이 지시서에 적는다). up 적용에 별도 승인은 필요 없다.
 - 0022_occupation_embeddings(위 "직군 문장 벡터 저장·알림 쿼리", 확인 항목 59, 승인·적용 완료)의 up은 테이블 추가라 되돌릴 수 없는 마이그레이션이
   아니다. down은 `drop table`이라 값이 채워진 뒤에는 행 삭제다(스크립트로 재생성 가능한 파생 값). 채워진 뒤 down은 구현 단계 지시서에 별도 사용자
   승인이 있어야 하고, 없으면 실행하지 않고 멈춰서 보고한다. 비어 있으면 승인이 필요 없다. up 적용은 별도 승인이 필요 없다.
@@ -1708,6 +1739,7 @@ OR 신규 후보의 직군 적합 판단(제목 기준, 위 3의 기준과 같�
     확인한다. `consents`는 반대로 확인한다 — `withdrawn_at`을 먼저 채운 뒤 `users` 행을
     삭제하고, `consents` 행이 삭제되지 않고 `user_id`만 null로 바뀌었는지 확인한다(위
     `consents` 절, `on delete set null`).
+- 0023 확인(확인 항목 62): 기억이 연결된 대화를 테스트 사용자로 만들어 `delete from conversations where id = ...`를 실행하면 오류 없이 지워지고, 해당 `messages`는 cascade로 사라지며, `user_preferences` 행은 그대로이고 `source_conversation_id`만 null인지 확인한다. 0023 적용 전에는 같은 삭제가 FK 위반으로 실패하는지도 본다(전후 비교). 로컬은 up → down → up 왕복. 운영(읽기 전용): `select conname, confdeltype from pg_constraint where conname = 'user_preferences_source_conversation_id_fkey';` 가 `confdeltype = 'n'`(set null)이어야 한다. 운영 데이터는 삭제해 보지 않는다.
 - 인덱스 확인: `EXPLAIN ANALYZE`로 벡터 유사도 검색 쿼리가 HNSW 인덱스를 쓰는지(`Index Scan using ... hnsw`)
   확인한다. 데이터가 적을 때는 planner가 seq scan을 고를 수 있어 테스트 데이터가 어느 정도
   있어야 유효하다.
