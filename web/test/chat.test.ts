@@ -333,6 +333,19 @@ describe("consumeAndStore", () => {
     expect(insertCall).toBeUndefined();
   });
 
+  it("rejects on a deleted conversation (messages FK violation) and never extracts preferences", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      if (String(sql).includes("insert into messages")) {
+        throw Object.assign(new Error("violates foreign key constraint"), { code: "23503" });
+      }
+      return { rows: [] };
+    });
+    const stream = makeSseStream(['data: {"choices":[{"delta":{"content":"응답"}}]}\n\n', "data: [DONE]\n\n"]);
+
+    await expect(consumeAndStore(stream, "deleted-conv", "u1", "질문", [])).rejects.toMatchObject({ code: "23503" });
+    expect(extractPreferencesMock).not.toHaveBeenCalled();
+  });
+
   it("extracts preferences on every call, regardless of message count (item 43, removes the 6-message gate)", async () => {
     const stream = makeSseStream(['data: {"choices":[{"delta":{"content":"안녕"}}]}\n\n', "data: [DONE]\n\n"]);
 
