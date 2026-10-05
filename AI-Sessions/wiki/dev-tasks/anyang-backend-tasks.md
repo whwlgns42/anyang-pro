@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-09-27
-status: draft
+status: active
 owner: backend
 ---
 
@@ -262,21 +262,21 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     - 21-3. 운영 순서: 0023 운영 적용(database) → 코드 배포. 배포 뒤 확인은 미인증 DELETE 401과 `confdeltype`(읽기 전용)만, 운영 대화는 삭제하지 않는다.
     - 의존: database 0023, frontend 대화 기록 화면(frontend는 이 계약만 쓰고 병렬 구현 가능). 독립 커밋 가능.
 
-22. **채팅 제한·입력 상한·비용 상한(신규, 확인 항목 63 C-3, 설계 draft)** — [[anyang-backend-api#3-4. 채팅 남용 제한·입력 상한·비용 상한·실패 응답 (신규, 2026-10-05, 확인 항목 63 C-3·A-1 서버 계약, 설계 draft)]] 기준. 스키마 변경 없음. 모든 세부값 `(미확정)`(사용자 확정은 1분 5회·하루 100회·2,000자뿐).
+22. **채팅 제한·입력 상한·비용 상한(신규, 확인 항목 63 C-3, 사용자 결정 반영, 설계 draft·재승인 대기)** — [[anyang-backend-api#3-4. 채팅 남용 제한·입력 상한·비용 상한·실패 응답 (신규, 2026-10-05, 확인 항목 63 C-3·A-1 서버 계약, 설계 draft)]] 기준. 스키마 변경 없음. 세부값은 모두 사용자 확정(2026-10-05, 에이전트 제안값 "제안대로" 포함). 예외 하나: 선호 추출 `max_tokens` 값 500은 `(미확정)`.
     - 22-1. `web/lib/auth-attempts.ts`: `AttemptType`에 `chat_request` 추가, `claimChatSlot(userId)`(트랜잭션 + advisory 락 + 두 창 판정 삽입, 거절 시 `limit` 구분). 기존 `isBlocked`·`recordAttempt`·`claimTestNotifySlot` 불변. 테스트 3-4절 ③④.
     - 22-2. `web/app/api/chat/route.ts`: 빈 메시지 400 다음에 길이 검사(코드 포인트, `MESSAGE_TOO_LONG`), 그다음 `claimChatSlot`(거절 429 `TOO_MANY_ATTEMPTS`+`limit`), 그 뒤 기존 흐름. 대화·메시지 insert, 임베딩, DeepSeek보다 앞이다. 테스트 ①②⑤.
-    - 22-3. `web/lib/deepseek.ts`: `streamDeepSeekChat` body에 `max_tokens`(상수 `DEEPSEEK_CHAT_MAX_TOKENS`). 값 확정은 database 읽기 전용 실측 뒤(답변 `char_length` 분포). 테스트 ⑥.
+    - 22-3. `web/lib/deepseek.ts`: `streamDeepSeekChat` body에 `max_tokens`(상수 `DEEPSEEK_CHAT_MAX_TOKENS`). `DEEPSEEK_CHAT_MAX_TOKENS = 1500` 확정(실측은 배포 뒤 점검, 구현의 전제 아님). 22-3b: `extractPreferences`(`deepseek.ts` 91행 body, `stream: false`)에도 `max_tokens: DEEPSEEK_EXTRACT_MAX_TOKENS = 500 (미확정)`. 테스트 ⑥.
     - 22-4. `web/app/api/chat/route.ts`: 이력 쿼리를 최근 N개(`order by created_at desc limit $2` → 뒤집기 → 앞 assistant 제거). 테스트 ⑦.
-    - 22-5. (사용자가 A안을 고르면) 502 직전 이번 요청이 만든 사용자 메시지(새 대화면 대화)를 최선 노력으로 삭제. 사용자가 B안·C안을 고르면 이 단위는 없다. 테스트 ⑤.
+    - 22-5. 502 직전 이번 요청이 만든 행을 최선 노력으로 삭제(A안 확정): 새 대화면 대화(messages cascade), 기존 대화면 이번 사용자 메시지 1행만. 502 응답에 `x-conversation-id`를 싣지 않고, 이미 기록된 `chat_request` 행은 지우지 않는다(실패도 셈). 삭제 실패는 `console.error`만 하고 502 유지. 테스트 ⑤.
     - 22-6. frontend 계약(frontend 소관, 이 단위에서 backend가 고치지 않음): 입력창 `maxLength={2000}`, 429 안내, 400 `MESSAGE_TOO_LONG` 안내, 2xx가 아니면 모두 오류 표시+"다시 시도"(JSON 본문 파싱 금지). 3-4절 3-4-6. 22-1~22-4는 frontend와 독립이며 서버가 먼저 나가도 화면은 지금처럼 "응답을 받아오지 못했습니다"를 보인다(해 없음).
     - 순서: 22-1 → 22-2(독립 커밋 가능), 22-3, 22-4(서로 독립). 정리 잡 4종 등록(database 소관, 승인 별도)과 순서 제약 없음 — 단 `cleanup-auth-attempts` 보관이 24시간 미만으로 바뀌면 22의 하루 한도가 약해진다(3-4-3).
     - 의존: 1-5(`auth_attempts`)·3(채팅) 구현 완료분.
 
-23. **추천 쿼리 임베딩 전 공지 포함(신규, 확인 항목 63 A-3, 설계 draft)** — [[anyang-backend-api#2-1-1. 추천 쿼리에 임베딩 전 새 공지 포함 (신규, 2026-10-05, 확인 항목 63 A-3, 설계 draft)]] 기준. 스키마 변경 없음.
+23. **추천 쿼리 임베딩 전 공지 포함(신규, 확인 항목 63 A-3, 값 확정, 설계 draft·재승인 대기)** — [[anyang-backend-api#2-1-1. 추천 쿼리에 임베딩 전 새 공지 포함 (신규, 2026-10-05, 확인 항목 63 A-3, 설계 draft)]] 기준. 스키마 변경 없음.
     - 23-1. `web/app/api/notices/recommended/route.ts`: 선호 있는 경로의 쿼리를 2-1-1절 `union all` 쿼리로 교체(인자 `UNEMBEDDED_RECENT_DAYS = 7` 추가). 선호 없는 경로·응답 필드·`no-store` 불변. 테스트 `web/test/notices-recommended.test.ts` ①②③, 로컬 개발 DB 실제 실행 ④.
     - 독립 단위. frontend 변경 없음.
 
-24. **보안 응답 헤더(신규, 확인 항목 63 C-4, 설계 draft)** — [[anyang-backend-api#10-1. 보안 응답 헤더 (신규, 2026-10-05, 확인 항목 63 C-4, 설계 draft)]] 기준. 스키마 변경 없음.
+24. **보안 응답 헤더(신규, 확인 항목 63 C-4, 값 확정, 설계 draft·재승인 대기)** — [[anyang-backend-api#10-1. 보안 응답 헤더 (신규, 2026-10-05, 확인 항목 63 C-4, 설계 draft)]] 기준. 스키마 변경 없음.
     - 24-1. `web/next.config.ts`: `headers()` 추가(헤더 3종, `/:path*`). 테스트 `web/test/next-config.test.ts`(신규), `npm run build`.
     - 24-2. 배포 뒤 `curl -sI`로 `/login`·`/api/profile`·`/sw.js`·`/_next/static/…` 확인(pm·메인 세션). 서비스워커가 막히면 정적 파일 제외로 설계 변경.
     - 독립 단위. 먼저 배포해도 해 없음.

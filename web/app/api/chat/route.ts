@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/require-auth";
 import { maskPii } from "@/lib/mask-pii";
 import { ageBandLabel } from "@/lib/age-band";
 import { embedText } from "@/lib/embeddings";
+import { claimChatSlot } from "@/lib/auth-attempts";
 import { streamDeepSeekChat, extractPreferences, type ChatMessage } from "@/lib/deepseek";
 
 // anyang-backend-api 3절 — 채팅 + RAG. DeepSeek 스트리밍 응답을 tee()해 클라이언트로는 원본
@@ -20,6 +21,15 @@ const MEMORY_SIMILAR_K = 5;
 const MEMORY_MAX_TOTAL = 10;
 // database 설계(user_preferences 절) — 코사인 거리 0.08 미만(유사도 0.92 이상)이면 갱신.
 const PREFERENCE_UPDATE_DISTANCE_THRESHOLD = 0.08;
+
+// anyang-backend-api 3-4-4·3-4-5절(확인 항목 63) — 메시지 상한(코드 포인트)과 DeepSeek로 보내는 이력 개수.
+const MAX_MESSAGE_CHARS = 2000;
+const CHAT_HISTORY_MAX_MESSAGES = 20;
+
+// UTF-16 길이가 2배를 넘으면 코드 포인트도 상한을 넘으므로 큰 본문을 배열로 펼치지 않고 거른다.
+function isMessageTooLong(message: string): boolean {
+  return message.length > MAX_MESSAGE_CHARS * 2 || [...message].length > MAX_MESSAGE_CHARS;
+}
 
 function internalDeepSeekUserId(userId: string): string {
   // 실제 user_id/email이 아닌, 사용자별로 고정된 무작위 성격의 내부 ID(anyang-backend-api 3절 3번).
@@ -205,7 +215,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "INVALID_REQUEST" }, { status: 400 });
   }
 
+  if (isMessageTooLong(message)) {
+    return NextResponse.json({ error: "MESSAGE_TOO_LONG", max_length: MAX_MESSAGE_CHARS }, { status: 400 });
+  }
+
+  // 3-4-2절 — 대화·메시지 insert, 임베딩, DeepSeek보다 앞. 거절된 요청은 아무것도 만들지 않는다.
+  const slot = await claimChatSlot(authResult.userId);
+  if (!slot.ok) {
+    return NextResponse.json({ error: "TOO_MANY_ATTEMPTS", limit: slot.limit }, { status: 429 });
+  }
+
   let conversationId = typeof body?.conversation_id === "string" ? body.conversation_id : null;
+  let createdConversation = false;
   if (conversationId) {
     const owned = await pool.query(`select id from conversations where id = $1 and user_id = $2`, [
       conversationId,
@@ -221,13 +242,33 @@ export async function POST(request: NextRequest) {
       [authResult.userId, title],
     );
     conversationId = rows[0].id;
+    createdConversation = true;
   }
 
   // 저장은 가림 처리 전 원문으로 한다(설계 3절 1번) — DB 자체는 외부 전송 대상이 아니다.
-  await pool.query(`insert into messages (conversation_id, role, content) values ($1, 'user', $2)`, [
-    conversationId,
-    message,
-  ]);
+  const { rows: userMessageRows } = await pool.query<{ id: string }>(
+    `insert into messages (conversation_id, role, content) values ($1, 'user', $2) returning id`,
+    [conversationId, message],
+  );
+  const userMessageId = userMessageRows[0]?.id;
+  const failedConversationId = conversationId;
+
+  // 3-4-6절(A안) — 502 직전에 이번 요청이 만든 행을 지운다(최선 노력). chat_request 행은 지우지 않는다.
+  const failWith502 = async (error: "EMBEDDING_FAILED" | "CHAT_FAILED") => {
+    try {
+      if (createdConversation) {
+        await pool.query(`delete from conversations where id = $1 and user_id = $2`, [
+          failedConversationId,
+          authResult.userId,
+        ]);
+      } else if (userMessageId) {
+        await pool.query(`delete from messages where id = $1`, [userMessageId]);
+      }
+    } catch (err) {
+      console.error("chat: failed to clean up after 502", err);
+    }
+    return NextResponse.json({ error }, { status: 502 });
+  };
 
   const maskedMessage = maskPii(message);
 
@@ -238,7 +279,7 @@ export async function POST(request: NextRequest) {
     messageEmbedding = embedded.embedding;
     queryVector = await buildQueryVector(authResult.userId, embedded.embedding);
   } catch {
-    return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 502 });
+    return failWith502("EMBEDDING_FAILED");
   }
 
   // anyang-backend-api 3-3절(확인 항목 43) — 가공 전 원본 메시지 임베딩을 재사용(추가 임베딩
@@ -310,9 +351,12 @@ export async function POST(request: NextRequest) {
     `${conditionText}${memoryBlock}\n\n관련 공지:\n${noticesText}`;
 
   const { rows: historyRows } = await pool.query<{ role: string; content: string }>(
-    `select role, content from messages where conversation_id = $1 order by created_at asc`,
-    [conversationId],
+    `select role, content from messages where conversation_id = $1 order by created_at desc limit $2`,
+    [conversationId, CHAT_HISTORY_MAX_MESSAGES],
   );
+  // 3-4-5절 — 시간순으로 되돌리고, assistant로 시작하면 앞 assistant 행을 버려 첫 메시지를 user로 맞춘다.
+  historyRows.reverse();
+  while (historyRows.length > 0 && historyRows[0].role === "assistant") historyRows.shift();
   // DeepSeek로 보내는 모든 메시지(과거 이력 포함)를 가림 처리한다 — 식별정보 미전송 원칙을
   // 현재 메시지 하나만이 아니라 전송되는 전체 텍스트에 일관 적용한다.
   const chatMessages: ChatMessage[] = [
@@ -324,10 +368,10 @@ export async function POST(request: NextRequest) {
   try {
     deepseekRes = await streamDeepSeekChat(chatMessages, internalDeepSeekUserId(authResult.userId));
   } catch {
-    return NextResponse.json({ error: "CHAT_FAILED" }, { status: 502 });
+    return failWith502("CHAT_FAILED");
   }
   if (!deepseekRes.body) {
-    return NextResponse.json({ error: "CHAT_FAILED" }, { status: 502 });
+    return failWith502("CHAT_FAILED");
   }
 
   const [clientStream, captureStream] = deepseekRes.body.tee();

@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/require-auth";
 // 최신 공지 순으로 대체한다(설계 확정).
 const DEFAULT_PAGE_SIZE = 20; // 설계 제안값(N 미확정)
 const MAX_PAGE_SIZE = 50;
+const UNEMBEDDED_RECENT_DAYS = 7; // 2-1-1절 확정값
 const EXCERPT_LENGTH = 100; // 설계 제안값(길이 미확정)
 
 function averageVectors(vectors: number[][]): number[] {
@@ -77,18 +78,28 @@ export async function GET(request: NextRequest) {
 
   const avgPref = averageVectors(prefRows.map((r) => JSON.parse(r.embedding) as number[]));
 
+  // 2-1-1절(확인 항목 63) — 청크(임베딩) 없는 최근 7일 공지를 유사도 결과보다 앞(맨 위)에 둔다.
   const { rows } = await pool.query<NoticeRow>(
     `select id, title, body, published_at, is_pinned, image_count from (
-       select distinct on (n.id) n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
-              nc.embedding <=> $1 as distance
-         from notice_chunks nc
-         join notices n on n.id = nc.notice_id
+       select n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
+              0 as grp, 0::float8 as distance
+         from notices n
         where n.hidden_at is null
-        order by n.id, distance
-     ) matched
-     order by distance asc
+          and not exists (select 1 from notice_chunks nc where nc.notice_id = n.id)
+          and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $4)
+       union all
+       select id, title, body, published_at, is_pinned, image_count, 1 as grp, distance from (
+         select distinct on (n.id) n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
+                nc.embedding <=> $1 as distance
+           from notice_chunks nc
+           join notices n on n.id = nc.notice_id
+          where n.hidden_at is null
+          order by n.id, distance
+       ) matched
+     ) merged
+     order by grp asc, distance asc, published_at desc nulls last, id desc
      limit $2 offset $3`,
-    [JSON.stringify(avgPref), limit, offset],
+    [JSON.stringify(avgPref), limit, offset, UNEMBEDDED_RECENT_DAYS],
   );
 
   // 추천 경로는 유사도 순서를 유지하고 is_pinned는 별표 표시용이다.

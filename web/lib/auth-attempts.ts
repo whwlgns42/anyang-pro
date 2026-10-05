@@ -3,7 +3,7 @@ import { pool } from "./db";
 
 // anyang-backend-api 1-6절(확인 항목 29) — auth_attempts 기반 로그인 실패·가입 시도 제한.
 // 값은 확정(15분/5회), 구현 방식(해시·IP 추출·판정 위치)은 backend 제안(미확정).
-export type AttemptType = "login_failure" | "signup_attempt" | "test_notify";
+export type AttemptType = "login_failure" | "signup_attempt" | "test_notify" | "chat_request";
 export type IdentifierType = "email" | "ip" | "user";
 
 const WINDOW_MINUTES = 15;
@@ -63,4 +63,46 @@ export async function claimTestNotifySlot(userId: string): Promise<boolean> {
     [hash],
   );
   return (result.rowCount ?? 0) > 0;
+}
+
+// anyang-backend-api 3-4-2절(확인 항목 63) — 채팅 사용자당 1분 5회·24시간 100회. 사용자별 advisory 락으로
+// 판정·삽입을 직렬화해 동시 연타가 한도를 뚫지 못하게 한다. 락은 commit까지(수 ms)만 잡는다.
+// 거절이면 행을 남기지 않는다. DB 오류는 던진다(제한 장애 시 열어 두지 않고 막는다).
+export type ChatSlotResult = { ok: true } | { ok: false; limit: "minute" | "day" };
+
+export async function claimChatSlot(userId: string): Promise<ChatSlotResult> {
+  const hash = createHash("sha256").update(userId).digest("hex");
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(`select pg_advisory_xact_lock(hashtextextended('chat_request:' || $1::text, 0))`, [hash]);
+    const inserted = await client.query(
+      `insert into auth_attempts (attempt_type, identifier_type, identifier_hash)
+       select 'chat_request', 'user', $1::text
+        where (select count(*) from auth_attempts
+                where attempt_type = 'chat_request' and identifier_type = 'user' and identifier_hash = $1
+                  and created_at > now() - interval '1 minute') < 5
+          and (select count(*) from auth_attempts
+                where attempt_type = 'chat_request' and identifier_type = 'user' and identifier_hash = $1
+                  and created_at > now() - interval '24 hours') < 100`,
+      [hash],
+    );
+    if ((inserted.rowCount ?? 0) > 0) {
+      await client.query("commit");
+      return { ok: true };
+    }
+    const { rows } = await client.query<{ d: string }>(
+      `select count(*)::text as d from auth_attempts
+        where attempt_type = 'chat_request' and identifier_type = 'user' and identifier_hash = $1
+          and created_at > now() - interval '24 hours'`,
+      [hash],
+    );
+    await client.query("commit");
+    return { ok: false, limit: Number(rows[0]?.d ?? 0) >= 100 ? "day" : "minute" };
+  } catch (err) {
+    await client.query("rollback").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }

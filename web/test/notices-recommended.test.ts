@@ -92,7 +92,13 @@ describe("GET /api/notices/recommended", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     // 추천 경로는 유사도 순서를 유지한다(고정 공지를 위로 올리지 않는다).
     const sql = String(queryMock.mock.calls.find(([s]) => String(s).includes("distinct on"))?.[0]);
-    expect(sql).toContain("order by distance asc");
+    expect(sql).toContain("order by grp asc, distance asc");
     expect(sql).not.toContain("is_pinned desc");
+    // 2-1-1절(확인 항목 63) - 임베딩 전 최근 공지를 맨 위에 합친다.
+    expect(sql).toContain("not exists (select 1 from notice_chunks");
+    expect(sql).toContain("hidden_at is null");
+    expect(sql).toContain("union all");
+    const params = queryMock.mock.calls.find(([s]) => String(s).includes("distinct on"))?.[1] as unknown[];
+    expect(params.slice(1)).toEqual([20, 0, 7]);
   });
 });

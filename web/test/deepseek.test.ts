@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 const queryMock = vi.fn();
 vi.mock("@/lib/db", () => ({ pool: { query: (...args: unknown[]) => queryMock(...args) } }));
 
-const { extractPreferences } = await import("@/lib/deepseek");
+const { extractPreferences, streamDeepSeekChat } = await import("@/lib/deepseek");
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status });
@@ -138,5 +138,29 @@ describe("extractPreferences", () => {
     global.fetch = vi.fn().mockResolvedValue(jsonResponse(500, {}));
 
     await expect(extractPreferences("대화", [])).rejects.toThrow();
+  });
+});
+
+// anyang-backend-api 3-4-5절(확인 항목 63) — max_tokens 상한
+describe("max_tokens", () => {
+  const originalFetch = global.fetch;
+  beforeEach(() => {
+    queryMock.mockReset();
+    queryMock.mockResolvedValue({ rows: [] });
+    process.env.DEEPSEEK_API_KEY = "test-key";
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("chat stream sends max_tokens 1500 with stream true; extraction sends 500 with stream false", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, chatContent("[]")));
+    global.fetch = fetchMock;
+    await streamDeepSeekChat([{ role: "user", content: "hi" }], "uid");
+    await extractPreferences("대화", []);
+    const chatBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const extractBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(chatBody).toMatchObject({ stream: true, max_tokens: 1500 });
+    expect(extractBody).toMatchObject({ stream: false, max_tokens: 500 });
   });
 });

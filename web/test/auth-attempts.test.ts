@@ -1,9 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const queryMock = vi.fn();
-vi.mock("@/lib/db", () => ({ pool: { query: (...args: unknown[]) => queryMock(...args) } }));
+const connectMock = vi.fn();
+vi.mock("@/lib/db", () => ({
+  pool: { query: (...args: unknown[]) => queryMock(...args), connect: () => connectMock() },
+}));
 
-const { extractIp, isBlocked, recordAttempt } = await import("@/lib/auth-attempts");
+const { extractIp, isBlocked, recordAttempt, claimChatSlot } = await import("@/lib/auth-attempts");
 
 describe("extractIp", () => {
   it("uses the first x-forwarded-for value", () => {
@@ -37,5 +40,55 @@ describe("isBlocked / recordAttempt", () => {
     expect(sql).toContain("insert into auth_attempts");
     expect(params[0]).toBe("signup_attempt");
     expect(params[1]).toBe("ip");
+  });
+});
+
+// anyang-backend-api 3-4-2절(확인 항목 63) — claimChatSlot: begin → 락 → 삽입 → commit, 항상 release.
+describe("claimChatSlot", () => {
+  const clientQuery = vi.fn();
+  const release = vi.fn();
+  beforeEach(() => {
+    clientQuery.mockReset();
+    release.mockReset();
+    connectMock.mockReset();
+    connectMock.mockResolvedValue({ query: clientQuery, release });
+  });
+  const sqls = () => clientQuery.mock.calls.map(([s]) => String(s));
+
+  it("allows when the insert affects a row", async () => {
+    clientQuery.mockResolvedValue({ rowCount: 1, rows: [] });
+    expect(await claimChatSlot("u1")).toEqual({ ok: true });
+    const all = sqls();
+    expect(all[0]).toBe("begin");
+    expect(all[1]).toContain("pg_advisory_xact_lock");
+    expect(all[2]).toContain("insert into auth_attempts");
+    expect(all[2]).toContain("interval '24 hours'");
+    expect(all[2]).toContain("interval '1 minute'");
+    expect(all[2]).toContain("< 5");
+    expect(all[2]).toContain("< 100");
+    expect(all[3]).toBe("commit");
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses with limit day when 100 rows in 24h, minute otherwise", async () => {
+    clientQuery.mockImplementation(async (s: string) =>
+      String(s).trim().startsWith("insert") ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ d: "100" }] },
+    );
+    expect(await claimChatSlot("u1")).toEqual({ ok: false, limit: "day" });
+    clientQuery.mockImplementation(async (s: string) =>
+      String(s).trim().startsWith("insert") ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ d: "7" }] },
+    );
+    expect(await claimChatSlot("u1")).toEqual({ ok: false, limit: "minute" });
+    expect(release).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back, releases and rethrows on error", async () => {
+    clientQuery.mockImplementation(async (s: string) => {
+      if (String(s).includes("pg_advisory")) throw new Error("boom");
+      return { rowCount: 0, rows: [] };
+    });
+    await expect(claimChatSlot("u1")).rejects.toThrow("boom");
+    expect(sqls()).toContain("rollback");
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });

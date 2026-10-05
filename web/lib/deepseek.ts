@@ -3,6 +3,10 @@ import { ApiCallError, withApiUsageLog } from "./api-usage-log";
 // anyang-backend-api 3절 — DeepSeek 스트리밍 채팅 + 선호 추출용 비스트리밍 호출.
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 
+// anyang-backend-api 3-4-5절(확인 항목 63) — 비용 상한. 값이 바뀌면 설계 변경이다(환경변수화하지 않는다).
+const DEEPSEEK_CHAT_MAX_TOKENS = 1500;
+const DEEPSEEK_EXTRACT_MAX_TOKENS = 500; // (미확정, 결정 뒤 새로 나온 값)
+
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 function apiKeyOrThrow(): string {
@@ -23,6 +27,7 @@ export async function streamDeepSeekChat(messages: ChatMessage[], internalUserId
         model: "deepseek-chat",
         messages,
         stream: true,
+        max_tokens: DEEPSEEK_CHAT_MAX_TOKENS,
         // 실제 user_id/email이 아닌 서버 파생 무작위 내부 ID만 전달(anyang-backend-api 3절 3번).
         user: internalUserId,
       }),
@@ -90,6 +95,7 @@ export async function extractPreferences(
       body: JSON.stringify({
         model: "deepseek-chat",
         stream: false,
+        max_tokens: DEEPSEEK_EXTRACT_MAX_TOKENS,
         messages: [
           {
             role: "system",

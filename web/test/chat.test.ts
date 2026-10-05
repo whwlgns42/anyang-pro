@@ -5,10 +5,12 @@ const authMock = vi.fn();
 const embedTextMock = vi.fn();
 const streamDeepSeekChatMock = vi.fn();
 const extractPreferencesMock = vi.fn();
+const claimChatSlotMock = vi.fn();
 
 vi.mock("@/lib/db", () => ({ pool: { query: (...args: unknown[]) => queryMock(...args) } }));
 vi.mock("@/lib/auth", () => ({ auth: () => authMock() }));
 vi.mock("@/lib/embeddings", () => ({ embedText: (...args: unknown[]) => embedTextMock(...args) }));
+vi.mock("@/lib/auth-attempts", () => ({ claimChatSlot: (...args: unknown[]) => claimChatSlotMock(...args) }));
 vi.mock("@/lib/deepseek", () => ({
   streamDeepSeekChat: (...args: unknown[]) => streamDeepSeekChatMock(...args),
   extractPreferences: (...args: unknown[]) => extractPreferencesMock(...args),
@@ -65,7 +67,120 @@ describe("POST /api/chat", () => {
     embedTextMock.mockReset();
     streamDeepSeekChatMock.mockReset();
     extractPreferencesMock.mockReset();
+    claimChatSlotMock.mockReset();
+    claimChatSlotMock.mockResolvedValue({ ok: true });
     authMock.mockResolvedValue({ user: { id: "u1", email: "a@b.com" } });
+  });
+
+  // anyang-backend-api 3-4절(확인 항목 63) — 길이·제한·이력·502 정리
+  const sqlCalls = () => queryMock.mock.calls.map(([sql]) => String(sql));
+  const happyMocks = () => {
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockResolvedValue(new Response(makeSseStream(["data: [DONE]\n\n"])));
+  };
+
+  it("length: 2000 chars pass, 2001 get 400 MESSAGE_TOO_LONG before the slot is claimed", async () => {
+    mockAuthenticatedQueries();
+    happyMocks();
+    expect((await POST(makeRequest({ message: "가".repeat(2000) }))).status).toBe(200);
+    claimChatSlotMock.mockClear();
+    const res = await POST(makeRequest({ message: "가".repeat(2001) }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "MESSAGE_TOO_LONG", max_length: 2000 });
+    expect(claimChatSlotMock).not.toHaveBeenCalled();
+  });
+
+  it("length: counts code points (2000 emoji pass, 2001 fail), ignores surrounding spaces", async () => {
+    mockAuthenticatedQueries();
+    happyMocks();
+    expect((await POST(makeRequest({ message: "😀".repeat(2000) }))).status).toBe(200);
+    happyMocks();
+    expect((await POST(makeRequest({ message: "😀".repeat(2001) }))).status).toBe(400);
+    happyMocks();
+    expect((await POST(makeRequest({ message: `  ${"a".repeat(2000)}  ` }))).status).toBe(200);
+  });
+
+  it("429 with limit when the slot is refused; nothing is written or called", async () => {
+    mockAuthenticatedQueries();
+    claimChatSlotMock.mockResolvedValue({ ok: false, limit: "day" });
+    const res = await POST(makeRequest({ message: "안녕" }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "TOO_MANY_ATTEMPTS", limit: "day" });
+    expect(sqlCalls().some((s) => s.includes("insert into conversations") || s.includes("insert into messages"))).toBe(false);
+    expect(embedTextMock).not.toHaveBeenCalled();
+    expect(streamDeepSeekChatMock).not.toHaveBeenCalled();
+  });
+
+  it("an over-limit user sending 2001 chars gets 400, not 429", async () => {
+    mockAuthenticatedQueries();
+    claimChatSlotMock.mockResolvedValue({ ok: false, limit: "minute" });
+    expect((await POST(makeRequest({ message: "a".repeat(2001) }))).status).toBe(400);
+  });
+
+  it("slot failure surfaces as an exception (not let through)", async () => {
+    mockAuthenticatedQueries();
+    claimChatSlotMock.mockRejectedValue(new Error("db down"));
+    await expect(POST(makeRequest({ message: "안녕" }))).rejects.toThrow("db down");
+  });
+
+  it("502 on embedding failure deletes the conversation created by this request, no x-conversation-id", async () => {
+    mockAuthenticatedQueries();
+    embedTextMock.mockRejectedValue(new Error("boom"));
+    const res = await POST(makeRequest({ message: "안녕" }));
+    expect(res.status).toBe(502);
+    expect(res.headers.get("x-conversation-id")).toBeNull();
+    const del = queryMock.mock.calls.find(([s]) => String(s).includes("delete from conversations"));
+    expect(del?.[1]).toEqual(["conv-1", "u1"]);
+    expect(sqlCalls().some((s) => s.includes("delete from messages"))).toBe(false);
+  });
+
+  it("502 on DeepSeek failure in an existing conversation deletes only this user message", async () => {
+    mockAuthenticatedQueries((text) => {
+      if (text.includes("select id from conversations")) return [{ id: "c9" }];
+      if (text.includes("insert into messages")) return [{ id: "m-new" }];
+      return undefined;
+    });
+    embedTextMock.mockResolvedValue({ embedding: [0.1, 0.2], model: "gemini-embedding-001" });
+    streamDeepSeekChatMock.mockRejectedValue(new Error("boom"));
+    const res = await POST(makeRequest({ conversation_id: "c9", message: "안녕" }));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "CHAT_FAILED" });
+    const del = queryMock.mock.calls.find(([s]) => String(s).includes("delete from messages"));
+    expect(del?.[1]).toEqual(["m-new"]);
+    expect(sqlCalls().some((s) => s.includes("delete from conversations"))).toBe(false);
+  });
+
+  it("a failing cleanup delete does not change the 502", async () => {
+    queryMock.mockImplementation(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("delete from")) throw new Error("cleanup boom");
+      if (text.includes("suspended_at")) return { rows: [{ suspended_at: null }] };
+      if (text.includes("policy_version")) return { rows: [{ policy_version: "2026-09-27" }] };
+      if (text.includes("insert into conversations")) return { rows: [{ id: "conv-1" }] };
+      return { rows: [] };
+    });
+    embedTextMock.mockRejectedValue(new Error("boom"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const res = await POST(makeRequest({ message: "안녕" }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+
+  it("history: queries newest 20 desc, reverses to chronological, drops leading assistant rows", async () => {
+    const desc = [
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u1" },
+      { role: "assistant", content: "a0" },
+    ];
+    mockAuthenticatedQueries((text) => (text.includes("select role, content from messages") ? [...desc] : undefined));
+    happyMocks();
+    await POST(makeRequest({ message: "u2" }));
+    const call = queryMock.mock.calls.find(([s]) => String(s).includes("select role, content from messages"));
+    expect(String(call?.[0])).toContain("order by created_at desc limit $2");
+    expect(call?.[1]).toEqual(["conv-1", 20]);
+    const [chatMessages] = streamDeepSeekChatMock.mock.calls[0] as [{ role: string; content: string }[]];
+    expect(chatMessages.slice(1).map((m) => m.content)).toEqual(["u1", "a1", "u2"]);
   });
 
   it("400 on empty message", async () => {
