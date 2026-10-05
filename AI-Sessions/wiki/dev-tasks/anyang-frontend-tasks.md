@@ -1,6 +1,6 @@
 ---
 type: dev-task
-date: 2026-10-04
+date: 2026-10-05
 status: active
 owner: frontend
 ---
@@ -30,6 +30,8 @@ owner: frontend
 **2026-10-04 추가(확인 항목 60, draft)**: 채팅 뒤로가기 시 대화·인용 유지 작업 S1~S3을 "채팅 뒤로가기 시 대화·인용 유지" 절에 추가했다. 이미 구현된 채팅 화면에 대한 추가 작업이며 [[anyang-frontend-screens]] 3-1절에 의존한다. 설계 재승인 전에는 구현하지 않는다.
 
 **2026-10-04 추가(확인 항목 58, draft)**: 알림 설정 화면 테스트 알림 버튼 작업 T1~T3을 "테스트 알림 버튼" 절에 추가했다. 이미 구현된 알림 설정(C 단위)에 대한 추가 작업이며 [[anyang-frontend-screens]] 알림 절 "테스트 알림 보내기"·서비스워커 절과 [[anyang-backend-api#8-1. 테스트 알림 (신규, 2026-10-04, 확인 항목 58)]]에 의존한다.
+
+**2026-10-05 추가(확인 항목 61, draft)**: 공지 화면 "관심사 보기" 시트 작업 V1~V4를 "공지 화면 관심사 시트" 절에 추가했다. 이미 구현된 공지 목록(C5)과 내 정보 기억 구역에 대한 추가 작업이며 [[anyang-frontend-screens]] 2-1절에 의존한다. backend·DB 변경은 없다. 설계 승인 전에는 구현하지 않는다.
 
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
@@ -243,10 +245,27 @@ S1~S3 구현 뒤 사용자가 정한 세 가지를 코드에 반영한다. 근�
 |---|---|---|---|
 | S4 | ① 안내를 띄운 경우 보관분 `streaming: true` 유지(다음 복원에서 재조회) ② 서버 조회 실패·네트워크 예외 때 보관분 표시, 404면 보관분 삭제·빈 화면 ③ 브라우저 뒤로가기로 `/chat`(prop `null`) 도착 때도 진행 중 이전 조회 취소. 단위 테스트에 ①·② 케이스 추가 | `web/app/(tabs)/chat/chat-client.tsx`, `web/app/_lib/chat-snapshot.ts`, `web/test/frontend-chat-snapshot.test.ts` | 32차 재승인 |
 
+### 공지 화면 관심사 시트 (확인 항목 61, 신규, 설계 draft)
+
+공지 목록의 "관심사 보기"를 `/notices` 위 바텀시트로 바꾸고, 시트 안 링크가 내 정보 기억 구역(`#memory`)으로 가게 한다. 설계 근거와 모든 값은 [[anyang-frontend-screens]] 2-1절이고 여기에 옮겨 적지 않는다. 기존 `GET /api/preferences`만 쓰므로 backend·DB 변경은 없다(구현 중 필요해지면 멈추고 보고). UI를 만들 때는 `design-taste-frontend` 스킬을 호출하고, 청안 토큰·기존 컴포넌트와 충돌하는 규칙은 청안 설계를 따르며 그 사실을 보고에 적는다. 구현 시작 때 승인된 설계 문서에서 `(미확정)` 값의 확정 여부를 확인한다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| V1 | `sheetView(status, count)` 순수 함수와 단위 테스트 | `web/app/_lib/interest-sheet.ts`(신규), `web/test/frontend-interest-sheet.test.ts`(신규) | 없음 |
+| V2 | `Sheet` 컴포넌트(네이티브 `<dialog>`, Esc·바깥 클릭·닫기, 포커스 복귀 보장, `aria-labelledby`·`aria-modal`, 모바일 바텀시트 / `desktop:` 모달, 열 때 움직임)와 상태별 본문 `InterestSheetBody`, 정적 렌더 테스트 | `web/app/_components/ui/sheet.tsx`(신규), `web/app/(tabs)/notices/interest-sheet.tsx`(신규), `web/app/globals.css`(열 때 움직임이 필요할 때만), `web/test/frontend-interest-sheet.test.ts` | V1 |
+| V3 | `notices-list.tsx`: `interestCount` 대신 `status`·`items` 보관(머리 동작 불변), 링크를 버튼으로, 시트 열림 상태, "다시 시도" | `web/app/(tabs)/notices/notices-list.tsx` | V1, V2 |
+| V4 | `MemoryClient` 구역에 `id="memory"`(와 `scroll-mt-4`), 정적 렌더 테스트, 실제 실행으로 해시 이동 확인(안 되면 대체 effect) | `web/app/(tabs)/settings/memory/memory-client.tsx`, `web/test/frontend-interest-sheet.test.ts` | 없음(V3와 함께 확인) |
+
+- 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, `notices/page.tsx`, `settings/page.tsx`, `ConfirmDialog`(`controls.tsx`).
+- `memory-client.tsx`는 `consent-privacy-wording.test.ts`가 읽으므로 고정 문구를 건드리지 않는다.
+- 실행 확인에서 배경 스크롤 잠금·해시 이동이 설계 추정대로 되지 않으면 [[anyang-frontend-screens]] 2-1절의 대체 수단을 적용하고 보고에 적는다. 그 밖의 설계 변경이 필요하면 "설계 변경 필요"로 보고한다.
+- 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "관심사 시트(확인 항목 61, 2-1절)"가 원본이다(여기에 복제하지 않는다).
+- 커밋: V1~V4를 묶거나 단위마다 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
+
 ## 테스트 방법
 
 1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
-중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에, 테스트 알림 버튼(T1~T3)은 위 "테스트 알림 버튼" 절에 있다.
+중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에, 테스트 알림 버튼(T1~T3)은 위 "테스트 알림 버튼" 절에, 관심사 시트(V1~V4)는 위 "공지 화면 관심사 시트" 절에 있다.
 
 ## Links
 

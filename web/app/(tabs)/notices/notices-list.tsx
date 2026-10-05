@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { apiFetch } from "../../_lib/api-fetch";
 import { formatKoreanDay } from "../../_lib/format";
 import { Button } from "../../_components/ui/controls";
+import { Sheet } from "../../_components/ui/sheet";
+import { InterestSheetBody } from "./interest-sheet";
+import type { InterestStatus } from "../../_lib/interest-sheet";
 import { NoticeRow } from "../../_components/ui/notice-row";
 import { REFETCH_MIN_GAP_MS, appendPage, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
 
@@ -26,7 +28,10 @@ export function NoticesList() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [interestCount, setInterestCount] = useState<number | null>(null);
+  const [prefStatus, setPrefStatus] = useState<InterestStatus>("loading");
+  const [prefs, setPrefs] = useState<{ id: string; preference_text: string }[]>([]);
+  const [prefTry, setPrefTry] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [today, setToday] = useState<string | null>(null);
   const lastFetchedAt = useRef<number | null>(null);
   const refetching = useRef(false);
@@ -36,19 +41,24 @@ export function NoticesList() {
     setToday(formatKoreanDay());
   }, []);
 
+  // 마운트 때 한 번(다시 시도하면 prefTry가 늘어 다시) 받는다. 머리 개수와 관심사 시트가 같은 결과를 쓴다.
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/preferences")
       .then(async (res) => {
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as unknown[];
-        setInterestCount(data.length);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { id: string; preference_text: string }[];
+        if (cancelled) return;
+        setPrefs(data);
+        setPrefStatus("ok");
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setPrefStatus("error");
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [prefTry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +102,7 @@ export function NoticesList() {
     });
   }, []);
 
+  const interestCount = prefStatus === "ok" ? prefs.length : null;
   const personalized = (interestCount ?? 0) > 0;
 
   return (
@@ -111,9 +122,14 @@ export function NoticesList() {
                   : "아직 대화 전이라 최신순이에요. 대화할수록 더 잘 맞춰져요."}
               </p>
             )}
-            <Link href="/settings" className="ml-auto flex min-h-touch shrink-0 items-center text-body-sm font-medium text-ink no-underline">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setSheetOpen(true)}
+              className="ml-auto flex min-h-touch shrink-0 items-center rounded-none border-0 bg-transparent p-0 text-body-sm font-medium text-ink no-underline"
+            >
               관심사 보기
-            </Link>
+            </button>
           </div>
           <div className="h-0.5 bg-ink" />
         </header>
@@ -148,6 +164,16 @@ export function NoticesList() {
           </div>
         )}
       </div>
+      <Sheet open={sheetOpen} title="대화에서 모인 관심사" onClose={() => setSheetOpen(false)}>
+        <InterestSheetBody
+          status={prefStatus}
+          items={prefs}
+          onRetry={() => {
+            setPrefStatus("loading");
+            setPrefTry((n) => n + 1);
+          }}
+        />
+      </Sheet>
     </main>
   );
 }

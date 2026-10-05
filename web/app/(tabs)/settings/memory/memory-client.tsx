@@ -112,7 +112,7 @@ export function MemoryClient() {
   }, [deleter, restore]);
 
   return (
-    <section className="flex flex-col gap-2.5">
+    <section id="memory" className="flex scroll-mt-4 flex-col gap-2.5">
       <div className="flex flex-col gap-1">
         <h2 className="m-0 text-title">AI가 기억하는 내 정보</h2>
         <p className="m-0 text-label font-normal text-ink-2">

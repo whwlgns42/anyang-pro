@@ -559,3 +559,26 @@ a.card:hover {
 }
 
 }
+
+/* 관심사 시트(Sheet) 열 때 움직임. 닫을 때는 없다. 토큰이 reduced-motion에서 0ms. */
+@keyframes sheet-in-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-in-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+dialog.sheet[open] {
+  animation: sheet-in-up var(--duration-base) var(--ease-out);
+}
+
+@media (min-width: 75rem) {
+  dialog.sheet[open] {
+    animation-name: sheet-in-fade;
+  }
+}
