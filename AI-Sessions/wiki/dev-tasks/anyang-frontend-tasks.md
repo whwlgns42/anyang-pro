@@ -33,6 +33,8 @@ owner: frontend
 
 **2026-10-05 추가(확인 항목 61, draft)**: 공지 화면 "관심사 보기" 시트 작업 V1~V4를 "공지 화면 관심사 시트" 절에 추가했다. 이미 구현된 공지 목록(C5)과 내 정보 기억 구역에 대한 추가 작업이며 [[anyang-frontend-screens]] 2-1절에 의존한다. backend·DB 변경은 없다. 설계 승인 전에는 구현하지 않는다.
 
+**2026-10-05 추가(확인 항목 62, draft)**: 대화 기록 삭제 작업 D1~D3을 "대화 기록 삭제" 절에 추가했다. 이미 구현된 10번(대화 히스토리 목록)에 대한 추가 작업이며 [[anyang-frontend-screens]] 8-2절에 의존한다. backend의 `DELETE /api/conversations/:id`([[anyang-backend-api#3-1. 대화 히스토리 조회 — 채택]] 3-1-1절)와 database 0023에 의존한다. 설계 승인 전에는 구현하지 않는다.
+
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
 3절(채팅 인용 카드)·11절(공지 목록 탭) draft 반영에 의존한다.
@@ -262,10 +264,24 @@ S1~S3 구현 뒤 사용자가 정한 세 가지를 코드에 반영한다. 근�
 - 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "관심사 시트(확인 항목 61, 2-1절)"가 원본이다(여기에 복제하지 않는다).
 - 커밋: V1~V4를 묶거나 단위마다 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.
 
+### 대화 기록 삭제 (확인 항목 62, 신규, 설계 draft)
+
+대화 기록 화면의 각 행에 삭제 버튼을 더하고 기억 화면과 같은 5초 되돌리기를 적용한다. 설계 근거와 모든 값은 [[anyang-frontend-screens]] 8-2절이고 여기에 옮겨 적지 않는다. UI를 만들 때는 `design-taste-frontend` 스킬을 호출하고, 청안 토큰·기존 `IconButton`·`Toast`와 충돌하는 규칙은 청안 설계를 따르며 그 사실을 보고에 적는다. 구현 시작 때 승인된 설계 문서에서 `(미확정)` 값의 확정 여부를 확인한다. 서버 계약은 backend 문서의 3-1-1절이 원본이고, 구현 중 계약이 달라지면 설계 변경으로 보고한다.
+
+| 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
+|---|---|---|---|
+| D1 | 순수 함수와 단위 테스트: `insertBack`(되살리기), `focusIndexAfterRemove`(삭제 뒤 포커스 인덱스), `deleteConversation`(`DELETE` 호출 + 204일 때만 `removeSnapshot`, 의존 주입) | `web/app/_lib/restore-item.ts`(신규), `web/app/_lib/delete-conversation.ts`(신규), `web/test/frontend-conversation-delete.test.ts`(신규) | 없음(`apiFetch`·`removeSnapshot`·`createDelayedDelete`는 기존 것을 재사용) |
+| D2 | `ConversationRow`(Link와 삭제 `IconButton` 형제, label, 제목 줄임) + 정적 렌더 테스트 | `web/app/(tabs)/conversations/conversation-row.tsx`(신규), `web/test/frontend-conversation-delete.test.ts` | D1 |
+| D3 | `conversations-client.tsx`: `userId` prop, `createDelayedDelete` + 낙관적 제거 + Toast(`key`)·되돌리기·오류 줄·이탈 flush·포커스 이동, `ListRow` 대신 `ConversationRow`. `page.tsx`가 `session.user?.id ?? null`을 내려줌 | `web/app/(tabs)/conversations/conversations-client.tsx`, `web/app/(tabs)/conversations/page.tsx` | D1, D2, backend의 `DELETE` 구현(없으면 목 응답으로 화면만 확인) |
+
+- 수정하지 않는 것: `app/api/**`, `lib/**`, `db/**`, `notice-row.tsx`(`ListRow`는 쓰는 곳이 없어지지만 삭제는 사용자 승인 뒤), `memory-client.tsx`, `delayed-delete.ts`, `chat-snapshot.ts`, `chat-client.tsx`.
+- 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "대화 삭제(확인 항목 62, 8-2절)"가 원본이다(여기에 복제하지 않는다). 지연 삭제 자체는 기존 `frontend-delayed-delete.test.ts`가 다룬다. 테스트 환경이 `node`(DOM 없음)라 Toast·포커스 이동은 수동 확인이다.
+- 커밋: D1 → D2 → D3 순으로 또는 묶어서 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류. 운영 반영은 backend DELETE 배포와 0023 운영 적용 뒤다.
+
 ## 테스트 방법
 
 1~15번 작업 단위의 테스트는 [[anyang-frontend-screens#테스트 방법]]에 이미 기술돼 있다. 여기서는
-중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에, 테스트 알림 버튼(T1~T3)은 위 "테스트 알림 버튼" 절에, 관심사 시트(V1~V4)는 위 "공지 화면 관심사 시트" 절에 있다.
+중복하지 않는다. 청안 디자인 적용(C1~C10)의 테스트는 위 "청안 적용 테스트 방법"에, 공지 시안 반영(N1~N3)의 테스트는 위 "공지 화면 시안 반영" 절에, 테스트 알림 버튼(T1~T3)은 위 "테스트 알림 버튼" 절에, 관심사 시트(V1~V4)는 위 "공지 화면 관심사 시트" 절에, 대화 기록 삭제(D1~D3)는 위 "대화 기록 삭제" 절에 있다.
 
 ## Links
 
