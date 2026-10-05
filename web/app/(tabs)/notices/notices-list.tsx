@@ -33,6 +33,7 @@ export function NoticesList() {
   const [prefTry, setPrefTry] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [today, setToday] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const lastFetchedAt = useRef<number | null>(null);
   const refetching = useRef(false);
 
@@ -123,6 +124,7 @@ export function NoticesList() {
               </p>
             )}
             <button
+              ref={triggerRef}
               type="button"
               aria-haspopup="dialog"
               onClick={() => setSheetOpen(true)}
@@ -164,7 +166,7 @@ export function NoticesList() {
           </div>
         )}
       </div>
-      <Sheet open={sheetOpen} title="대화에서 모인 관심사" onClose={() => setSheetOpen(false)}>
+      <Sheet open={sheetOpen} triggerRef={triggerRef} title="대화에서 모인 관심사" onClose={() => setSheetOpen(false)}>
         <InterestSheetBody
           status={prefStatus}
           items={prefs}

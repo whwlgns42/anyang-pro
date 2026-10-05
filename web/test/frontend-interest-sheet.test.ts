@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { sheetView } from "../app/_lib/interest-sheet";
 import { InterestSheetBody } from "../app/(tabs)/notices/interest-sheet";
-import { Sheet } from "../app/_components/ui/sheet";
+import { Sheet, isBackdropClick, pickReturnTarget } from "../app/_components/ui/sheet";
 import { MemoryClient } from "../app/(tabs)/settings/memory/memory-client";
 
 const noop = () => {};
@@ -60,6 +60,29 @@ describe("Sheet", () => {
     const labelled = h.match(/aria-labelledby="([^"]+)"/)?.[1];
     expect(labelled).toBeTruthy();
     expect(h).toContain(`<h2 id="${labelled}"`);
+  });
+});
+
+describe("Sheet helpers", () => {
+  const dlg = { id: "dlg" } as unknown as Element;
+  const inner = { id: "in" } as unknown as Element;
+  it("isBackdropClick: both down and click must be the dialog", () => {
+    expect(isBackdropClick(dlg, dlg, dlg)).toBe(true);
+    expect(isBackdropClick(inner, dlg, dlg)).toBe(false);
+    expect(isBackdropClick(null, dlg, dlg)).toBe(false);
+    expect(isBackdropClick(dlg, inner, dlg)).toBe(false);
+    expect(isBackdropClick(dlg, dlg, null)).toBe(false);
+  });
+  it("pickReturnTarget: trigger first, skips body/disconnected", () => {
+    const el = (tagName: string, isConnected = true) => ({ tagName, isConnected, focus() {} }) as unknown as Element;
+    const trigger = el("BUTTON");
+    const body = el("BODY");
+    const opener = el("A");
+    expect(pickReturnTarget(trigger, body)).toBe(trigger);
+    expect(pickReturnTarget(null, body)).toBeNull();
+    expect(pickReturnTarget(null, opener)).toBe(opener);
+    expect(pickReturnTarget(el("BUTTON", false), opener)).toBe(opener);
+    expect(pickReturnTarget(undefined, null)).toBeNull();
   });
 });
 
