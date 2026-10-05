@@ -413,6 +413,28 @@ owner: pm
       - 후속(문서, 설계 잠금이라 다음 수정 때): [[anyang-database-schema]] 1654행 "파일은 구현 단계에서 만든다(이번에 만들지 않았고 운영에도 적용하지 않았다)"는 이제 사실과 반대(운영 적용 결과는 이 항목에 기록), 1742행 0023 수동 확인(테스트 사용자 대화 삭제) 미수행; 설계 4종에 "설계 draft" 표기 잔존(backend-api 571, frontend-screens 460, backend-tasks 259, frontend-tasks 36).
       - **push·배포(2026-10-05)**: 기록 커밋 `b185063`, push `064bfea..b185063`(7커밋 — 62 코드 4개, `85ca3ac`, 메인 세션 `b6eeeb4` "토큰 절약 구조 점검" 포함; backend가 한때 "165개 앞섬"이라 보고했으나 git-manager 확인 결과 실제 6개였음). `vercel deploy --prod` 첫 시도 성공(`dpl_4uG2cjhMbHJPwnWBPsNTP4HhsQnM`, 별칭 `web-beta-smoky-16.vercel.app`). `/login` 200, 로그인 없이 `/conversations` 307 → `/login`, 로그인 없이 `DELETE /api/conversations/{uuid}` 401, 배포 후 error 로그 없음.
       - **사용자 확인 순서**: ① 대화 기록에서 대화 하나 옆 휴지통 → 목록에서 사라지고 "되돌리기"가 뜨는지 ② "되돌리기" → 다시 나타나는지 ③ 다시 지우고 5초 기다린 뒤 새로고침 → 사라진 상태인지 ④ 지운 대화를 채팅에서 열어 둔 적이 있으면 뒤로가기로 돌아갔을 때 그 대화가 보이지 않는지 ⑤ "내 정보 → AI가 기억하는 내 정보"의 관심사가 그대로인지.
+63. **새 요청(2026-10-05, user — 버그 수정 A + 개인정보·보안 C, 계획 승인)**: 계획 원문 `C:\Users\whwlg\.claude\plans\https-www-anyang-go-kr-youth-selectbbsnt-keen-sunbeam.md`. A: ① 채팅 전송 중 예외로 입력창이 막힘(`chat-client.tsx` `handleSend` try/catch 없음) → 오류 표시·`onRetry` 재시도, 429 전용 안내, 60 보관 로직과 충돌 없게 ② 공지 목록·상세·대화 기록·기억 화면 오류 처리(오류 문구·"다시 시도", 공통 `error.tsx`, "더 보기" 종료 판정 `data.length === pageSize`) ③ 관심사 있는 사용자의 추천 쿼리가 `notice_chunks` inner join이라 임베딩 전 새 공지가 빠짐 → 포함(위치는 backend 제안, 추천 정렬의 고정 공지는 별표만 — 55 결정 유지). C: ① 정리 잡 `UNAPPLIED_cleanup-logs.sql`·`UNAPPLIED_consents-retention-cleanup.sql`·`UNAPPLIED_cleanup-auth-attempts.sql` 검토·pg_cron 등록, 처리방침 고지(실행 이력·사용량 90일, 동의 기록 탈퇴 후 1년)와 일치 ② 대화 1년 보관 정리(`updated_at < now() - 1 year`), 처리방침 문구 ③ 채팅 남용 제한(auth_attempts 방식 재사용), 2,000자, DeepSeek `max_tokens`, 이력 최근 N개 ④ 보안 헤더(X-Frame-Options DENY 또는 frame-ancestors 'none', nosniff, Referrer-Policy; 전체 CSP 제외).
+    - 사용자 확정(2026-10-05): 대화 마지막 대화 후 1년 자동 삭제·기억 유지·처리방침 기재, 채팅 1분 5회·하루 100회(429)·2,000자(400, 화면 선차단), 운영 작업 승인(정리 잡 4종 pg_cron 등록, 코드 배포, 처리방침 문구 수정 — **처리방침 개정이 기존 동의 버전 규칙상 재동의를 요구하면 멈추고 보고**), 그 밖의 세부값(미임베딩 새 공지 위치, max_tokens, 이력 N, 오류 문구, error.tsx 등)은 `(미확정)`으로 두고 제안대로. 기록: [[anyang-service-scope]] "대화 기록 보관 기간"·"채팅 사용 제한" 행. 주의: 정리 잡 등록 전 각 delete 대상 행 수를 읽기 전용으로 세고, 예상보다 많으면 멈춤. 참고: 결정 18(처리방침 개정 시 재동의 강제, [[anyang-service-scope]] "처리방침 개정" 행) — 개정 판단 근거.
+    - 진행: `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(35차 전 단계). 설계 database → backend → frontend → 35차 → 구현 → test·build → code-review → 커밋 → push → deploy → 정리 잡 등록 → 운영 확인.
+    - 2026-10-05 frontend 설계 호출 1회가 사용량 한도로 산출물 없이 끊겼고, 메인 세션 지시로 재개해 다시 호출했다.
+    - **설계 draft 완료(2026-10-05)**:
+      - database [[anyang-database-schema]] "보관 기간 정리 잡 4종 등록 설계": `cleanup-logs` `2 18 * * *`(서울 03:02, collect_runs·api_usage_logs 90일), `cleanup-consents-retention` `3 18 * * *`(탈퇴 후 1년), `cleanup-conversations` `4 18 * * *`(updated_at 1년, messages cascade·기억 set null), `cleanup-auth-attempts` `17 * * * *`(24시간 — `'1 day'` 대신 `'24 hours'` 제안). 잡 4개로 나눔(한 잡 실패가 다른 삭제를 롤백하지 않게), `web/db/jobs/` SQL + MCP `execute_sql`로 `cron.schedule`. 롤백은 잡 중지뿐, 지운 행 복구 불가(되돌릴 수 없는 작업). auth_attempts 값에 `chat_request` 추가, "1일 보관은 채팅 24시간 창의 하한" 기록.
+      - **삭제 대상 실측(운영 읽기 전용)**: collect_runs 26 중 0, api_usage_logs 700 중 0, consents 8 중 0(탈퇴 없음), auth_attempts 5 중 5(전부 — 판정 창 15분 이하라 영향 없음), conversations 5 중 0(가장 오래된 대화 2026-09-29 → 첫 실제 삭제 2027-09-29 이후), messages 14 중 0, user_preferences set null 대상 0.
+      - backend [[anyang-backend-api]] 3-4절(채팅 제한 — auth_attempts `chat_request`, 사용자별 advisory 락으로 1분·24시간 창을 한 번에 세고 기록, 처리 순서 401→403→400 INVALID_REQUEST→400 MESSAGE_TOO_LONG→429 TOO_MANY_ATTEMPTS(limit minute/day)→404→502, 2,000자는 trim 뒤 코드 포인트, `max_tokens` 1500, 이력 최근 20개), 2-1-1절(추천에 청크 없는 최근 7일 공지를 맨 위에, 추천 정렬의 고정 공지는 별표만), 10-1절(보안 헤더 `/:path*` 전체 — X-Frame-Options DENY, nosniff, Referrer-Policy strict-origin-when-cross-origin, 전체 CSP 제외), [[anyang-backend-tasks]] 22~24. 60 보관 로직과 서버 쪽 충돌 없음.
+      - frontend [[anyang-frontend-screens]] 15절(15-1~15-8)·[[anyang-frontend-tasks]] E1~E5·P1·R1(조건부): 채팅 try/catch/finally·`finally`에서 보관분 `streaming:false`로 기록(60과 충돌 없음), 오프라인·5xx·스트림 끊김은 오류 블록+`onRetry`, 429·400·401·404처럼 서버가 대화를 만들지 않은 실패는 말풍선을 지우고 입력창에 질문 복원, 429 문구 "잠시 후 다시 시도해 주세요", 공통 `LoadError`(공지 목록·상세·대화 기록·기억), `web/app/error.tsx`(Next 16.3.6 prop `retry`), "더 보기" `received === 20`·`page_size=20` 명시, `maxLength=2000`·1,800자부터 글자 수 표시. 처리방침 필수 문구: 대화 마지막 대화 후 1년 자동 삭제, 기억은 남고 설정에서 직접 지울 수 있음.
+      - max_tokens 근거 자료(database): assistant 메시지 7건, 최대 1,019자·중앙 724자(표본 적음, 토큰 아님).
+    - **(a) 사용자 결정 필요 — 재동의(지시: 재동의가 필요하면 멈추고 보고)**: 결정 18([[anyang-service-scope]] "처리방침 개정" 행, user 2026-09-27)은 "처리방침 개정 시 재동의를 강제한다"이고, 이번 대화 1년 보관 문구 추가는 처리방침 개정이다. 사실: 재동의는 `web/lib/consent.ts` `POLICY_VERSION` 상수로만 걸린다(`require-auth.ts`·`session-guard.ts`가 비교) — 문구만 바꾸면 재동의가 일어나지 않는다. 운영 사용자 4명 모두 `2026-09-27`. 선례: 41(2026-09-28)은 사용자가 "재동의 없음"을 명시 결정해 버전을 올리지 않음. 선택지: (가) 올림 — 상수 변경과 테스트 목 9개 파일 22곳 정리(R1), 4명 전원 재동의(현재 `/consent` 화면에 바뀐 내용 안내 없음) (나) 올리지 않음 — 41처럼 사용자가 명시 결정, [[anyang-service-scope]] "처리방침 개정" 행에 예외 기록. 이번 문구는 수집 항목·이용 목적·AI 처리 대상을 바꾸지 않는다(법적 판단은 하지 않음). **그래서 35차 기록·구현 전에 멈춤.**
+    - (b) 그 밖의 사용자 결정·확인(같이 받으면 좋음):
+      - ① 처리방침에 로그인·가입 시도와 채팅 요청 기록 1일 보관 고지를 넣을지, "대화 기록 화면에서 직접 지울 수 있다" 문구를 넣을지.
+      - ② 채팅이 502로 실패한 뒤 "다시 시도"하면 서버 부작용이 남는다(새 대화면 대화가 하나 더 생기고 처음 대화는 질문 1개짜리로 남음): A안(권장, backend) 502 직전에 이번 요청이 만든 행을 지움 / B안 502에도 `x-conversation-id`를 실어 같은 대화를 이어 씀(질문 2번 저장) / C안 현행.
+      - ③ 채팅 제한 판정: advisory 락(권장 — 동시 요청이 한도를 뚫지 않음, 연결 잠시 점유) vs 락 없는 한 문장(8-1과 같음).
+      - ④ `max_tokens`를 선호 추출 호출에도 넣을지(현재 설계는 채팅 호출만).
+      - ⑤ `error.tsx`를 `app/error.tsx` 하나로 두면 탭 화면 렌더 오류 때 하단 탭·사이드바도 사라짐 — `app/(tabs)/error.tsx`도 둘지.
+      - ⑥ 기억 화면 `saveEdit`도 `fetch` 예외 때 `saving`이 풀리지 않는 같은 종류의 구멍 — 이번에 함께 고칠지.
+      - ⑦ 실패한 채팅 요청도 한도에 세고 429 거절은 세지 않는 것, "하루"를 롤링 24시간으로 해석하는 것.
+      - ⑧ 정리 잡 첫 실행에서 auth_attempts 5행 전부 삭제(영향 없음), 백업·시점 복구 가능 여부는 모름.
+      - ⑨ 권장(database): 대화 삭제가 실제로 시작되는 2027-09-29 전에 `messages(conversation_id)` 인덱스 추가(0024).
+    - 에이전트 제안값(`(미확정)`, 지시대로 제안대로 구현 예정): 잡 이름·시각·4개 분리·`'24 hours'`, `chat_request`·롤링 24시간·락 방식, 429 `limit` 필드·400 `MESSAGE_TOO_LONG`·`max_length`, 코드 포인트 기준·처리 순서, `max_tokens` 1500·이력 20, 추천 7일·맨 위, X-Frame-Options 선택·정적 파일 포함, frontend 실패 분류·문구·`LoadError`·`error.tsx` 한 개·글자 수 1,800 임계값 등(15-2 표 전체).
 
 ## 승인된 설계
 
@@ -426,11 +448,7 @@ owner: pm
 
 2026-10-05(34차): 확인 항목 62 사용자 결정·계획 승인(메인 세션 전달, "에이전트 세부값은 (미확정)으로 두고 제안대로 구현")으로 5종을 다시 기록한다. 승인 범위는 사용자 결정 값과 계획에 적힌 값이고, 62(a) 제안값은 `(미확정)` 그대로 범위 밖이다(20·28·33차와 같은 처리).
 
-- [[anyang-database-schema]] — 승인일 2026-10-05, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-05, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-05, 승인자 user
-- [[anyang-frontend-screens]] — 승인일 2026-10-05, 승인자 user
-- [[anyang-frontend-tasks]] — 승인일 2026-10-05, 승인자 user
+2026-10-05(34차 이어서): 5종을 다시 뺀다 — 사유: 확인 항목 63(버그 수정·개인정보·보안, 새 요청). 반영 후 35차로 재기록한다.
 
 ## Jev 도입 제안
 

@@ -1,7 +1,7 @@
 ---
 type: design
 date: 2026-09-27
-status: active
+status: draft
 owner: backend
 ---
 
@@ -68,6 +68,11 @@ Vercel이 같은 코드(`web/lib/notice-parser.ts`)로 공유한다. 값은 모�
 `POST /api/notify-settings/test`(새 8-1절). 1분 1회 제한은 기존 `auth_attempts`에 새 값(`test_notify`/`user`)을 쓰는
 방식이라 스키마 변경이 없다. 8절 payload `{title, notice_id}`에 선택 필드 `url`을 더하고 서비스워커가 이를 읽게 하는 변경이
 frontend 계약에 포함된다. 승인값에서 직접 나오지 않는 값은 `(미확정)`이다. status는 draft이며 pm이 28차 기록 후 구현 단계에서 active로 바꾼다.
+
+**2026-10-05 개정(확인 항목 63, 설계 draft, 재승인 대기)**: 버그 수정·개인정보·보안 중 backend 몫 4가지. ① 채팅 남용 제한(1분 5회·하루 100회 → 429), 메시지
+2,000자 상한(400), DeepSeek `max_tokens`, 모델에 보내는 이력 최근 N개, 채팅 실패 응답 계약(3-4절) ② 추천 쿼리에 임베딩 전 새 공지 포함(2-1-1절) ③ 보안 헤더 3종(10-1절).
+스키마 변경 없음(`auth_attempts`에 새 값 `chat_request`). 확정 값은 사용자 결정 4개(1분 5회, 하루 100회, 2,000자, "잠시 후 다시 시도해 주세요" 안내)뿐이고
+나머지는 모두 `(미확정)`이다.
 
 **공식 수치 반영 완료**: Gemini 임베딩 무료 티어 한도, DeepSeek API 요청 한도, Vercel Hobby
 함수 실행 시간 한도, `gemini-embedding-001`/`output_dimensionality` 지원 여부는 2026-09-27
@@ -384,6 +389,50 @@ frontend가 채팅 밖에서 "나에게 맞는 공지 목록"과 개별 공지 �
   `Cache-Control: no-store`를 붙인다. 새 글이 수집된 직후 화면이 옛 목록을 보이지 않게 한다. Supabase Realtime 같은
   실시간 연결은 쓰지 않는다(확정). 재조회 시점(탭 복귀·재진입)은 frontend 소관이다.
 - 인증 필요(세션 없으면 401). 본인 프로필 기준 결과만 반환.
+
+### 2-1-1. 추천 쿼리에 임베딩 전 새 공지 포함 (신규, 2026-10-05, 확인 항목 63 A-3, 설계 draft)
+
+문제: 선호가 있는 사용자의 추천 쿼리(`web/app/api/notices/recommended/route.ts` 80-92행)는 `notice_chunks`를 `join`해서, 수집됐지만 아직 청크(임베딩)가 없는 공지가 목록에서 빠진다.
+아래는 모두 `(미확정)` 제안이다. 응답 필드·`Cache-Control: no-store`·`hidden_at is null`·고정 공지 별표 규칙(55 결정: 추천 정렬에서는 `is_pinned`를 정렬에 쓰지 않고 별표만)은 그대로다.
+
+| 항목 | 제안 |
+|---|---|
+| 포함 대상 | 숨기지 않았고(`hidden_at is null`), `notice_chunks`에 행이 하나도 없고, `coalesce(published_at, collected_at) >= now() - 7일`인 공지. 7일 상수 `UNEMBEDDED_RECENT_DAYS = 7` `(미확정)` |
+| 최근 기준 식 | `coalesce(published_at, collected_at)`. 7-1절 알림 14일 상한과 같은 식이다. `collected_at`만 쓰지 않는 이유: 백필로 옛 글(462건)이 한꺼번에 수집되면 `collected_at`은 모두 "방금"이라 임베딩 전 구간에 옛 글이 목록 맨 위를 채운다 |
+| 위치 | 해당 페이지 계산에서 유사도 결과보다 앞(전체 목록의 맨 위). 이 그룹 안은 `published_at desc nulls last, id desc`. 근거: 이 기능의 목적이 "새 글이 안 보이는 것"을 없애는 것이고, 유사도를 모르는 글을 순위 중간에 끼우면 근거 없는 순위가 되기 때문이다. 대안(유사도 결과 뒤에 붙임)은 첫 페이지에 안 나와 목적이 사라져 채택하지 않았다 |
+| 기간 상한 이유 | 본문이 비어 청크가 영영 생기지 않는 공지가 맨 위에 계속 남지 않게 한다. 7일이 지나면 현재처럼 추천 목록에서만 빠진다(선호 없는 사용자 경로와 `/notices`의 다른 목록에는 영향 없음) |
+| 개수 상한 | 두지 않는다. 임베딩 잡은 수집 직후 이어서 돌고(`runEmbedJob`) 평상시 이 그룹은 비어 있거나 몇 건이다. 임베딩이 며칠 막히면 7일 안의 글이 모두 앞에 오는 것이 한계이고, 그때는 오히려 그것이 의도다 |
+| 선호 없는 사용자 경로 | 변경 없음(애초에 `notices` 전체에서 읽어 청크 유무와 무관) |
+| 채팅 RAG·알림 잡 | 변경 없음(청크 유사도로만 찾는다. 임베딩 전 공지는 채팅 인용과 알림 후보에서 그대로 빠진다. 이번 요청 범위 밖) |
+
+쿼리 모양(파라미터: `$1` 평균 선호 벡터, `$2` limit, `$3` offset, `$4` 7):
+
+```sql
+select id, title, body, published_at, is_pinned, image_count from (
+  select n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
+         0 as grp, 0::float8 as distance
+    from notices n
+   where n.hidden_at is null
+     and not exists (select 1 from notice_chunks nc where nc.notice_id = n.id)
+     and coalesce(n.published_at, n.collected_at) >= now() - make_interval(days => $4)
+  union all
+  select id, title, body, published_at, is_pinned, image_count, 1 as grp, distance from (
+    select distinct on (n.id) n.id, n.title, n.body, n.published_at, n.is_pinned, n.image_count,
+           nc.embedding <=> $1 as distance
+      from notice_chunks nc
+      join notices n on n.id = nc.notice_id
+     where n.hidden_at is null
+     order by n.id, distance
+  ) matched
+) merged
+order by grp asc, distance asc, published_at desc nulls last, id desc
+limit $2 offset $3
+```
+
+- 임베딩 전 그룹은 `distance`가 모두 0이라 `grp` 다음 `published_at`으로 정렬된다. 두 그룹 모두 마지막 `id desc`가 페이지 중복·누락을 막는다.
+- 페이지 경계 한계(수용): 사용자가 2페이지를 보는 사이 임베딩이 끝나 어떤 공지가 앞 그룹에서 유사도 그룹으로 옮겨 가면 그 공지가 한 번 중복되거나 한 번 빠질 수 있다. 평상시 앞 그룹이 0~몇 건이라 영향이 작다.
+- 인덱스: `notice_chunks(notice_id)`에 인덱스가 없지만 `embed-job.ts`가 같은 `not exists` 반-조인을 이미 쓰고 있고 규모가 작다(실측하지 않았다). 느려지면 database가 인덱스를 제안한다. 지금 database 변경은 없다.
+- 이 변경은 화면 계약을 바꾸지 않는다(응답 필드 동일). frontend 작업 없음.
 
 ### 2-2. 알림 설정 — 채택 (사용자별 자유 시각 + on/off)
 
@@ -946,6 +995,103 @@ SSE 청크 형식 자체는 바꾸지 않는다(그대로 tee해 전달, 3절 �
   설계에서 새 필드·API·화면은 없다(이전 문장 표시·되돌리기는 범위 밖, f-5). 처리방침·기억 화면 안내 문구
   ("삭제하면 사라진다" 등)와 직전 문장 보관의 정합성은 보류(f-8)이며 frontend 재개 때 확인한다. 이 세션에서는
   frontend를 호출하지 않았다(지시).
+
+### 3-4. 채팅 남용 제한·입력 상한·비용 상한·실패 응답 (신규, 2026-10-05, 확인 항목 63 C-3·A-1 서버 계약, 설계 draft)
+
+확정 값([[anyang-service-scope]] "채팅 사용 제한", user, 2026-10-05): 사용자별 1분 5회, 하루 100회(넘으면 429), 메시지 2,000자(넘으면 400, 화면에서도 미리 막음),
+"잠시 후 다시 시도해 주세요" 안내. 그 밖의 모든 값은 `(미확정)` 제안이다. 코드는 `web/app/api/chat/route.ts`, `web/lib/auth-attempts.ts`, `web/lib/deepseek.ts`를 고친다.
+
+#### 3-4-1. 처리 순서와 응답 코드
+
+| 순서 | 검사 | 실패 응답 | 비고 |
+|---|---|---|---|
+| 1 | 세션 | 401 빈 본문 | 기존 `requireUser()` |
+| 2 | 정지 | 403 `{error:"ACCOUNT_SUSPENDED"}` | 기존 |
+| 2 | 재동의 | 403 `{error:"CONSENT_REQUIRED", missing}` | 기존. 정지와 같은 `requireUser()` 안 |
+| 3 | 본문·빈 메시지 | 400 `{error:"INVALID_REQUEST"}` | 기존. 비었으면 길이 검사로 가지 않는다 |
+| 4 | 길이 | 400 `{error:"MESSAGE_TOO_LONG", max_length:2000}` | 신규 `(미확정)` 코드명. 제한 슬롯을 쓰지 않는다 |
+| 5 | 사용 제한 선점 | 429 `{error:"TOO_MANY_ATTEMPTS", limit:"minute"\|"day"}` | 신규. 1-6절·8-1절과 같은 코드명 재사용(YAGNI), `limit` 필드는 `(미확정)` 추가 |
+| 6 | 대화 소유 확인 | 404 `{error:"NOT_FOUND"}` | 기존. 제한 선점 뒤라 소유하지 않은 id를 계속 시도하는 요청도 한도에 센다 |
+| 7 | 임베딩·DeepSeek | 502 `{error:"EMBEDDING_FAILED"\|"CHAT_FAILED"}` | 기존 |
+
+- 순서 근거: 길이는 DB 없이 판단되고 잘못된 입력이 슬롯을 소모하지 않게 하려고 제한보다 앞에 둔다. 제한은 대화·메시지를 DB에 쓰기 전과 임베딩·DeepSeek 호출 전에 둬서, 막힌 요청이 비용도 쓰기도 만들지 않게 한다(막힌 429 요청은 `conversations`·`messages`를 만들지 않는다).
+- `limit` 필드: 둘 다 넘었으면 `"day"`. frontend가 문구를 하나로 써도 되고(확정 안내문), 하루 한도일 때 "내일 다시"처럼 다르게 써도 된다. 문구는 frontend 소관이다. 서버는 `Retry-After` 헤더를 보내지 않는다(8-1절과 같다).
+
+#### 3-4-2. 제한 저장·판정 (auth_attempts 재사용, 스키마 변경 없음)
+
+- 값 `(미확정)`: `attempt_type='chat_request'`, `identifier_type='user'`, `identifier_hash=sha256(user_id)`(8-1절 `test_notify`와 같은 해시, `attempt_type`이 달라 서로 세지 않는다). `auth_attempts`는 check 제약이 없고 인덱스 `(attempt_type, identifier_type, identifier_hash, created_at)`가 두 창 모두의 조회에 맞는다(8-1절에서 운영 DB 확인됨).
+- 창: 1분 5회와 하루 100회. "하루"는 달력 날이 아니라 최근 24시간 롤링 창으로 해석한다 `(미확정)` — 자정에 한도가 한꺼번에 풀리는 날짜 경계가 없고 쿼리가 단순하다. 쿼리는 `interval '24 hours'`로 시간 단위를 명시한다(`'1 day'`는 시간대에 따라 23·25시간이 될 수 있다).
+- 기록 시점: 요청이 모든 사전 검사(1~4)를 통과한 직후, 대화·임베딩·DeepSeek 호출보다 먼저 1행을 기록한다. 이후 임베딩·DeepSeek가 실패(502)해도 행은 남는다 — 외부 API 비용이 이미 쓰였을 수 있고, 실패 응답을 세지 않으면 실패를 유도하는 반복 요청이 한도를 우회하기 때문이다. 429로 거절된 요청은 행을 남기지 않는다(남기면 연타하는 사용자가 자기 창을 스스로 늘려 영영 풀리지 않는다).
+- 선점은 하나의 트랜잭션에서 사용자별 advisory 락을 잡고 판정·삽입한다(`web/lib/auth-attempts.ts`에 `claimChatSlot(userId)` 추가 `(미확정)`, 반환은 허용이면 `{ok:true}`, 거절이면 `{ok:false, limit}`):
+
+  ```sql
+  -- 클라이언트 1개로 begin → (1) → (2) → commit. 실패 시 rollback, finally release
+  -- (1) 같은 사용자의 동시 요청을 직렬화 (락 키는 사용자별 문자열의 해시)
+  select pg_advisory_xact_lock(hashtextextended('chat_request:' || $1, 0));
+  -- (2) 두 창을 모두 통과하면 1행 삽입. rowCount 0이면 거절
+  insert into auth_attempts (attempt_type, identifier_type, identifier_hash)
+  select 'chat_request', 'user', $1
+   where (select count(*) from auth_attempts
+           where attempt_type = 'chat_request' and identifier_type = 'user' and identifier_hash = $1
+             and created_at > now() - interval '1 minute') < 5
+     and (select count(*) from auth_attempts
+           where attempt_type = 'chat_request' and identifier_type = 'user' and identifier_hash = $1
+             and created_at > now() - interval '24 hours') < 100;
+  ```
+
+  거절(`rowCount` 0)일 때만 아래 한 문장으로 어느 창이 찼는지 구한다(`limit` 값 결정용, 거절 경로라 드물다):
+  `select count(*) filter (where created_at > now() - interval '1 minute') as m, count(*) as d from auth_attempts where attempt_type='chat_request' and identifier_type='user' and identifier_hash=$1 and created_at > now() - interval '24 hours'` → `d >= 100`이면 `"day"`, 아니면 `"minute"`.
+- 원자성 한계와 선택: 테스트 알림(8-1절)은 락 없는 한 문장 선점이라 동시 요청이 둘 다 통과할 수 있고 그것을 수용했다. 채팅은 비용이 걸려 있고 요청 하나가 수 초 동안 이어지므로 같은 사용자가 한꺼번에 수십 건을 보내면 락 없는 방식으로는 한도가 뚫린다. 그래서 채팅만 advisory 락을 쓴다. 락은 (1)~commit 동안만(수 ms) 잡히고 응답 스트림 전체 동안 잡지 않는다. 한계: 트랜잭션 안 문장은 `pool.connect()`가 필요해 풀(`max: 3`, `web/lib/db.ts`)에서 연결 하나를 잠깐 점유하고 왕복이 4회(begin, 락, 삽입, commit)다. 같은 사용자의 대기자는 락이 풀릴 때까지 기다리지만 락 보유 시간이 짧아 한도가 풀 크기보다 빨리 소진되지 않는다. 락 없는 한 문장 방식(왕복 1회)으로 되돌려도 되며 그 경우 동시 연타 한도 초과(최대 동시 요청 수만큼)를 수용하는 것이다 — `(미확정)`, 사용자 확인 필요.
+- 이 판정은 코드(카운트 비교)로 결정적이라 Jev 대상이 아니다.
+
+#### 3-4-3. auth_attempts 1일 보관과 하루 100회 창의 충돌 검토 (결론: 충돌 없음, 단 결합 조건 있음)
+
+database 설계 [[anyang-database-schema#보관 기간 정리 잡 4종 등록 설계 (확인 항목 63 C-1·C-2, 2026-10-05, 설계 draft)]]의 `cleanup-auth-attempts`는 매시 17분 `delete from auth_attempts where created_at < now() - interval '1 day'`다.
+
+- 24시간 창은 `created_at > now() - 24시간`만 센다. 정리 잡이 지우는 행은 `created_at < now() - 1일`, 즉 24시간보다 더 오래된 행뿐이다. 두 조건이 맞닿아 있으므로 24시간 창에 들어오는 행은 정리 잡이 절대 지우지 않는다. 정리가 매시 17분에만 돌아서 25시간까지 남는 행이 있어도 창 밖이라 세지 않는다. 그래서 정리 잡 때문에 카운트가 줄어 한도가 느슨해지는 일은 없다.
+- 결합 조건 1: 정리 잡 보관이 24시간보다 짧아지면(예: 12시간) 하루 100회 판정이 조용히 약해진다. 이 값은 database 문서 쪽 정리 잡이 정하므로 database 문서에 "`auth_attempts` 보관 1일은 채팅 24시간 창의 하한"이라는 한 줄과 `attempt_type='chat_request'` 값을 추가해야 한다(아래 "database 문서 수정 필요").
+- 결합 조건 2: 정리 잡 SQL의 `interval '1 day'`는 `timestamptz` 계산이라 세션 시간대에 DST가 있으면 23시간이 될 수 있다. 운영 세션 시간대를 이 세션에서 확인하지 못했다(Supabase 기본은 UTC로 알려져 있으나 미확인). 잡 SQL을 `interval '24 hours'`로 쓰면 그 의존이 없어진다. database 판단.
+- 행 수: 사용자당 하루 최대 약 100행(거절 요청은 행을 남기지 않음). 현재 사용자 수 규모에서 무시 가능하다(실측 안 함). 1일 뒤 정리된다.
+- 정리 잡이 아직 등록되지 않은 동안: 행이 쌓여도 24시간 창 쿼리는 인덱스 범위 조회라 판정은 맞다. 정리 잡이 지우는 것은 보관 목적이다.
+- 개인정보: 행에는 `sha256(user_id)`와 요청 시각만 있고 메시지 내용·원본 id는 없다. 처리방침에 `auth_attempts` 1일 문구가 없다는 database 문서의 지적(`auth_attempts` 1일 고지 차이)이 이 새 용도로 더 분명해진다 — 문구 판단은 frontend·pm.
+
+#### 3-4-4. 메시지 2,000자 판정
+
+- 기준: 사용자가 쓴 글자 수로 센다 — UTF-16 코드 단위(`string.length`)가 아니라 유니코드 코드 포인트(`[...message].length`)다. 이모지 등 서로게이트 쌍 문자(예: 😀)는 `length`로는 2이고 코드 포인트로는 1이다. 서버가 코드 포인트로 세므로 이모지를 쓴 사용자가 부당하게 일찍 막히지 않는다. 결합 이모지(ZWJ 연결, 예: 👨‍👩‍👧)와 결합 문자는 여러 코드 포인트로 세어진다 — 사용자가 한 글자로 보는 단위(grapheme)로는 세지 않는다(필요하면 `Intl.Segmenter`를 쓸 수 있으나 비용 대비 효과가 낮아 채택하지 않았다 `(미확정)`).
+- 대상: `trim()`을 거친 뒤의 문자열(저장·전송되는 값과 같다). 앞뒤 공백은 세지 않는다.
+- 구현 모양: `const MAX_MESSAGE_CHARS = 2000;` 먼저 `message.length > MAX_MESSAGE_CHARS * 2`이면 곧바로 초과(코드 포인트 수는 `length / 2` 이상이므로 큰 본문을 배열로 펼치지 않고 거른다), 아니면 `[...message].length > MAX_MESSAGE_CHARS` 비교.
+- frontend 입력창: `<textarea maxLength={2000}>`의 `maxLength`는 UTF-16 코드 단위로 센다. 서버 기준보다 같거나 엄격하므로(코드 단위 수 ≥ 코드 포인트 수) 화면이 허용한 글이 서버에서 400이 되는 일은 없다. 이모지가 많으면 화면이 서버보다 먼저 막는 것이 한계(수용)다. 글자 수 표시는 `.length`와 같은 방식을 쓰면 화면 수치와 `maxLength`가 일치한다. 표시 방식은 frontend 소관.
+- 400을 받았을 때(화면 선차단을 우회한 요청 등): 본문 `{error:"MESSAGE_TOO_LONG", max_length:2000}`. 재시도해도 같은 결과이므로 frontend는 "다시 시도"를 보이지 않고 글자 수 안내를 쓴다.
+
+#### 3-4-5. DeepSeek `max_tokens`와 이력 최근 N개 (비용·무료 한도 보호)
+
+- `max_tokens`: 채팅 스트리밍 호출(`streamDeepSeekChat`)의 body에 `max_tokens: DEEPSEEK_CHAT_MAX_TOKENS`를 넣는다. 값 `1500` `(미확정, 추정, 근거: 없음)`. 이 세션에서 DeepSeek `deepseek-chat`의 공식 기본값·상한을 확인하지 못했고(웹 접근 없음) 실제 답변 길이 분포도 실측하지 못했다(스트리밍 호출은 토큰 수를 `api_usage_logs`에 남기지 않는다, 확인 항목 47). 시스템 프롬프트가 평문·요약형 답을 요구하므로 대부분의 한국어 답변이 이 안에 든다고 보는 추정이다. 확정 전에 database(읽기 전용)가 `messages`의 `role='assistant'` 행의 `char_length(content)` 분포(최댓값·p99)를 세어 값을 맞춘다. 한계: 상한에 닿으면 답변이 문장 중간에서 끊기고 스트림은 정상 종료되어 클라이언트가 알 수 없다(`finish_reason: "length"`를 서버에서 읽는 방안은 이번 범위에 넣지 않았다). 선호 추출 호출(`extractPreferences`)에는 아직 넣지 않는다 — 출력이 짧은 JSON 배열이고 이번 요청이 "채팅 호출"을 가리키는지 확정되지 않았다(미해결 질문).
+- 이력 최근 N개: 지금은 대화의 모든 `messages`를 보낸다(`web/app/api/chat/route.ts` 312-315행, 상한 없음 — 긴 대화일수록 입력 토큰이 늘어난다). 최근 `CHAT_HISTORY_MAX_MESSAGES = 20`개(사용자·어시스턴트 합산, 방금 저장한 현재 사용자 메시지 포함)만 보낸다 `(미확정)`. 쿼리: `select role, content from messages where conversation_id = $1 order by created_at desc limit $2`로 가져와 코드에서 뒤집어 시간순으로 만든다. 잘라낸 결과가 `assistant`로 시작하면(교대로 저장되면 20개 창은 assistant로 시작한다) 그 앞 `assistant` 행을 버려 첫 메시지를 `user`로 맞춘다 — 모델 API가 첫 메시지 역할에 민감할 수 있어서이고 구현이 단순하다.
+- 영향: 오래된 맥락은 모델에 가지 않지만, 장기 맥락은 기억(3-3절 `user_preferences`)이 주입하므로 개인화는 유지된다. DB의 `messages`는 지우지 않는다(대화 화면에는 전부 보인다). 기억 추출(3-3-1절)은 방금 한 쌍만 쓰므로 영향 없다.
+- 수치: 호출당 입력 토큰의 상한이 20메시지로 묶이는 효과가 있다. 절감량은 실측하지 않았다(추정할 근거 없음) — 쓰지 않는다.
+- 최악 크기: 사용자 메시지 상한(2,000자)과 `max_tokens`로 저장되는 어시스턴트 메시지가 모두 묶이므로 20개 합이 한정된다(이 상한 도입 전 저장된 긴 메시지는 예외).
+
+#### 3-4-6. 채팅 실패 시 응답 계약 (frontend 몫 A-1이 쓰는 서버 쪽 약속)
+
+| 상황 | HTTP | body | 클라이언트가 할 일(문구는 frontend 소관) |
+|---|---|---|---|
+| 세션 없음 | 401 | 없음 | 기존 처리(로그인으로) |
+| 정지·재동의 필요 | 403 | `ACCOUNT_SUSPENDED`·`CONSENT_REQUIRED` | 기존 처리 |
+| 빈 메시지 | 400 | `INVALID_REQUEST` | 보내지 않는다(화면이 이미 막는다) |
+| 2,000자 초과 | 400 | `MESSAGE_TOO_LONG` | 글자 수 안내, 재시도 버튼 없음 |
+| 사용 제한 초과 | 429 | `TOO_MANY_ATTEMPTS`, `limit` | "잠시 후 다시 시도해 주세요" 안내(확정 문구). 입력 내용은 유지하는 편이 좋다 |
+| 남의/없는 대화 | 404 | `NOT_FOUND` | 오류 표시 |
+| 임베딩·DeepSeek 실패 | 502 | `EMBEDDING_FAILED`·`CHAT_FAILED` | 오류 표시 + "다시 시도" |
+| 그 밖의 서버 예외(DB 오류 등) | 500 | JSON이 아닐 수 있음 | 오류 표시 + "다시 시도". 본문을 JSON으로 파싱하지 말 것 |
+| 스트림 도중 끊김 | 200 이후 연결 오류 | — | 지금까지 받은 텍스트는 서버가 저장한다(3-3-2절). 오류 표시 + "다시 시도" |
+
+- frontend 규칙: 2xx가 아니면 모두 오류다. 오류 상태에서 JSON 본문은 `content-type`이 `application/json`일 때만 읽고, 그 외(500·게이트웨이 오류)는 상태 코드로만 분기한다. 429·400·403만 전용 분기를 둔다. 성공 응답의 계약(`x-conversation-id` 헤더, `event: citations` 첫 이벤트, DeepSeek SSE 그대로)은 3·3-2절과 같고 바뀌지 않는다.
+- 재시도의 서버 부작용(수정 제안, `(미확정)`): 지금은 임베딩 실패(502)가 나도 요청 앞부분이 이미 `conversations`(새 대화일 때)와 사용자 `messages`를 썼다. `x-conversation-id`는 성공 응답에만 실리므로 새 대화에서 실패한 뒤 "다시 시도"를 누르면 클라이언트는 conversation_id가 없어 대화가 하나 더 생기고, 처음 대화는 사용자 메시지 1개짜리로 남는다. 제안(A안, 권고): 502를 돌려주기 전에 이번 요청이 만든 행을 지운다 — 사용자 메시지는 `insert … returning id`로 받은 id로 삭제, 이번 요청이 새로 만든 대화면 대화도 삭제(`messages`는 cascade). 삭제는 최선 노력이며 실패해도 502는 그대로 돌려준다. 이러면 "다시 시도"가 깨끗이 다시 보낸다. B안: 지우지 않고 502 응답에도 `x-conversation-id`를 실어 재시도가 같은 대화를 이어 쓰게 한다(대신 같은 사용자 메시지가 두 번 저장된다). C안: 현행 유지(고아 대화·중복 대화 수용). 권고는 A안이고 사용자 확인이 필요하다. 스트림 도중 끊긴 경우는 어느 안이든 사용자 메시지·부분 답변이 남고 재시도는 같은 질문을 한 번 더 저장한다(3-3-2절, 수용).
+- 60 보관 로직과의 관계: 60은 chat 화면 클라이언트가 대화·인용 공지를 `sessionStorage`에 보관하는 frontend 전용 변경이었고 서버 변경이 없었다([[anyang-youth-policy-assistant]] 60). 이번 서버 변경은 성공 응답 계약(헤더·스트림 형식)을 건드리지 않고, 새 오류 응답(400·429)은 대화·메시지를 만들기 전에 나가므로 서버 쪽에서 60과 충돌하는 부분은 없다. 429·400이 났을 때 보관된 상태를 어떻게 둘지는 frontend 몫이다.
+
+#### 3-4-7. 코드 영향 요약 (구현 단계 작업은 [[anyang-backend-tasks]] 22번)
+
+`auth-attempts.ts`에 `claimChatSlot` 추가와 `AttemptType`에 `chat_request` 추가, `chat/route.ts`의 길이 검사·선점 호출·이력 쿼리 변경·(A안이면) 실패 시 정리, `deepseek.ts`의 `max_tokens`. 상수는 해당 파일 상단에 둔다(환경변수화하지 않는다 — 값이 바뀔 때는 재배포가 필요한 설계 변경이다).
 
 ### 4. Gemini 임베딩 호출
 
@@ -1615,6 +1761,35 @@ dev-common "Jev 도입 제안" 조건: (1) 좁은 판단 — 충족. 공지 1건
   있고 수익화 계획 없음으로 확정됐다([[anyang-youth-policy-assistant#확인이 필요한 항목]]
   5번, 해결됨).
 
+### 10-1. 보안 응답 헤더 (신규, 2026-10-05, 확인 항목 63 C-4, 설계 draft)
+
+`web/next.config.ts`에 `headers()`를 추가한다. 헤더 3종과 대상 경로는 사용자가 승인한 계획의 값이고, 아래 세부 선택은 `(미확정)`이다. 현재 `next.config.ts`에는 `output: "standalone"`뿐이고 `web/vercel.json`에는 `regions`만 있어 겹치는 헤더 설정이 없다(코드 확인).
+
+```ts
+async headers() {
+  return [{
+    source: "/:path*",
+    headers: [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    ],
+  }];
+}
+```
+
+| 항목 | 선택과 근거 |
+|---|---|
+| 대상 경로 | 전체 `/:path*`(루트 `/` 포함 — 설치된 Next 문서의 `:slug*`는 0개 이상 일치). 페이지·API·정적 파일 모두. 설치된 Next 문서(`node_modules/next/dist/docs/.../headers.md`): "Headers are checked before the filesystem which includes pages and `/public` files" |
+| 정적 파일 포함 | 포함한다(제외 규칙을 두지 않는다). `nosniff`는 JS·CSS·서비스워커에 오히려 이롭다. 위험은 MIME이 틀린 파일이 막히는 것뿐인데, `web/public`에는 `sw.js` 하나뿐이고 Next가 확장자로 JS MIME을 붙인다고 보지만 **실제 응답 `Content-Type`은 이 세션에서 확인하지 못했다** — 배포 뒤 `curl -I`로 확인(아래). 빌드 산출물(`/_next/static/*`)에 대해 Next가 기본으로 붙이는 `Cache-Control`은 이 설정과 키가 달라 충돌하지 않는다고 보지만 역시 배포 뒤 `curl -I`로 확인한다 |
+| `X-Frame-Options: DENY` | `frame-ancestors 'none'`(CSP)을 쓰지 않는 이유: 그 헤더는 `Content-Security-Policy` 헤더를 새로 만들어 "전체 CSP는 이번에 넣지 않는다"는 범위와 섞인다. 모든 현대 브라우저가 `X-Frame-Options`를 지원한다. 우리 화면은 다른 곳에 iframe으로 내장되는 경로가 없다(코드: `web/app`에 `iframe` 요소 없음, 주석 1곳뿐). OAuth(Google) 리다이렉트는 최상위 이동이라 영향이 없다 |
+| `X-Content-Type-Options: nosniff` | 응답 `Content-Type`을 브라우저가 추측하지 않게 한다. SSE(`text/event-stream`)·JSON·HTML 응답은 모두 이미 유형을 명시한다 |
+| `Referrer-Policy: strict-origin-when-cross-origin` | 다른 출처로 나가는 링크(공지 원문 `anyang.go.kr`)에는 경로·쿼리 없이 출처만 보낸다. 같은 출처 이동은 전체 URL을 보낸다. Auth.js의 CSRF 검사는 `Origin`/호스트를 쓰므로 영향이 없다고 보지만 로그인 흐름은 구현 뒤 로컬에서 한 번 눈으로 확인한다 |
+| 넣지 않는 것 | 전체 CSP(인라인 스크립트 점검이 먼저), `Permissions-Policy`, COOP/COEP, `Strict-Transport-Security`(호스팅이 붙이는지 이 세션에서 확인하지 못했다 — 필요하면 별도 요청) |
+
+- 롤백: `headers()` 블록을 지우고 재배포한다. 데이터·스키마 영향 없음.
+- frontend 영향: 없다(화면이 `X-Frame-Options`에 의존하는 동작 없음). frontend는 이 절을 몰라도 된다.
+
 ### 11. 공식 문서로 확인한 수치 (2026-09-27, 메인 세션 웹 확인)
 
 | 항목 | 값 | 출처 |
@@ -2061,10 +2236,26 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
     "최신 글 1건을 지우고 다시 호출하면 그 글만 들어온다"는 확인은 운영 DB 삭제를 포함하므로 별도 사용자 승인 대상이다.
     배포 뒤 `cron.job_run_details`로 10분 주기 실행과 성공 여부를 본다(database 소관 확인).
 - **직군 매칭 반영(7-2절, 확인 항목 59, 승인 30차)**: `web/test/jobs-notify.test.ts`에 추가하고 시드 스크립트 테스트는 목 임베딩으로 한다. ① 직군 벡터 조회가 0행(직군 null·`other`·테이블 비어 있음·테이블 없음 오류)이면 직군 쿼리를 호출하지 않고 현행(선호만) 결과와 같다. ② 선호 없음+직군 벡터 있음이면 직군 쿼리 결과만으로 대상이 되고 `notify_logs` 선점·푸시가 나간다. 선호도 직군도 없으면 건너뛴다. ③ 선호·직군 둘 다 있으면 각자 임계값(선호 0.70, 직군 0.60 = `T_occ`)으로 거른 합집합이고 같은 공지는 1번만, 합산 20건 상한. ④ 두 쿼리 모두 `collected_at > enabled_at`·14일·`hidden_at is null` 인자가 들어가는지(쿼리 문자열·파라미터 캡처). ⑤ 이미 `notify_logs`에 있는 (사용자, 공지)는 직군 경로에서도 재발송되지 않는다. ⑥ 시드 스크립트: 문장당 `embedText` 1회, `on conflict (code) do update`, 두 번 실행해도 행 수 불변. ⑦ API 응답·푸시 payload가 바뀌지 않는다. 운영 확인은 57-D 6(승인된 테스트 계정 `enabled_at` 1행 당기기)과 연계한다: database가 읽기 전용으로 "직군 쿼리 결과(최근 14일·`T_occ`)"를 먼저 세고, 1건 이상이면 직군 있고 선호 없는 테스트 계정(실측 1명, 알림 켠 사람 아님)으로 받는지 확인한다. 0건이면 "쿼리·라우트까지만 확인"으로 보고한다. v2 직군 유사도 재실측(7-2절 C)은 구현 전에 database가 읽기 전용으로 한다.
+- **채팅 제한·길이·비용 상한(3-4절, 확인 항목 63)**: 단위 테스트는 `web/test/chat.test.ts`(갱신)·`web/test/auth-attempts.test.ts`(갱신)·`web/test/deepseek.test.ts`(갱신). `claimChatSlot`은 `@/lib/auth-attempts` 목으로 분리해 chat 라우트 테스트는 기존 `pool.query` 목 구조를 유지한다.
+  ① 순서: 세션 없음 401 → 정지 403 → 재동의 403 → 빈 메시지 400 `INVALID_REQUEST` → 2,001자 400 `MESSAGE_TOO_LONG`(선점 함수 미호출) → 선점 거절 429(`conversations`/`messages` insert·`embedText`·DeepSeek 미호출) → 통과. 길이 400이 429보다 먼저임을 "한도가 찬 사용자의 2,001자 요청은 400"으로 고정.
+  ② 길이 경계: 2,000자 통과, 2,001자 400. 😀 1,000개(UTF-16 길이 2,000)·2,000개(UTF-16 길이 4,000, 코드 포인트 2,000) 통과, 2,001개 400. UTF-16 길이 4,001 초과는 배열 펼침 없이 거른다(빠른 경로). 앞뒤 공백은 세지 않는다.
+  ③ 선점(`claimChatSlot`, `pg` 클라이언트 목): 호출 순서 `begin` → 락 → 삽입 → `commit`이고 `release`가 항상 불린다, 삽입 `rowCount` 1이면 허용, 0이면 카운트 조회 후 `d>=100`이면 `limit:"day"`, 아니면 `"minute"`. 중간에 던지면 `rollback` 후 `release`하고 예외가 라우트로 올라가 500이다(통과시키지 않는다 — 제한 장애 시 열어 두는 것이 아니라 막는다 `(미확정)`). SQL 문자열에 `interval '24 hours'`·`'1 minute'`·한도 5/100이 들어 있다.
+  ④ 실제 DB 동시성(목으로 증명 불가, 로컬 개발 DB 전용): 같은 사용자로 `claimChatSlot`을 20개 병렬 호출하면 정확히 5개만 허용된다. 같은 사용자 1분 5회 뒤 시각을 조작해(`created_at`을 70초 전으로) 다시 허용되고 25시간 전 행은 하루 창에 세지 않는다. 운영 DB에는 쓰지 않는다.
+  ⑤ 실패 계약: 429 본문 `{error:"TOO_MANY_ATTEMPTS", limit}`, 400 본문 `{error:"MESSAGE_TOO_LONG", max_length:2000}`. 임베딩 실패 502 `EMBEDDING_FAILED`, DeepSeek 실패 502 `CHAT_FAILED`. A안을 채택하면 502 직전에 이번 요청이 만든 사용자 메시지(새 대화면 대화까지) 삭제 쿼리가 불리고, 삭제가 던져도 502가 그대로 나가는지, 기존 대화에서 실패하면 대화 자체는 지워지지 않는지.
+  ⑥ `max_tokens`: `streamDeepSeekChat`이 보내는 fetch body에 `max_tokens`가 상수 값으로 들어 있고 `stream: true`가 유지된다(`fetch` 목으로 body 캡처). 선호 추출 호출 body는 바뀌지 않는다(범위 확정 전까지).
+  ⑦ 이력: `select role, content from messages … order by created_at desc limit $2`가 불리고 `$2`가 20이며, 목이 반환한 행을 시간순으로 뒤집어 보내고, 21번째 이전 행은 DeepSeek payload에 없고, 결과가 `assistant`로 시작하면 그 행이 빠져 첫 메시지가 `user`인지. 21개 이상 쌓인 대화 픽스처. 가림 처리가 남은 메시지에 그대로 적용되는지.
+  ⑧ 운영 확인(배포 뒤, 운영 데이터에 쓰지 않는다): 로그인 없이 `POST /api/chat`이 401. 429·400은 로그인 세션이 필요해 운영 자동 확인은 하지 않고 사용자 확인 순서 3번(6번 연속 전송)에 맡긴다. 한도 실측용 행은 사용자 본인 계정이 만드는 것이라 운영 `auth_attempts`에 데이터가 쌓이는 것은 정상이다.
+- **추천 쿼리 임베딩 전 공지(2-1-1절, 확인 항목 63)**: `web/test/notices-recommended.test.ts`(갱신). ① 선호가 있을 때 불리는 SQL에 `not exists (select 1 from notice_chunks`·`hidden_at is null`·`union all`·`order by grp asc, distance asc`가 있고 인자가 `[벡터, limit, offset, 7]`이다. ② 응답 변환(`toListItem`)은 두 그룹 모두 같은 필드를 낸다(`is_pinned` 포함). ③ 선호가 없을 때의 SQL은 바뀌지 않았다. ④ 로컬 개발 DB 실제 실행(목으로 증명 불가): 공지 3건(청크 있음·청크 없음 최근·청크 없음 8일 전)과 `hidden_at` 공지 1건을 넣으면 결과가 "청크 없음 최근 → 청크 있음(유사도 순)"이고 8일 전·숨김 공지는 빠진다. 고정 공지가 청크 없음 그룹에 있어도 일반 최근 글보다 앞서지 않고 `published_at desc`로만 정렬된다(55 결정 유지).
+- **보안 헤더(10-1절, 확인 항목 63)**: ① `web/test/next-config.test.ts`(신규): `await nextConfig.headers!()`가 `source: "/:path*"` 한 항목이고 `X-Frame-Options: DENY`·`X-Content-Type-Options: nosniff`·`Referrer-Policy: strict-origin-when-cross-origin` 3개만 있고 `Content-Security-Policy` 키가 없다. ② 빌드: `npm run build` 통과. ③ 배포 뒤 `curl -sI`로 3개 헤더를 확인할 경로: `/login`(페이지), `/api/profile`(401 응답에도 붙는지), `/sw.js`(정적, `Content-Type`이 JS 계열인지 함께 확인), HTML 안의 `/_next/static/…` 파일 하나(정적, `Cache-Control`이 기존대로인지 함께 확인). 하나라도 빠졌거나 `sw.js`가 막히면(서비스워커 등록 오류) 정적 파일 제외 규칙(`source`에 정규식)을 설계 변경으로 올린다. ④ 로그인·로그아웃·Google 로그인 이동이 정상인지 사용자 확인(Referrer-Policy 영향 점검).
 - **api_usage_logs 기록**: DeepSeek·Gemini 호출을 목으로 성공/429/오류 각각 재현해
   `api_usage_logs`에 대응하는 `status` 값으로 1행씩 남는지 확인.
 
 ## 확인이 필요한 항목 (이 문서 관련, pm이 프로젝트 문서에 반영)
+
+- **채팅 제한·보안 헤더·추천 쿼리(3-4·10-1·2-1-1절, 확인 항목 63, 신규, 설계 draft)** — 확정(사용자, 2026-10-05): 1분 5회·하루 100회(429), 2,000자(400), 안내 문구 "잠시 후 다시 시도해 주세요", 보안 헤더 3종(`X-Frame-Options` 또는 `frame-ancestors`, `nosniff`, `Referrer-Policy`)과 전체 CSP 제외.
+  `(미확정)`(제안): ① 제한 저장 값 `chat_request`/`user`/`sha256(user_id)` ② "하루" = 롤링 24시간 ③ 요청 시점 기록·실패(502)도 셈·429 거절은 기록 안 함 ④ advisory 락 트랜잭션 방식(대안: 락 없는 한 문장, 동시 연타 초과 수용) ⑤ 429 코드명 `TOO_MANY_ATTEMPTS` 재사용과 `limit` 필드 ⑥ 400 코드명 `MESSAGE_TOO_LONG`·`max_length` 필드 ⑦ 코드 포인트 기준 글자 수(grapheme 아님) ⑧ 처리 순서(길이 400이 제한 429보다 먼저, 대화 소유 404는 제한 뒤)
+  ⑨ `DEEPSEEK_CHAT_MAX_TOKENS = 1500`(추정, 근거 없음, 답변 길이 분포 읽기 전용 실측으로 확정, 선호 추출 호출에 넣을지) ⑩ 이력 `CHAT_HISTORY_MAX_MESSAGES = 20`·앞 assistant 제거 ⑪ 502 실패 시 부작용 정리 A안(권고)·B안·C안 ⑫ 임베딩 전 공지 포함 7일·맨 위·`coalesce(published_at, collected_at)` ⑬ 보안 헤더는 `X-Frame-Options: DENY` 선택(`frame-ancestors` 제외)·`/:path*` 정적 파일 포함.
+  확인하지 못한 것: 운영 DB 세션 시간대(정리 잡 `'1 day'` 해석), `deepseek-chat`의 `max_tokens` 공식 기본값·상한, `sw.js`·`/_next/static` 실제 응답 헤더, 호스팅의 기본 HSTS, 답변 길이 분포.
 
 - **테스트 알림(8-1절, 확인 항목 58, 신규)** — 확정(사용자 승인 범위): 경로·메서드, 세션 인증·정지 규칙, 본인 구독에만 발송, 제목·클릭 이동 경로, 410/404 삭제, `notify_logs`
   미기록, 사용자당 1분 1회·429, 응답 `{success_count, failed_count}`, 구독 0이면 409 `NO_SUBSCRIPTION`. `(미확정)`: ① payload 필드명 `url`과 서비스워커 변경(경로 검증 규칙)

@@ -141,9 +141,9 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | id | uuid, PK | |
-| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안. `test_notify`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값" |
-| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안. `user`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값" |
-| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고. `test_notify`일 때는 `sha256(user_id)` |
+| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안. `test_notify`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값", `chat_request`(`(미확정)`, 확인 항목 63)는 "채팅 요청 값" |
+| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안. `user`(`(미확정)`, 확인 항목 58·63)는 아래 "테스트 알림 값"·"채팅 요청 값" |
+| identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고. `test_notify`·`chat_request`일 때는 `sha256(user_id)` |
 | created_at | timestamptz, not null, default now() | 시도 시각 |
 
 - 인덱스: `(attempt_type, identifier_type, identifier_hash, created_at)` — 창 안 횟수를
@@ -155,6 +155,15 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
   `auth_attempts_pkey` 하나뿐이고 check 제약이 없다 — 값 셋은 DB가 강제하지 않으므로 새 값에 마이그레이션·인덱스가
   필요 없다(기존 인덱스가 그대로 맞는다). 이 행도 아래 보존·정리(1일) 대상에 포함된다 — 정리 잡이 등록되면 함께 지워지고,
   1분 창 판정에는 영향이 없다(정리 잡 등록 여부는 아래 절의 승인 규칙을 따른다).
+- **채팅 요청 값 (`(미확정)`, 확인 항목 63, 2026-10-05, backend 요청)**: 채팅 하루 한도를 `attempt_type='chat_request'`,
+  `identifier_type='user'`, `identifier_hash=sha256(user_id)`(원본 id 미저장)로 요청마다 한 행씩 기록해 24시간 창에서 센다.
+  `test_notify`와 같은 이유로 DB 제약이 없어 마이그레이션·인덱스가 필요 없다. 판정·선점 방식은
+  [[anyang-backend-api]] 3-4-3·3-4-5절이 원본이다. **보관 1일은 채팅 24시간 창의 하한이다 — 정리 잡 보관을 24시간 미만으로
+  줄이면 하루 한도가 약해진다**(창 안 행이 먼저 지워져 횟수가 덜 센다).
+- **어시스턴트 답변 길이 실측 (확인 항목 63 max_tokens 판단 자료, 2026-10-05 운영 읽기 전용)**: `messages`에서 `role='assistant'`
+  행 7건, `char_length(content)` 최댓값 1019자, p99 약 1018자, 중앙값 724자. 표본이 7건뿐이라 p99는 통계적 의미가 거의 없고
+  최댓값이 사실상 전부다. 글자 수일 뿐 토큰 수가 아니며(토큰 환산은 모델·언어별이라 여기서 하지 않음), 답변이 max_tokens에
+  잘렸는지는 알 수 없다.
 - **원값/해시 선택 (제안)**: 개인정보 최소화 관점에서 이메일·IP 원값 대신 SHA-256
   해시(`sha256(lower(trim(email)))`, `sha256(ip_text)`)로 저장한다 — 판정에는 "같은 값인지"
   비교만 필요하고 원값 복원이 필요 없다(단방향 해시로 충분). `identifier_type='email'`이면
@@ -195,9 +204,12 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
   select cron.schedule(
     'cleanup-auth-attempts',
     '0 * * * *',
-    $$ delete from auth_attempts where created_at < now() - interval '1 day'; $$
+    $$ delete from auth_attempts where created_at < now() - interval '24 hours'; $$
   );
   ```
+  `'1 day'` 대신 `'24 hours'`로 쓴다(확인 항목 63 판단, `(미확정)`). `timestamptz - interval '1 day'`는 세션 시간대의 달력 하루라
+  DST 전환일에 23·25시간이 될 수 있다. 운영 `cron.timezone`은 GMT(2026-10-05 읽기 조회로 확인)라 지금은 DST가 없어 둘이
+  같지만, `'24 hours'`는 시간대와 무관하게 정확히 24시간이라 채팅 24시간 창 하한을 항상 지킨다. 시간대를 바꿔도 안전하다.
   이 정리 잡도 데이터 삭제이므로 되돌릴 수 없는 마이그레이션 취급이다(dev-common.md 규칙).
   구현 단계 지시서에 이 정리 잡 등록에 대한 사용자 승인이 별도로 적혀 있어야 실행한다 —
   없으면 등록하지 않고 멈춰서 보고한다(위 `consents`/`cleanup-logs`와 동일한 규칙).
@@ -887,6 +899,99 @@ select count(*) from users where suspended_at is null;
   보존 기간은 1년으로 확정됐다([[anyang-service-scope]], user, 2026-09-27, 위 `consents` 절
   참고) — 다만 90일 로그와 보존 기간이 다르고 삭제 대상 테이블도 달라 정리 잡 등록 자체는
   별도로 다룬다.
+
+### 보관 기간 정리 잡 4종 등록 설계 (확인 항목 63 C-1·C-2, 2026-10-05, 설계 draft)
+
+이 절 전체가 설계 draft다. 확정 근거는 [[anyang-service-scope]]의 "로그 보존"·"탈퇴 시 동의 기록"·"대화 기록 보관 기간"(user, 2026-10-05) 행이고, 아래 이름·시각·분리 방식은 모두 `(미확정)` 제안이다. 위 "로그성 테이블 보존 기간·정리 잡"과 `consents`·`auth_attempts` 절의 정리 잡 SQL 초안을 이 절이 대체·보강한다(사실이 겹치는 곳은 그쪽을 고치지 않고 이 절을 원본으로 본다).
+
+#### 확인한 사실 (2026-10-05 운영 DB 읽기 전용)
+
+- `cron.job`에는 `notify-job-trigger`(`*/5 * * * *`, active) 1건뿐이다. 수집 잡 `collect-quick`·`collect-full`과 정리 잡은 아직 없다. pg_cron 1.6.4, `cron.timezone` = GMT(스케줄은 UTC로 해석), `cron.max_running_jobs` 32. 알림 잡 1회 실행 시간 최대 약 0.06초.
+- 실제 컬럼명은 `web/db/jobs/UNAPPLIED_*.sql` 세 파일의 조건과 모두 일치한다: `collect_runs.started_at`, `api_usage_logs.requested_at`, `consents.withdrawn_at`, `auth_attempts.created_at`, `conversations.updated_at`(모두 timestamptz).
+- `conversations.updated_at`은 채팅 응답이 끝날 때마다 `update conversations set updated_at = now()`로 갱신된다(`web/app/api/chat/route.ts:191`). "마지막 대화 후 1년" 조건과 의미가 맞는다.
+- 연쇄: `messages.conversation_id` → `on delete cascade`(`messages_conversation_id_fkey`), `user_preferences.source_conversation_id` → `on delete set null`(`user_preferences_source_conversation_id_fkey`, 0023 적용됨). 둘 다 운영 `pg_constraint`로 확인했다. `users` 삭제 경로와는 별개다.
+- 인덱스: `collect_runs(started_at desc)`, `api_usage_logs(requested_at)`는 있다. `consents`는 `(user_id, consent_type, policy_version)`뿐이라 `withdrawn_at` 조건은 순차 스캔, `auth_attempts`는 `(attempt_type, identifier_type, identifier_hash, created_at)`라 `created_at` 단독 조건은 순차 스캔, `conversations`는 `(user_id, updated_at desc)`라 `updated_at` 단독 조건은 순차 스캔이다. **`messages(conversation_id)`와 `user_preferences(source_conversation_id)`에는 인덱스가 없다.** 대화 1행을 지울 때마다 cascade·set null이 각 테이블을 순차 스캔한다.
+- `collect_runs`/`api_usage_logs`는 Supabase 쪽 테이블이다. 보드 수집기의 `collector_runs`(보드 DB)는 확인 항목 56(j)에 따라 수집기가 시작할 때 스스로 90일 삭제하므로 이 잡들과 별개이고 겹치지 않는다([[anyang-board-collector-db]]).
+
+#### 대상 행 수 (읽기 전용 실측, 2026-10-05 UTC, 건수만)
+
+| 잡 | 조건 | 전체 | 지금 삭제 대상 | 가장 오래된 행 |
+|---|---|---|---|---|
+| cleanup-logs (collect_runs) | `started_at` 90일 경과 | 26 | **0** | 2026-10-03 |
+| cleanup-logs (api_usage_logs) | `requested_at` 90일 경과 | 700 | **0** | 2026-09-28 |
+| cleanup-consents-retention | `withdrawn_at` 1년 경과 | 8 | **0** (탈퇴 철회 기록 0건) | 2026-09-28 |
+| cleanup-auth-attempts | `created_at` 1일 경과 | 5 | **5** (전부) | 2026-10-03 15:00 UTC |
+| cleanup-conversations | `updated_at` 1년 경과 | 5 | **0** | 2026-09-29 |
+| (연쇄) messages | 위 대화에 속한 행 | 14 | **0** | |
+| (연쇄) user_preferences | 위 대화를 출처로 하는 행 | 11 | **0** (set null 대상) | |
+
+- 대화 1년 삭제의 첫 실제 삭제 가능일은 가장 오래된 대화 기준 **2027-09-29 이후**다. 그때까지 이 잡은 0행을 지운다.
+- `auth_attempts` 5행(로그인 실패·가입 시도·테스트 알림)은 첫 실행에서 전부 지워진다. 판정 창이 15분(로그인·가입)·1분(테스트 알림, 채팅 제한 예정)이라 영향이 없다.
+
+#### 잡 구성 (제안, 모두 (미확정))
+
+모두 `cron.schedule`로 등록한다. 시각은 UTC로 쓰고 괄호는 서울 시각이다. 같은 이름으로 다시 `cron.schedule`을 부르면 기존 잡을 갱신하므로 등록 SQL을 여러 번 실행해도 잡이 늘지 않는다.
+
+| 잡 이름 | 주기 | 삭제 SQL | 비고 |
+|---|---|---|---|
+| `cleanup-logs` | `2 18 * * *` (03:02) | `delete from collect_runs where started_at < now() - interval '90 days';` 및 `delete from api_usage_logs where requested_at < now() - interval '90 days';` | 기존 UNAPPLIED 파일에서 시각만 `0`→`2`분. 두 문장은 한 트랜잭션이라 한쪽이 실패하면 둘 다 롤백된다. 둘 다 같은 보존 기간·같은 성격이라 한 잡으로 둔다 |
+| `cleanup-consents-retention` | `3 18 * * *` (03:03) | `delete from consents where withdrawn_at is not null and withdrawn_at < now() - interval '1 year';` | 기존 파일에서 시각만 변경 |
+| `cleanup-conversations` | `4 18 * * *` (03:04) | `delete from conversations where updated_at < now() - interval '1 year';` | 신규. messages cascade, 기억은 set null. 조건이 `updated_at`이라 사용자가 안 쓴 지 1년이 안 된 대화는 지워지지 않는다 |
+| `cleanup-auth-attempts` | `17 * * * *` (매시 17분) | `delete from auth_attempts where created_at < now() - interval '24 hours';` | 위 `auth_attempts` 절 판단대로 `'1 day'`에서 `'24 hours'`로 변경(DST 무관, 채팅 24시간 창 하한). 기존 파일은 `0 * * * *`. 매시 정각·5의 배수 분(알림 잡 `*/5`)을 피해 17분으로 옮긴다 |
+
+- 시각 근거: 서울 새벽 03시대, 알림 잡의 `*/5`(분이 5의 배수)와 겹치지 않는 분(2·3·4·17)을 쓴다. 겹쳐도 `max_running_jobs` 32에 한참 못 미치고 삭제는 0.1초 안팎이라 장애 요인은 아니다(순서가 아니라 로그를 읽기 쉽게 하려는 정리). 04:00(UTC 19:00)으로 정한 `collect-full`과도 겹치지 않는다. 기존 파일의 `0 18`(03:00 정각)은 `*/5` 알림 잡과 같은 분이라 바꿨다.
+- 잡을 하나로 합치지 않는 이유: 한 트랜잭션이라 한 문장의 실패(예: 대화 삭제의 FK 오류)가 다른 보존 삭제까지 막는다. 4개로 나눠도 `cron.job` 행이 4개 늘 뿐이다.
+- 보존 기간 값(90일·1년·1일)은 확정이고 위 이름·시각·분리는 (미확정)이다.
+
+#### 각 delete 검토
+
+- **조건·컬럼**: 위 사실대로 실제 컬럼명과 일치한다. `now() - interval`은 서버(UTC) 기준 경과 시간이라 시간대 영향이 없다.
+- **인덱스**: 현재 규모(최대 700행)에서는 순차 스캔이 몇 ms다. 규모가 커졌을 때를 대비한 인덱스 제안(모두 (미확정), 지금 만들지 않음, 되돌릴 수 있음, 롤백 `drop index`): `messages(conversation_id)` — 앱의 대화 조회에도 쓰이고 cascade 비용을 줄이므로 **대화 삭제 첫 실제 삭제일(2027-09-29) 전이나 `messages`가 수만 행이 되기 전에** 0024로 추가하는 것을 권한다. `user_preferences(source_conversation_id)`, `conversations(updated_at)`, `consents(withdrawn_at)`, `auth_attempts(created_at)`는 행 수가 적어 불필요하다. 숫자 기준(수만 행)은 근거 없는 감이며(추정, 근거: 없음) 실측이 아니다.
+- **배치 크기**: 지금은 배치를 두지 않는다(0~수백 행). 한 번에 수만 행 이상을 지우게 되면(예: 대화 삭제가 처음 크게 몰릴 때) `where id in (select id … limit N)` 반복으로 나눈다. 그때 설계한다.
+- **잠금**: 행 단위 잠금만 건다. 지워지는 대화는 1년간 아무도 쓰지 않은 것이라 같은 행을 동시에 쓰는 요청이 사실상 없다(그래도 동시 쓰기가 오면 앱 쪽 FK 위반 처리가 이미 있다: 커밋 f662915 테스트). `consents`·`auth_attempts`·로그 테이블은 쓰기 경로와 대상 행이 달라 충돌하지 않는다.
+- **트랜잭션**: 잡 한 번 = 한 트랜잭션. 중간 실패 시 해당 잡의 삭제는 모두 롤백되고 다음 주기에 다시 시도된다.
+
+#### 처리방침 고지와의 대조 ([[anyang-frontend-screens]] 소관, 화면 파일 `web/app/privacy-policy/page.tsx` 33-37 읽기)
+
+| 고지·결정 | 처리방침 현재 문구 | 잡 동작 | 판정 |
+|---|---|---|---|
+| 동의 기록 탈퇴 후 1년 | 있음 | `withdrawn_at` 1년 경과 삭제 | 일치 |
+| 실행 이력·API 사용량 90일, 알림 로그 제외 | 있음 | `collect_runs`·`api_usage_logs` 90일, `notify_logs` 대상 아님 | 일치 |
+| auth_attempts 1일 | **없음** | 1일 경과 삭제(식별값은 SHA-256 해시) | 차이 — 고지 추가 여부는 frontend·pm 판단 |
+| 대화 마지막 대화 후 1년 | **없음** | 1년 경과 삭제, AI 기억은 유지(출처만 끊김) | 차이 — 결정은 처리방침에 적기로 했다([[anyang-service-scope]]). 대화는 지워져도 AI 기억은 남고 설정에서 따로 지울 수 있다는 점을 같이 적어야 사실과 맞는다 |
+
+- 보드 수집기 `collector_runs` 90일 삭제(56)는 처리방침의 "공지 수집 실행 이력 90일"과 같은 값이라 문구 충돌이 없다.
+
+#### 재동의 판단에 필요한 사실 (판단은 frontend·pm)
+
+- `consents` 컬럼: `consent_type`(text), `policy_version`(text), `consented_at`, `withdrawn_at`, `user_id`(null 허용), `ip_address`.
+- 운영 현재 값(2026-10-05): `consent_type` `collection_use` 4행·`overseas_transfer` 4행, `policy_version`은 두 종류 모두 `2026-09-27` 하나뿐, 탈퇴 철회 0건, user_id null 0건. 사용자 4명이 모두 이 버전이다. 가장 최근 동의는 2026-10-04.
+- 앱 상수: `web/lib/consent.ts`의 `POLICY_VERSION = "2026-09-27"`. 로그인 시 `requireUser`·`session-guard`가 사용자별 최신 `policy_version`이 이 상수와 다르면 재동의 화면으로 보낸다. 상수를 올리면 지금 4명 모두 재동의 대상이 된다.
+- 정리 잡은 `policy_version`을 건드리지 않는다. 처리방침 문구가 바뀌어도 DB 쪽 변경은 없다.
+
+#### 운영 등록 절차 (제안)
+
+1. 파일 위치: 마이그레이션이 아니라 `web/db/jobs/`의 SQL 파일로 둔다. 근거: `cron.schedule`은 스키마 변경이 아니고 알림·수집 잡과 같은 선례(`notify-job-trigger.sql`, `collect-job-trigger.sql`)가 있으며, `schema_migrations` 단방향 번호 체계와 잡 롤백(`unschedule`)이 맞지 않는다. 4개를 한 파일 `cleanup-jobs.sql`로 합치고(`UNAPPLIED_` 세 파일은 구현 때 이 파일로 대체하며 삭제는 사용자 승인 후), 적용 뒤 파일에 등록 날짜를 주석으로 남긴다. 파일 정리 방식은 (미확정)이다.
+2. 실행: Supabase MCP `execute_sql`로 `cron.schedule` 4회. 접속 롤이 `cron` 스키마에 쓸 수 있는지는 알림 잡 등록 선례로 이미 확인됐다.
+3. 순서: 사용자 승인(아래) → 등록 직전 "대상 행 수" 표의 쿼리를 다시 읽어 숫자를 확인 → 등록 → 확인.
+4. 사용자 승인: 네 잡 모두 데이터를 주기적으로 지우는 되돌릴 수 없는 작업이다. 보존 값(90일·1년·1일·대화 1년)은 확정됐어도 **구현 지시서에 이 등록 4건에 대한 사용자 승인이 별도로 적혀 있어야** 실행한다. 없으면 등록하지 않고 멈춰서 보고한다.
+
+#### 롤백
+
+- 잡 중지·해제(다음 실행부터 삭제가 멈춘다): `select cron.alter_job((select jobid from cron.job where jobname = '<이름>'), active := false);` 또는 `select cron.unschedule('<이름>');`
+- **이미 지운 행은 복구할 수 없다.** Supabase 무료 플랜의 백업·시점 복구 가능 여부는 이 세션에서 확인하지 못했다(미확인). 그래서 등록 전 대상 행 수 확인이 유일한 사전 방어선이다.
+- 위험이 큰 순서: `cleanup-conversations`(사용자 대화 원문)·`cleanup-consents-retention`(증빙). 이 둘은 지금 대상이 0건이라 등록 후 첫 실행은 안전하다.
+
+#### 테스트 방법 (구현 단계)
+
+- 등록 직후: `select jobid, jobname, schedule, active from cron.job where jobname like 'cleanup-%';`가 4행이고 schedule·active가 위 표와 같은지 본다(`command` 컬럼은 시크릿이 없지만 출력하지 않아도 된다).
+- 첫 실행 뒤: `select j.jobname, d.status, d.return_message, d.start_time from cron.job_run_details d join cron.job j using (jobid) where j.jobname like 'cleanup-%' order by d.start_time desc limit 20;`에서 `succeeded`를 확인한다. `cleanup-auth-attempts`는 첫 실행(다음 시각의 17분)에 `DELETE 5`, 나머지는 `DELETE 0`이어야 한다(`return_message`는 마지막 문장의 명령 태그).
+- 삭제 동작: 운영에 시험 행을 남기지 않는다. `begin;` 안에서 기한 지난 시험 행(예: `updated_at = now() - interval '2 years'`인 대화 1행과 그 messages 1행과 그 대화를 출처로 하는 `user_preferences` 1행)을 넣고, 잡과 같은 delete를 실행한 뒤 대화·messages가 사라지고 기억 행은 남고 `source_conversation_id`만 null인지 `select`로 보고 `rollback;`한다. `consents`·`auth_attempts`·로그 테이블도 같은 방식이다. 시험 행에는 실제 사용자 값을 쓰지 않는다.
+- 알림 잡 영향: 등록 전후로 `notify-job-trigger` 실행 이력(`status`, 소요 시간)이 달라지지 않았는지 본다.
+
+#### 미확정 목록
+
+잡 이름 4개, 주기·시각(2·3·4분, 17분), 4개로 나눈 구성, `cleanup-jobs.sql` 통합과 UNAPPLIED 파일 정리 방식, 0024 `messages(conversation_id)` 인덱스(추가 여부와 시점), 배치 도입 기준, 처리방침에 `auth_attempts` 1일 문구를 넣을지.
 
 ### pg_cron / pg_net 잡 정의
 
@@ -1701,6 +1806,7 @@ OR 신규 후보의 직군 적합 판단(제목 기준, 위 3의 기준과 같�
   없으면 등록하지 않고 멈춰서 보고한다. `auth_attempts` 테이블 자체(0017
   마이그레이션)와 `notify_logs.failed_device_count` 컬럼(0018 마이그레이션)은 위
   "마이그레이션 계획" 절에 적힌 대로 되돌릴 수 없는 마이그레이션이 아니다.
+- 정리 잡 4종(`cleanup-logs`, `cleanup-consents-retention`, `cleanup-conversations`, `cleanup-auth-attempts`, 위 "보관 기간 정리 잡 4종 등록 설계", 확인 항목 63)의 등록은 모두 되돌릴 수 없는 삭제다. 보존 값은 확정이나 등록 4건에 대한 사용자 승인이 구현 지시서에 별도로 있어야 실행한다. 없으면 등록하지 않고 멈춰서 보고한다.
 - `0019_lock_public_api`(위 "공개 API 차단" 절)도 되돌릴 수 없는 마이그레이션이 아니다 —
   RLS on/off와 권한 회수/부여만 다루고 데이터를 지우지 않는다. 다만 운영 DB에 적용하므로
   "운영 적용 시 원자성"과 "적용 후 점검" 절의 절차(트랜잭션, 소유자·접속 롤 점검, 점검 SQL,
