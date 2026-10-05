@@ -1,7 +1,7 @@
 ---
 type: dev-task
 date: 2026-10-05
-status: draft
+status: active
 owner: frontend
 ---
 
@@ -35,7 +35,7 @@ owner: frontend
 
 **2026-10-05 추가(확인 항목 62, draft)**: 대화 기록 삭제 작업 D1~D3을 "대화 기록 삭제" 절에 추가했다. 이미 구현된 10번(대화 히스토리 목록)에 대한 추가 작업이며 [[anyang-frontend-screens]] 8-2절에 의존한다. backend의 `DELETE /api/conversations/:id`([[anyang-backend-api#3-1. 대화 히스토리 조회 — 채택]] 3-1-1절)와 database 0023에 의존한다. 설계 승인 전에는 구현하지 않는다.
 
-**2026-10-05 추가(확인 항목 63, draft)**: 채팅 전송 오류·화면별 불러오기 오류·공통 `error.tsx`·"더 보기" 판정·입력 2,000자 제한(E1~E5)과 처리방침 보관 문구(P1, 재동의 조건부 R1) 작업을 "오류 처리·입력 제한·처리방침 문구" 절에 추가했다. 이미 구현된 채팅·공지·대화 기록·기억·처리방침에 대한 추가 작업이며 [[anyang-frontend-screens]] 15절에 의존한다. 채팅 429·400 응답은 backend 22번([[anyang-backend-api#3-4. 채팅 남용 제한·입력 상한·비용 상한·실패 응답 (신규, 2026-10-05, 확인 항목 63 C-3·A-1 서버 계약, 설계 draft)]]) 구현이 있어야 실서버로 확인할 수 있다. 설계 승인 전에는 구현하지 않고, **R1 여부(재동의)는 사용자 결정 뒤에만** 정해진다.
+**2026-10-05 추가(확인 항목 63)**: 채팅 전송 오류·화면별 불러오기 오류·공통 `error.tsx`(앱·탭 두 개)·기억 화면 `saveEdit` 수정·"더 보기" 판정·입력 2,000자 제한(E1~E5)과 처리방침 보관 문구(P1, 재동의 없음 확정이라 R1은 하지 않음) 작업을 "오류 처리·입력 제한·처리방침 문구" 절에 추가했다. 이미 구현된 채팅·공지·대화 기록·기억·처리방침에 대한 추가 작업이며 [[anyang-frontend-screens]] 15절에 의존한다. 채팅 429·400 응답은 backend 22번([[anyang-backend-api#3-4. 채팅 남용 제한·입력 상한·비용 상한·실패 응답 (신규, 2026-10-05, 확인 항목 63 C-3·A-1 서버 계약, 설계 draft)]]) 구현이 있어야 실서버로 확인할 수 있다. 설계 재승인 전에는 구현하지 않는다. 재동의는 하지 않기로 확정됐다(사용자 결정 2026-10-05).
 
 **2026-09-28 추가(확인 항목 22·23)**: 아래 5-1, 13-1 두 작업 단위를 추가했다. 둘 다 이미
 1차 구현된 5번(채팅)·13번(공지 수집 관리)에 대한 추가 작업이며, [[anyang-frontend-screens]]의
@@ -280,22 +280,22 @@ S1~S3 구현 뒤 사용자가 정한 세 가지를 코드에 반영한다. 근�
 - 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "대화 삭제(확인 항목 62, 8-2절)"가 원본이다(여기에 복제하지 않는다). 지연 삭제 자체는 기존 `frontend-delayed-delete.test.ts`가 다룬다. 테스트 환경이 `node`(DOM 없음)라 Toast·포커스 이동은 수동 확인이다.
 - 커밋: D1 → D2 → D3 순으로 또는 묶어서 `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류. 운영 반영은 backend DELETE 배포와 0023 운영 적용 뒤다.
 
-### 오류 처리·입력 제한·처리방침 문구 (확인 항목 63, 신규, 설계 draft)
+### 오류 처리·입력 제한·처리방침 문구 (확인 항목 63, 신규)
 
-설계 근거와 모든 값은 [[anyang-frontend-screens]] 15절이고 여기에 옮겨 적지 않는다. UI를 만드는 E2·E3·E5에서는 `design-taste-frontend` 스킬을 호출하고, 청안 토큰·기존 `Button`·`InterestSheetBody` 오류 본문과 충돌하는 규칙은 청안 설계를 따르며 그 사실을 보고에 적는다. 구현 시작 때 승인된 설계 문서에서 `(미확정)` 값의 확정 여부를 확인한다. 이 Next.js(16.3.6)는 `error.tsx`의 prop이 `retry`다(`reset` 아님) — E5 구현 전에 `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`를 다시 읽는다.
+설계 근거와 모든 값은 [[anyang-frontend-screens]] 15절이고 여기에 옮겨 적지 않는다. UI를 만드는 E2·E3·E5에서는 `design-taste-frontend` 스킬을 호출하고, 청안 토큰·기존 `Button`·`InterestSheetBody` 오류 본문과 충돌하는 규칙은 청안 설계를 따르며 그 사실을 보고에 적는다. 15절의 값은 사용자 결정(2026-10-05)으로 모두 확정됐고 재동의는 하지 않기로 했다. 구현은 설계 재승인 뒤에 시작한다. 이 Next.js(16.3.6)는 `error.tsx`의 prop이 `retry`다(`reset` 아님) — E5 구현 전에 `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`를 다시 읽는다.
 
 | 단위 | 작업 | 만들거나 고치는 파일 | 선행 |
 |---|---|---|---|
 | E1 | 순수 함수와 단위 테스트: `describeChatFailure(status, contentType, body)`, `counterView(length)`, 상수 `CHAT_MAX_LENGTH`, `hasMorePages(received, pageSize)`와 `NOTICES_PAGE_SIZE` | `web/app/_lib/chat-error.ts`(신규), `web/app/_lib/notices-refetch.ts`, `web/test/frontend-chat-error.test.ts`(신규), `web/test/frontend-notices-refetch.test.ts` | 재승인 |
 | E2 | 채팅: `Composer`에 `maxLength`·글자 수 표시, `AnswerBlock`에 `errorText`, `chat-client.tsx`의 `try/catch/finally`·`send(text)` 분리·`lastQuestion`·재시도·`notice` 안내·질문 복원·404 보관분 삭제, 정적 렌더 테스트 | `web/app/_components/ui/chat.tsx`, `web/app/(tabs)/chat/chat-client.tsx`, `web/test/frontend-chat-error.test.ts` | E1 |
 | E3 | `LoadError` 컴포넌트 + 공지 목록(1페이지·더 보기 오류, `tries`, `page_size` 명시, `hasMorePages`, `cancelled` 정리) + 공지 상세 오류·다시 시도 | `web/app/_components/ui/load-error.tsx`(신규), `web/app/(tabs)/notices/notices-list.tsx`, `web/app/(tabs)/notices/[id]/notice-detail.tsx`, `web/test/frontend-load-error.test.ts`(신규) | E1 |
-| E4 | 대화 기록·기억 구역의 불러오기 오류·다시 시도(삭제·수정 실패 줄과 별개) | `web/app/(tabs)/conversations/conversations-client.tsx`, `web/app/(tabs)/settings/memory/memory-client.tsx` | E3 |
-| E5 | 앱 공통 `error.tsx` | `web/app/error.tsx`(신규) | 없음(E3과 같은 `Button` 사용) |
-| P1 | 처리방침 "보관 기간"에 대화 1년·기억 유지 문구(+ 선택: `auth_attempts` 1일 고지) 추가, 주석 갱신, 문구 테스트 확장 | `web/app/privacy-policy/page.tsx`, `web/test/consent-privacy-wording.test.ts` | 재승인. **배포(push·deploy)는 재동의 결정 뒤** |
-| R1 | **조건부(사용자가 "올림"을 고른 경우에만)**: `POLICY_VERSION` 값 변경, 테스트 목의 `policy_version` 문자열 9개 파일 22곳 맞춤, 필요하면 `/consent` 변경 안내 한 줄 | `web/lib/consent.ts`, `web/test/*.test.ts`(chat, conversation-delete, notices-detail, notices-recommended, notify-settings, notify-settings-test, preferences, profile, push-subscribe), `web/app/consent/consent-form.tsx`(안내 한 줄을 넣을 때만) | 사용자 결정 |
+| E4 | 대화 기록·기억 구역의 불러오기 오류·다시 시도(삭제·수정 실패 줄과 별개) + 기억 화면 `saveEdit`의 `fetch` 예외 때 `saving`이 풀리지 않는 구멍 수정(`try/catch/finally`) | `web/app/(tabs)/conversations/conversations-client.tsx`, `web/app/(tabs)/settings/memory/memory-client.tsx` | E3 |
+| E5 | 공통 오류 화면: 컴포넌트 `error-view.tsx` + `app/error.tsx` + `app/(tabs)/error.tsx`(탭·사이드바 유지) | `web/app/_components/ui/error-view.tsx`(신규), `web/app/error.tsx`(신규), `web/app/(tabs)/error.tsx`(신규) | 없음(E3과 같은 `Button` 사용) |
+| P1 | 처리방침 "보관 기간"에 문구 두 개(대화 1년 자동 삭제·기억 유지·화면에서 직접 삭제 가능, 로그인·가입 시도와 채팅 요청 기록 1일 보관) 추가, 주석 갱신, 문구 테스트 확장 | `web/app/privacy-policy/page.tsx`, `web/test/consent-privacy-wording.test.ts` | 재승인 |
+| R1 | **하지 않음** (사용자 결정 2026-10-05: 재동의 없음, `POLICY_VERSION` 유지). `lib/consent.ts`와 테스트 목은 바꾸지 않는다 | — | — |
 
-- 순서: E1 → (E2, E3 → E4, E5, P1은 파일이 겹치지 않아 병렬 가능하나 같은 `ui/*`를 읽으므로 순차를 기본으로 한다). R1은 P1과 같은 배포 묶음으로 나간다(재동의 화면이 새 문구와 함께 가도록).
-- 수정하지 않는 것: `app/api/**`, `lib/**`(R1의 `lib/consent.ts` 제외), `db/**`, `chat-snapshot.ts`·`chat-stream.ts`(보관 로직은 호출만), `delayed-delete.ts`, `session-guard.ts`·`require-auth.ts`(재동의 판정 코드).
+- 순서: E1 → (E2, E3 → E4, E5, P1은 파일이 겹치지 않아 병렬 가능하나 같은 `ui/*`를 읽으므로 순차를 기본으로 한다). 
+- 수정하지 않는 것: `app/api/**`, `lib/**`(`lib/consent.ts` 포함), `db/**`, `chat-snapshot.ts`·`chat-stream.ts`(보관 로직은 호출만), `delayed-delete.ts`, `session-guard.ts`·`require-auth.ts`(재동의 판정 코드).
 - `consent-privacy-wording.test.ts`가 읽는 고정 문구(43 고지, 금지 문자열)를 지킨다. P1이 문구를 더해도 기존 문장은 지우지 않는다.
 - 테스트 항목과 수동 시나리오는 [[anyang-frontend-screens]] 테스트 방법의 "오류 처리·입력 제한·처리방침 문구(확인 항목 63, 15절)"가 원본이다(여기에 복제하지 않는다). 테스트 환경이 `node`(DOM 없음)라 화면 연결은 수동 확인이다.
 - 커밋: 단위마다(또는 E1+E2, E3+E4 묶음) `npm test`·`npm run build` 통과 뒤 git-manager에 맡긴다. push는 사용자 승인 전 보류.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../../../_lib/api-fetch";
 import { formatDate, isHttpUrl, splitLinks } from "../../../_lib/format";
+import { LoadError } from "../../../_components/ui/load-error";
 import { buttonClass } from "../../../_components/ui/controls";
 import { Icon } from "../../../_components/ui/icon";
 import { Attachments } from "./attachments";
@@ -19,31 +20,40 @@ type Notice = {
   image_count?: number;
 };
 
+const LOAD_FAILED = "공지를 불러오지 못했어요.";
+
 // anyang-frontend-screens "청안 디자인 적용 화면 스펙" 3번(공지 상세). source_url은 새 탭으로만
 // 연다(iframe 임베드 없음). http(s)로 시작할 때만 링크로 그린다.
 export function NoticeDetail({ id }: { id: string }) {
   const router = useRouter();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
+  const [tries, setTries] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    apiFetch(`/api/notices/${id}`).then(async (res) => {
-      if (cancelled) return;
-      if (res.status === 404) {
-        setError({ message: "존재하지 않거나 숨김 처리된 공지입니다.", notFound: true });
-        return;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/notices/${id}`);
+        if (cancelled) return;
+        if (res.status === 404) {
+          setError({ message: "존재하지 않거나 숨김 처리된 공지입니다.", notFound: true });
+          return;
+        }
+        if (!res.ok) {
+          if (res.status !== 403) setError({ message: LOAD_FAILED, notFound: false });
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setNotice(data);
+      } catch {
+        if (!cancelled) setError({ message: LOAD_FAILED, notFound: false });
       }
-      if (!res.ok) {
-        if (res.status !== 403) setError({ message: "공지를 불러오지 못했습니다.", notFound: false });
-        return;
-      }
-      setNotice(await res.json());
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, tries]);
 
   // 푸시 알림으로 바로 연 경우(히스토리 없음)에는 공지 목록으로.
   function goBack() {
@@ -68,13 +78,21 @@ export function NoticeDetail({ id }: { id: string }) {
 
       {error ? (
         <div className="flex flex-1 flex-col items-start gap-4 px-gutter pt-6">
-          <p className="m-0 text-body" role={error.notFound ? undefined : "alert"}>
-            {error.message}
-          </p>
-          {error.notFound && (
-            <Link href="/notices" className={buttonClass("secondary")}>
-              공지 목록으로
-            </Link>
+          {error.notFound ? (
+            <>
+              <p className="m-0 text-body">{error.message}</p>
+              <Link href="/notices" className={buttonClass("secondary")}>
+                공지 목록으로
+              </Link>
+            </>
+          ) : (
+            <LoadError
+              message={error.message}
+              onRetry={() => {
+                setError(null);
+                setTries((n) => n + 1);
+              }}
+            />
           )}
         </div>
       ) : !notice ? (

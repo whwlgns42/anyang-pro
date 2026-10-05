@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { appendPage, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../app/_lib/notices-refetch";
+import { NOTICES_PAGE_SIZE, appendPage, hasMorePages, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../app/_lib/notices-refetch";
 
 describe("shouldRefetch", () => {
   it("30s gap and in-flight", () => {
@@ -43,5 +43,15 @@ describe("subscribeRefetch", () => {
     doc.dispatchEvent(new Event("visibilitychange"));
     win.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
     expect(cb).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("hasMorePages", () => {
+  it("only a full page may have a next page", () => {
+    expect(NOTICES_PAGE_SIZE).toBe(20);
+    expect(hasMorePages(20, NOTICES_PAGE_SIZE)).toBe(true);
+    expect(hasMorePages(19, NOTICES_PAGE_SIZE)).toBe(false);
+    expect(hasMorePages(0, NOTICES_PAGE_SIZE)).toBe(false);
+    expect(hasMorePages(21, NOTICES_PAGE_SIZE)).toBe(false);
   });
 });

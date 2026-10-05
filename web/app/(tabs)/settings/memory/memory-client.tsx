@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../../_lib/api-fetch";
 import { createDelayedDelete } from "../../../_lib/delayed-delete";
 import { Toast } from "../../../_components/ui/controls";
+import { LoadError } from "../../../_components/ui/load-error";
 import { IconButton } from "../../../_components/ui/icon";
 
 type Preference = { id: string; preference_text: string; updated_at: string };
 type Removed = { item: Preference; index: number };
 
+const EDIT_FAILED = "수정 중 오류가 발생했습니다. 내용이 반영되지 않았습니다.";
 const short = (text: string) => (text.length > 12 ? `${text.slice(0, 12)}…` : text);
 
 // anyang-frontend-screens "청안 디자인 적용 화면 스펙" 5번의 기억 구역(/settings 안). 수정은
@@ -21,6 +23,8 @@ export function MemoryClient() {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [tries, setTries] = useState(0);
   const [removed, setRemoved] = useState<Removed | null>(null);
 
   const restore = useCallback(({ item, index }: Removed) => {
@@ -47,10 +51,25 @@ export function MemoryClient() {
   );
 
   useEffect(() => {
-    apiFetch("/api/preferences").then(async (res) => {
-      if (res.ok) setItems(await res.json());
-    });
-  }, []);
+    let cancelled = false;
+    setLoadFailed(false);
+    apiFetch("/api/preferences")
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          if (res.status !== 403) setLoadFailed(true);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setItems(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tries]);
 
   useEffect(() => {
     const onHide = () => {
@@ -75,24 +94,27 @@ export function MemoryClient() {
   async function saveEdit(id: string) {
     setSaving(true);
     setError(null);
-    const res = await apiFetch(`/api/preferences/${id}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ preference_text: draft }),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      if (res.status !== 403) {
-        setError("수정 중 오류가 발생했습니다. 내용이 반영되지 않았습니다.");
+    try {
+      const res = await apiFetch(`/api/preferences/${id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ preference_text: draft }),
+      });
+      if (!res.ok) {
+        if (res.status !== 403) setError(EDIT_FAILED);
+        return;
       }
-      return;
+      const updated = (await res.json()) as { id: string; preference_text: string };
+      setItems(
+        (prev) =>
+          prev?.map((it) => (it.id === id ? { ...it, preference_text: updated.preference_text } : it)) ?? null,
+      );
+      setEditingId(null);
+    } catch {
+      setError(EDIT_FAILED);
+    } finally {
+      setSaving(false);
     }
-    const updated = (await res.json()) as { id: string; preference_text: string };
-    setItems(
-      (prev) =>
-        prev?.map((it) => (it.id === id ? { ...it, preference_text: updated.preference_text } : it)) ?? null,
-    );
-    setEditingId(null);
   }
 
   function remove(item: Preference) {
@@ -127,7 +149,11 @@ export function MemoryClient() {
       )}
 
       {items === null ? (
-        <p className="m-0 text-body-sm text-ink-2">불러오는 중...</p>
+        loadFailed ? (
+          <LoadError message="기억한 내용을 불러오지 못했어요." onRetry={() => setTries((n) => n + 1)} />
+        ) : (
+          <p className="m-0 text-body-sm text-ink-2">불러오는 중...</p>
+        )
       ) : items.length === 0 ? (
         <p className="m-0 rounded-control border border-rule bg-surface px-4 py-3.5 text-body-sm text-ink-2">
           아직 대화에서 기억한 내용이 없어요.

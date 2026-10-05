@@ -38,3 +38,9 @@ export function subscribeRefetch(doc: Doc, win: Win, onTrigger: () => void): () 
     win.removeEventListener("pageshow", onPageShow);
   };
 }
+
+// "더 보기" 판정(15-6절): 한 페이지를 꽉 채워 받았을 때만 다음 페이지가 있을 수 있다.
+export const NOTICES_PAGE_SIZE = 20;
+export function hasMorePages(received: number, pageSize: number): boolean {
+  return received === pageSize;
+}

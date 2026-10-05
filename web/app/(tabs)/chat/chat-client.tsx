@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_lib/api-fetch";
 import { ageBandDisplay } from "../../_lib/age-band-label";
+import { describeChatFailure, isJsonType } from "../../_lib/chat-error";
 import { ChatSseParser, type Citation } from "../../_lib/chat-stream";
 import { browserStorage, mergeStreamingSnapshot, onLoadFailure, removeSnapshot, readSnapshot, scrollTarget, shouldCancelRestore, writeSnapshot } from "../../_lib/chat-snapshot";
 import { ENROLLMENT_STATUS_LABELS } from "../../_lib/profile-labels";
@@ -34,7 +35,8 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; href?: string } | null>(null);
+  const [failed, setFailed] = useState(false);
   const [profile, setProfile] = useState<Profile>(null);
   const conversationIdRef = useRef<string | null>(initialConversationId);
   const [restoring, setRestoring] = useState(initialConversationId !== null);
@@ -44,6 +46,8 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   const readyRef = useRef(initialConversationId === null);
   const messagesRef = useRef<Message[]>([]);
   const streamingRef = useRef(false);
+  const lastQuestion = useRef("");
+  const goneRef = useRef(false); // 404로 지운 보관분을 flush가 다시 만들지 않게 한다
   const lastCitations = useRef<Citation[] | undefined>(undefined);
   const pendingScroll = useRef<{ scrollTop: number; atBottom: boolean } | null>(null);
   const firstRun = useRef(true);
@@ -79,6 +83,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     if (loadedIdRef.current === id) return;
     loadedIdRef.current = id;
     conversationIdRef.current = id;
+    goneRef.current = false;
     readyRef.current = false;
     pendingScroll.current = null; // 이전 대화의 복원 스크롤이 새 대화에 적용되지 않게 한다
     loadAbort.current?.abort(); // 늦게 온 이전 조회가 새 대화 messages를 덮어쓰지 않게 한다
@@ -137,7 +142,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   // 보관: 최신 상태를 ref에 들고, 즉시 쓰기(스트림 종료·인용 수신)와 500ms 지연 쓰기(델타)로 나눈다.
   function flush() {
     const id = conversationIdRef.current;
-    if (!userId || !id || !readyRef.current) return;
+    if (!userId || !id || !readyRef.current || goneRef.current) return;
     writeSnapshot(browserStorage(), userId, id, {
       messages: messagesRef.current,
       scrollTop: scrollState.current.scrollTop,
@@ -199,77 +204,117 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
     setRestoring(false);
     setMessages([]);
     setInterrupted(false);
-    setError(null);
+    setNotice(null);
+    setFailed(false);
+    goneRef.current = false;
     router.push("/chat");
   }
 
-  async function handleSend() {
+  function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
     setInput("");
-    setError(null);
+    void send(text);
+  }
+
+  // 15-2절: "다시 시도"는 끝의 실패 답변(있다면)과 그 앞 질문 말풍선을 빼고 같은 글자로 다시 보낸다.
+  function retry() {
+    const text = lastQuestion.current;
+    if (!text || sending) return;
+    setMessages((prev) => {
+      const next = [...prev];
+      if (next[next.length - 1]?.role === "assistant") next.pop();
+      if (next[next.length - 1]?.role === "user") next.pop();
+      return next;
+    });
+    void send(text);
+  }
+
+  async function send(text: string) {
+    lastQuestion.current = text;
+    setNotice(null);
+    setFailed(false);
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInterrupted(false);
     streamingRef.current = true;
     setSending(true);
 
-    const res = await apiFetch("/api/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        message: text,
-        conversation_id: conversationIdRef.current,
-      }),
-    });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const res = await apiFetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          conversation_id: conversationIdRef.current,
+        }),
+      });
 
-    if (!res.ok || !res.body) {
-      streamingRef.current = false;
-      setSending(false);
-      if (res.status !== 403) {
-        setError("응답을 받아오지 못했습니다.");
-      }
-      return;
-    }
-
-    const convId = res.headers.get("x-conversation-id");
-    if (convId && convId !== conversationIdRef.current) {
-      conversationIdRef.current = convId;
-      loadedIdRef.current = convId; // prop이 새 id로 바뀌어도 불러오기로 덮어쓰지 않는다
-      // router.replace는 page.tsx를 다시 그려 스트리밍 상태를 흔들 수 있어, 네이티브 replaceState로 URL만 맞춘다(3-1절 7번).
-      window.history.replaceState(null, "", `/chat?conversation_id=${encodeURIComponent(convId)}`);
-      flushRef.current();
-    }
-
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    const parser = new ChatSseParser();
-    let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const event = parser.parseLine(line);
-        if (!event) continue;
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (event.type === "citations") {
-            next[next.length - 1] = { ...last, citations: event.items };
-          } else {
-            next[next.length - 1] = { ...last, content: last.content + event.content };
+      if (!res.ok || !res.body) {
+        const type = res.headers.get("content-type");
+        const body = isJsonType(type) ? await res.json().catch(() => null) : null;
+        const f = res.ok ? { kind: "retry" as const } : describeChatFailure(res.status, type, body);
+        if (f.kind === "retry") {
+          setFailed(true); // 502는 서버가 이번 요청의 행을 지우므로 대화 id·URL을 건드리지 않는다
+        } else {
+          // 서버가 아무것도 만들지 않은 실패: 말풍선을 지우고 질문을 입력창에 돌려준다
+          setMessages((prev) => prev.slice(0, -1));
+          setInput((cur) => (cur === "" ? text : cur));
+          setNotice(f.message ? { message: f.message, href: f.href } : null);
+          if (f.kind === "gone") {
+            const id = conversationIdRef.current;
+            if (userId && id) removeSnapshot(browserStorage(), userId, id);
+            goneRef.current = true;
           }
-          return next;
-        });
+        }
+        return;
       }
+
+      const convId = res.headers.get("x-conversation-id");
+      if (convId && convId !== conversationIdRef.current) {
+        conversationIdRef.current = convId;
+        loadedIdRef.current = convId; // prop이 새 id로 바뀌어도 불러오기로 덮어쓰지 않는다
+        // router.replace는 page.tsx를 다시 그려 스트리밍 상태를 흔들 수 있어, 네이티브 replaceState로 URL만 맞춘다(3-1절 7번).
+        window.history.replaceState(null, "", `/chat?conversation_id=${encodeURIComponent(convId)}`);
+        flushRef.current();
+      }
+
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const parser = new ChatSseParser();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const event = parser.parseLine(line);
+          if (!event) continue;
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (event.type === "citations") {
+              next[next.length - 1] = { ...last, citations: event.items };
+            } else {
+              next[next.length - 1] = { ...last, content: last.content + event.content };
+            }
+            return next;
+          });
+        }
+      }
+    } catch {
+      // fetch 예외(오프라인) 또는 스트림 도중 끊김
+      setFailed(true);
+      reader?.cancel().catch(() => {});
+    } finally {
+      streamingRef.current = false;
+      flushRef.current(); // streaming:false를 즉시 기록
+      setSending(false);
     }
-    streamingRef.current = false;
-    flushRef.current(); // streaming:false를 즉시 기록
-    setSending(false);
   }
 
   const context = contextLine(profile);
@@ -277,6 +322,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
   const waitingForAnswer = sending && messages[lastIndex]?.role === "user";
 
   function answerState(m: Message, index: number): AnswerState {
+    if (failed && index === lastIndex) return "error";
     if (!sending || index !== lastIndex) return "done";
     return m.citations === undefined && m.content === "" ? "searching" : "streaming";
   }
@@ -303,6 +349,7 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
               key={i}
               context={context}
               state={answerState(m, i)}
+              onRetry={retry}
               sources={(m.citations ?? []).map((c) => ({ id: c.id, title: c.title, postedAt: c.posted_at }))}
             >
               {m.content}
@@ -310,12 +357,23 @@ export function ChatClient({ initialConversationId, userId }: { initialConversat
           ),
         )}
         {waitingForAnswer && <AnswerBlock context={context} state="searching" sources={[]} />}
+        {failed && messages[lastIndex]?.role === "user" && (
+          <AnswerBlock context={context} state="error" errorText="답변을 받지 못했어요" onRetry={retry} sources={[]} />
+        )}
         {interrupted && (
           <p className="m-0 text-meta text-ink-3">답변이 중간에 멈췄을 수 있어요. 새로고침하면 저장된 내용을 보여줘요.</p>
         )}
-        {error && (
+        {notice && (
           <p className="m-0 text-body-sm font-medium text-danger" role="alert">
-            {error}
+            {notice.message}
+            {notice.href && (
+              <>
+                {" "}
+                <Link href={notice.href} className="underline underline-offset-2">
+                  로그인
+                </Link>
+              </>
+            )}
           </p>
         )}
       </div>

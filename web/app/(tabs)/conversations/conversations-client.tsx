@@ -7,6 +7,7 @@ import { createDelayedDelete } from "../../_lib/delayed-delete";
 import { deleteConversation } from "../../_lib/delete-conversation";
 import { focusIndexAfterRemove, insertBack } from "../../_lib/restore-item";
 import { buttonClass, Toast } from "../../_components/ui/controls";
+import { LoadError } from "../../_components/ui/load-error";
 import { ScreenHeader } from "../../_components/ui/screen";
 import { ConversationRow } from "./conversation-row";
 
@@ -19,6 +20,8 @@ type Removed = { item: Conversation; index: number };
 export function ConversationsClient({ userId }: { userId: string | null }) {
   const [items, setItems] = useState<Conversation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [tries, setTries] = useState(0);
   const [removed, setRemoved] = useState<Removed | null>(null);
   const links = useRef(new Map<string, HTMLAnchorElement>());
   const newLink = useRef<HTMLAnchorElement>(null);
@@ -38,10 +41,25 @@ export function ConversationsClient({ userId }: { userId: string | null }) {
   );
 
   useEffect(() => {
-    apiFetch("/api/conversations").then(async (res) => {
-      if (res.ok) setItems(await res.json());
-    });
-  }, []);
+    let cancelled = false;
+    setLoadFailed(false);
+    apiFetch("/api/conversations")
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          if (res.status !== 403) setLoadFailed(true);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setItems(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tries]);
 
   useEffect(() => {
     const onHide = () => {
@@ -101,7 +119,13 @@ export function ConversationsClient({ userId }: { userId: string | null }) {
             </p>
           )}
           {items === null ? (
-            <p className="m-0 pt-4 text-body-sm text-ink-2">불러오는 중...</p>
+            loadFailed ? (
+              <div className="pt-4">
+                <LoadError message="대화 기록을 불러오지 못했어요." onRetry={() => setTries((n) => n + 1)} />
+              </div>
+            ) : (
+              <p className="m-0 pt-4 text-body-sm text-ink-2">불러오는 중...</p>
+            )
           ) : items.length === 0 ? (
             <p className="m-0 pt-4 text-body-sm text-ink-2">아직 대화 기록이 없어요.</p>
           ) : (

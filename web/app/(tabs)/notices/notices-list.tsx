@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../_lib/api-fetch";
 import { formatKoreanDay } from "../../_lib/format";
 import { Button } from "../../_components/ui/controls";
+import { LoadError } from "../../_components/ui/load-error";
 import { Sheet } from "../../_components/ui/sheet";
 import { InterestSheetBody } from "./interest-sheet";
 import type { InterestStatus } from "../../_lib/interest-sheet";
 import { NoticeRow } from "../../_components/ui/notice-row";
-import { REFETCH_MIN_GAP_MS, appendPage, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
+import { NOTICES_PAGE_SIZE, REFETCH_MIN_GAP_MS, appendPage, hasMorePages, mergeFirstPage, shouldRefetch, subscribeRefetch } from "../../_lib/notices-refetch";
 
 type NoticeItem = {
   id: string;
@@ -27,7 +28,8 @@ export function NoticesList() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [tries, setTries] = useState(0);
   const [prefStatus, setPrefStatus] = useState<InterestStatus>("loading");
   const [prefs, setPrefs] = useState<{ id: string; preference_text: string }[]>([]);
   const [prefTry, setPrefTry] = useState(0);
@@ -61,35 +63,41 @@ export function NoticesList() {
     };
   }, [prefTry]);
 
+  // 다시 시도하면 tries가 늘어 같은 page를 다시 받는다(page는 올리지 않는다).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    apiFetch(`/api/notices/recommended?page=${page}`)
-      .then(async (res) => {
+    setLoadFailed(false);
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/notices/recommended?page=${page}&page_size=${NOTICES_PAGE_SIZE}`);
+        if (cancelled) return;
         if (!res.ok) {
-          if (res.status !== 403) setError("공지를 불러오지 못했습니다.");
+          if (res.status !== 403) setLoadFailed(true);
           return;
         }
         const data = (await res.json()) as NoticeItem[];
         if (cancelled) return;
         setItems((prev) => (page === 1 ? data : appendPage(prev, data)));
-        setHasMore(data.length > 0);
+        setHasMore(hasMorePages(data.length, NOTICES_PAGE_SIZE));
         if (page === 1) lastFetchedAt.current = Date.now();
-      })
-      .finally(() => {
+      } catch {
+        if (!cancelled) setLoadFailed(true);
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [page]);
+  }, [page, tries]);
 
   // 탭 복귀·뒤로가기 복원 시 1페이지를 조용히 다시 받는다(로딩·오류 문구 없음, 실패하면 기존 목록 유지).
   useEffect(() => {
     return subscribeRefetch(document, window, () => {
       if (!shouldRefetch(lastFetchedAt.current, Date.now(), REFETCH_MIN_GAP_MS, refetching.current)) return;
       refetching.current = true;
-      apiFetch("/api/notices/recommended?page=1")
+      apiFetch(`/api/notices/recommended?page=1&page_size=${NOTICES_PAGE_SIZE}`)
         .then(async (res) => {
           if (!res.ok) return;
           const data = (await res.json()) as NoticeItem[];
@@ -136,12 +144,7 @@ export function NoticesList() {
           <div className="h-0.5 bg-ink" />
         </header>
 
-        {error && (
-          <p className="m-0 px-gutter pt-4 text-body-sm font-medium text-danger" role="alert">
-            {error}
-          </p>
-        )}
-        {!loading && items.length === 0 && !error && (
+        {!loading && items.length === 0 && !loadFailed && (
           <p className="m-0 px-gutter pt-4 text-body-sm text-ink-2">아직 추천할 공지가 없어요.</p>
         )}
         <ol className="m-0 list-none p-0 px-gutter">
@@ -158,7 +161,12 @@ export function NoticesList() {
           ))}
         </ol>
         {loading && <p className="m-0 px-gutter py-4 text-body-sm text-ink-2">불러오는 중...</p>}
-        {!loading && hasMore && items.length > 0 && (
+        {loadFailed && (
+          <div className="px-gutter py-4">
+            <LoadError message="공지를 불러오지 못했어요." onRetry={() => setTries((n) => n + 1)} />
+          </div>
+        )}
+        {!loading && !loadFailed && hasMore && items.length > 0 && (
           <div className="px-gutter py-6">
             <Button variant="secondary" className="w-full" onClick={() => setPage((p) => p + 1)}>
               더 보기

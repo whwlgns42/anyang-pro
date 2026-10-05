@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import Link from "next/link";
+import { CHAT_MAX_LENGTH, counterView } from "../../_lib/chat-error";
 import { shouldSubmitOnKey } from "../../_lib/composer-key";
 import { formatDate } from "../../_lib/format";
 import { Icon } from "./icon";
@@ -65,12 +66,14 @@ type AnswerBlockProps = {
   sources: SourceItem[];
   state?: AnswerState;
   onRetry?: () => void;
+  /** error 상태 문구. 기본은 답변이 중간에 끊긴 경우 */
+  errorText?: string;
   children?: ReactNode;
 };
 
 // AI 답변. 근거 공지 카드가 먼저, 답변 글이 그 아래. 답변 글은 테두리 없이 배경 위에 써서
-// 공식 공지(카드)와 구분한다. error 상태는 prop으로만 받는다(스트림 실패 연결은 범위 밖).
-export function AnswerBlock({ context, sources, state = "done", onRetry, children }: AnswerBlockProps) {
+// 공식 공지(카드)와 구분한다. error 상태는 prop으로 받는다.
+export function AnswerBlock({ context, sources, state = "done", onRetry, errorText = "답변을 끝까지 받지 못했어요", children }: AnswerBlockProps) {
   return (
     <section aria-label="청안의 답변" aria-busy={state === "searching" || state === "streaming"} className="flex flex-col gap-3.5">
       <div className="flex items-baseline gap-2">
@@ -81,7 +84,7 @@ export function AnswerBlock({ context, sources, state = "done", onRetry, childre
       {children && <div className="text-body whitespace-pre-wrap">{children}</div>}
       {state === "error" && (
         <div className="flex items-center justify-between gap-3 border-t border-rule pt-2">
-          <span className="text-body-sm text-ink-2">답변을 끝까지 받지 못했어요</span>
+          <span className="text-body-sm text-ink-2">{errorText}</span>
           <button
             type="button"
             onClick={onRetry}
@@ -105,6 +108,7 @@ type ComposerProps = {
 // 질문 입력줄. 비어 있거나 답변을 받는 중이면 보내기를 막는다. Enter 전송, Shift+Enter 줄바꿈.
 export function Composer({ value, onChange, onSubmit, busy }: ComposerProps) {
   const canSend = value.trim().length > 0 && !busy;
+  const counter = counterView(value.length);
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (shouldSubmitOnKey(e)) {
@@ -115,18 +119,26 @@ export function Composer({ value, onChange, onSubmit, busy }: ComposerProps) {
 
   return (
     <form
-      className="flex shrink-0 items-end gap-2 border-t border-rule px-4 py-2.5"
+      className="flex shrink-0 flex-wrap items-end gap-2 border-t border-rule px-4 py-2.5"
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit();
       }}
     >
+      {counter && (
+        <p id="chat-input-count" className={`m-0 w-full text-right text-meta ${counter.atLimit ? "text-danger" : "text-ink-3"}`}>
+          {counter.text}
+          {counter.atLimit && <span role="status"> 더 입력할 수 없어요</span>}
+        </p>
+      )}
       <label htmlFor="chat-input" className="sr-only">
         메시지 입력
       </label>
       <textarea
         id="chat-input"
         rows={1}
+        maxLength={CHAT_MAX_LENGTH}
+        aria-describedby={counter ? "chat-input-count" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
