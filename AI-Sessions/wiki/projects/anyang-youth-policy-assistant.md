@@ -493,6 +493,13 @@ owner: pm
       - **push·배포(2026-10-05)**: 기록 커밋 `0f4a7a6`, push `1161a4f..0f4a7a6`(31618df·36344a7·beb8a52·a07eaf5·cbf88ba 포함). frontend가 `vercel deploy --prod` 1회 성공(`dpl_Dz8BiJLuZxSLscJfi8rRsVifJxVM`, 별칭 `web-beta-smoky-16.vercel.app`). `/login` 200, 로그인 없이 `/chat`은 307 → `/login`(가드 정상), 배포 약 40초 뒤 error 로그 없음(15분 관찰은 안 함). 새 채팅 코드가 번들에 실렸는지는 로그인 없이 확인 불가 — 사용자 확인 필요. 오류 문서 역링크 2건 추가 `42bbab5`(push 안 함).
       - **사용자 확인 시나리오**: ① 질문 → 인용 1번 열기 → 공지 상세 뒤로 버튼 → 대화·인용·스크롤 그대로인지, 2~5번 반복(한 번은 브라우저 뒤로가기) ② 같은 탭 새로고침 → 대화·인용 그대로 ③ 첫 답변 도중 다른 곳으로 이동 후 복귀 → 끊기지 않거나 서버 내용으로 복원 ④ "새 대화" → 빈 화면에서 시작 ⑤ 로그아웃 → 다른 계정 로그인 → 이전 대화 안 보임.
     - (c) 경미(검수 기록): 브라우저 뒤로가기로 `/chat`(prop null)에 도착하는 경로에서 진행 중이던 이전 조회를 취소하지 않아, 늦게 끝나면 messages를 덮어쓸 수 있다(기존 동작, 드묾). (b) 반영 때 함께 고칠지 결정.
+61. **새 요청(2026-10-05, user — 공지 화면 "관심사 보기"를 시트로, frontend만)**: `/notices` 머리의 "관심사 보기"(`web/app/(tabs)/notices/notices-list.tsx:114`)가 `href="/settings"`라 내 정보 맨 위로 가는데, 관심사 목록은 그 안의 "AI가 기억하는 내 정보"(`settings/memory/memory-client.tsx`)에 있어 엉뚱하다.
+    - 사용자 결정 "공지 화면에서 바로 보기": 누르면 `/notices` 위에 바텀시트(1200px 이상은 같은 컴포넌트의 알맞은 형태)로 관심사(`user_preferences` 문장) 목록, 닫으면 공지 목록·스크롤 그대로. 시트 안 "내 정보에서 관리" 링크 → 해당 구역으로 바로 스크롤(앵커 등), 수정·삭제는 기존 구역에서. 관심사 없을 때 안내 문구(직군 매칭 언급 불필요). 데이터는 기존 기억 조회 API 재사용 — backend·DB 변경이 필요하면 멈추고 보고. 접근성: 포커스 트랩, Esc 닫기, 닫으면 버튼으로 포커스 복귀, aria. design-taste-frontend·청안 토큰·기존 시트/다이얼로그 재사용. 에이전트가 새로 정한 세부값은 `(미확정)`으로 두고 제안대로 구현.
+    - 진행: `anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(33차 전 단계). 설계 → 33차 → 구현 → test·build → code-review → 커밋 → push → deploy → 운영 확인.
+    - **설계 draft(2026-10-05, frontend)**: [[anyang-frontend-screens]] 새 2-1절 "관심사 시트"·내 정보 `id="memory"` 앵커·테스트(단위 4, 수동 가~차)·확인 항목 9, [[anyang-frontend-tasks]] V1~V4. 신규 `ui/sheet.tsx`(기존 `ConfirmDialog`와 같은 네이티브 `<dialog>`·`showModal`·Esc 방식; 포커스 트랩·inert는 `showModal`, 복귀는 열 때 기억한 요소로). `/notices`가 이미 마운트 때 `GET /api/preferences`로 개수를 받고 있어 문장 목록까지 보관해 재사용(열 때 재조회 없음). 시트는 상태만 바꿔 닫은 뒤 목록·스크롤 그대로. backend·DB 영향 없음.
+    - (a) 에이전트 제안값(`(미확정)`, 사용자 지시대로 제안대로 구현): 시트 제목 "대화에서 모인 관심사"와 빈 안내·오류·"다시 시도" 문구, 열 때 재조회 없음, 개수 상한 없음·본문만 스크롤, 빈·오류·로딩 상태에서 "내 정보에서 관리" 링크 숨김, 크기(모바일 최대 80dvh, 데스크톱 440px·70dvh), 열 때 모바일 아래에서 올라옴·데스크톱 페이드·닫을 때 움직임 없음, 닫기 버튼이 첫 포커스, 안드로이드 뒤로가기는 시트를 닫지 않음, 별도 스크롤 잠금 코드 없음(배경이 스크롤되면 대체), `id="memory"`와 해시 이동 실패 시 대체 effect.
+    - **구현(2026-10-05)**: frontend `512f27b`(V1 `web/app/_lib/interest-sheet.ts` `sheetView`, V2 `web/app/_components/ui/sheet.tsx`·`notices/interest-sheet.tsx`, V3 `notices-list.tsx` 버튼·기존 preferences 결과 재사용, V4 `memory-client.tsx` `id="memory"`, `globals.css` 열림 움직임; 스킬 `design-taste-frontend` 호출 — 랜딩용 규칙은 범위 밖, 청안 토큰·기존 아이콘 사용). code-review 치명·주요 0, 경미 4 → 재위임 `cadcb0f`(안쪽에서 누르고 바깥에서 떼면 닫히던 문제 — pointerdown·click 모두 dialog일 때만 닫기, Safari 포커스 복귀 — `triggerRef`) → 재검수 0(경미 1: 바깥에서 누르고 안에서 떼면 닫힘, 수용). npm test 447·build 통과. 검수 코드 판단: 배경 스크롤 잠금은 시트가 스크롤 div의 형제라 `<dialog>` 모달로 막힘, 해시 이동은 Next `layout-router`가 `scrollIntoView`로 처리 — 대체 수단 불필요. 실제 화면 실행은 못 함.
+      - 남은 것(경미): 닫힌 시트 안 `role="status"`/`alert`는 상태가 바뀌어도 읽히지 않음(열면 읽힘). 문서 [[anyang-frontend-screens]] "9차 개정(…draft)"·[[anyang-frontend-tasks]] "설계 draft"·"설계 승인 전에는 구현하지 않는다" 문구 잔존(잠금 — 다음 설계 수정 때).
 
 ## 승인된 설계
 
@@ -585,6 +592,11 @@ owner: pm
 2026-10-04(31차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 60(b) code-review "설계 변경 필요"(interrupted 시 보관분 streaming 플래그, 서버 실패 시 보관분 표시, 문서 정리). 결정 후 32차로 재기록한다.
 
 2026-10-05(32차): 확인 항목 60(b)·(c) 사용자 결정(2026-10-04 응답, "제안대로 진행")을 frontend가 반영(3-1절 5·6번, 취소 규칙, 문서 정리, 오류 문서 역링크, tasks S4)한 뒤 2종을 다시 기록한다. 3-1절 문장 2곳의 잠금 밖 수정은 사후 인정됨.
+
+
+2026-10-05(32차 이어서): `anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 61(공지 화면 관심사 시트, 새 요청). 반영 후 33차로 재기록한다.
+
+2026-10-05(33차): 확인 항목 61 사용자 결정(메인 세션 전달, "에이전트가 새로 정한 세부값은 (미확정)으로 두고 제안대로 구현")으로 2종을 다시 기록한다. 승인 범위는 사용자 결정 값이고, 61(a) 제안값은 `(미확정)` 그대로 승인 범위 밖이다(20·28차와 같은 처리).
 
 - [[anyang-frontend-screens]] — 승인일 2026-10-05, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-05, 승인자 user
