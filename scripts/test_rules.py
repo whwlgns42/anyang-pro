@@ -225,8 +225,37 @@ def check_jev_advisory():
         expect("jev" not in src, f"{name} references jev; enforcement must stay deterministic")
 
 
+def check_project_scope_settings():
+    """Global plugins and the ancestor CLAUDE.md stay out; vercel stays on.
+    enabledPlugins does not merge across layers, so vercel must be listed here."""
+    import json
+    root = Path(__file__).resolve().parent.parent
+    s = json.loads((root / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    plugins = s.get("enabledPlugins", {})
+    expect(plugins.get("vercel@claude-plugins-official") is True,
+           "settings.json enabledPlugins must keep vercel on (Vercel MCP)")
+    for p in ("superpowers@claude-plugins-official", "ponytail@ponytail"):
+        expect(plugins.get(p) is False, f"settings.json enabledPlugins must turn off {p}")
+    expect("C:/Users/whwlg/CLAUDE.md" in s.get("claudeMdExcludes", []),
+           "settings.json claudeMdExcludes lost the ancestor CLAUDE.md")
+
+
+def check_history_not_locked():
+    """A project history doc without a '승인된 설계' heading adds nothing to the lock list."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        projects = root / "AI-Sessions" / "wiki" / "projects"
+        projects.mkdir(parents=True)
+        (projects / "p.md").write_text("## 승인된 설계\n\n- [[a]] — 승인일 2026-10-05, 승인자 user\n",
+                                       encoding="utf-8")
+        (projects / "p-history.md").write_text("## 승인 이력\n\n- [[b]] — 1차\n", encoding="utf-8")
+        expect(agent_guard.approved_designs(root) == {"a"},
+               "design-lock: history doc links leak into the approved list")
+
+
 CHECKS = [check_index_filter, check_git_write, check_call_graph, check_design_lock,
-          check_log_order, check_rule_text, check_jev_advisory]
+          check_log_order, check_rule_text, check_jev_advisory,
+          check_project_scope_settings, check_history_not_locked]
 
 
 def main():

@@ -39,6 +39,7 @@
 ## Projects
 
 - [[anyang-youth-policy-assistant]] — 안양 청년정책 공지 맞춤 추천·푸시 알림 PWA. 확정 값, 확인 항목, 승인된 설계
+- [[anyang-youth-policy-assistant-history]] — 안양 비서 프로젝트 문서에서 옮긴 닫힌 확인 항목(번호 그대로)과 1~33차 승인·해제 이력. 옛 항목 번호를 찾을 때 본다
 
 ## Conversations
 
@@ -76,6 +77,7 @@
 - [[anyang-supabase-connection]] — 안양 비서: Supabase PostgreSQL 연결 (서울 리전, DATABASE_URL 환경변수, 마이그레이션 대기)
 - [[anyang-service-scope]] — 안양 비서: 수집 게시판 1개, 프로필 4항목, 사용자별 알림 시각·on/off, 기억·히스토리 화면, 인증 부가 테이블 미사용, 가입 시 개인정보 동의, 관리자 페이지(ADMIN_EMAILS)
 - [[anyang-deployment-portability]] — 안양 비서: Vercel Hobby icn1 + Supabase 서울, UNO Q 양방향 이전 원칙, Docker 미사용
+- [[rule-review-baseline]] — 규칙 검토 기준선: 해결한 항목(전역 플러그인·상위 CLAUDE.md 제외, 큰 문서 절 단위 읽기, 프로젝트 문서 이력 분리, 전역 설정 정리)과 수용한 한계·재검토 조건
 
 ## Sources
 

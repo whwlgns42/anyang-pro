@@ -48,5 +48,13 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {
+    "vercel@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
+    "ponytail@ponytail": false
+  },
+  "claudeMdExcludes": [
+    "C:/Users/whwlg/CLAUDE.md"
+  ]
 }
