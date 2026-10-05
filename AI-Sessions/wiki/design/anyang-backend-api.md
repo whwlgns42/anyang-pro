@@ -568,6 +568,24 @@ DeepSeek·Gemini 두 지점 모두에서 재사용한다.
   목록 식별은 충분). 제목은 최초 생성 후 수정 API를 두지 않는다(제안).
 - 인증 필요, 본인 것만 접근.
 
+#### 3-1-1. 대화 삭제 `DELETE /api/conversations/:id` (신규, 2026-10-05, 확인 항목 62, 설계 draft)
+
+사용자 확정은 "대화를 하나씩 삭제, 그 대화에서 추출된 기억은 남김"([[anyang-service-scope]] "대화 히스토리 삭제")까지다. 아래 세부는 모두 `(미확정)`이고 승인으로 확정된다.
+
+| 항목 | 내용 |
+|---|---|
+| 파일 | `web/app/api/conversations/[id]/route.ts`(신규, `DELETE`만. 기존 `[id]/messages/route.ts`와 같은 폴더) `(미확정)` |
+| 인증 | `requireUser()` 기본 옵션 — 세션 없음 401 빈 본문, 정지 403 `ACCOUNT_SUSPENDED`, 재동의 미완료 403 `CONSENT_REQUIRED`(1-2·1-4절). `skipSuspended`·`skipConsent`를 쓰지 않는다 `(미확정)` |
+| 쿼리 | `delete from conversations where id = $1 and user_id = $2` 한 문장. 소유자 조건을 WHERE에 둬서 남의 대화는 0행 삭제 `(미확정)` |
+| 응답 | 인증을 통과하면 삭제 행 수와 관계없이 항상 204 빈 본문(멱등). 이미 지운 대화·없는 id·남의 대화 모두 204라 존재 여부가 새지 않는다. 같은 호출을 되풀이해도 안전해서 frontend가 keepalive 재전송·재시도를 해도 된다 `(미확정)` |
+| id 형식 | 현재 코드(`preferences/[id]`·`conversations/[id]/messages`)는 id를 검증하지 않아 UUID가 아니면 pg `22P02`로 500이 난다(코드 확인, 프로젝트 내 UUID 검증 없음). 이 라우트는 UUID 정규식(`/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i`) 불일치면 쿼리 없이 204로 돌려 500을 막는다(멱등과 같은 이유, 지울 것이 없다). preferences 패턴과 다른 점이며 400 `INVALID_REQUEST`로 할지는 사용자 확인 `(미확정)` |
+| 연쇄 처리 | `messages`는 `messages_conversation_id_fkey` cascade로 함께 삭제. `user_preferences.source_conversation_id`는 0023 적용 후 set null(기억 행·문장·임베딩 유지). 스키마는 [[anyang-database-schema#마이그레이션 계획 (0023, 확인 항목 62, 설계 draft)]] 링크만 한다 |
+| 배포 순서 | 0023 운영 적용이 코드 배포보다 먼저. 0023 전에 배포하면 기억이 연결된 대화의 삭제가 FK 위반(`23503`)으로 실패한다. 이때 라우트는 204로 숨기지 않고 예외를 그대로 둬 500이 된다(가짜 성공 금지, 사용자 화면에서 삭제 취소 복원). 기억이 없는 대화는 0023 없이도 지워진다 `(미확정)` |
+| 스트리밍 중 삭제 | `/api/chat` 코드 확인: 이미 시작된 응답은 클라이언트로 계속 흐른다. 저장 쪽 `consumeAndStore`의 `insert into messages`가 FK 위반으로 던지면 `route.ts` `.catch`가 `console.error`만 하고 끝나며, 던지는 지점이 `extractAndStorePreference`보다 앞이라 삭제된 대화를 출처로 한 기억도 새로 만들어지지 않는다(고아 행 없음). 삭제된 id로 새 요청을 보내면 기존 소유 확인에서 404 `NOT_FOUND`. 요청 도중(소유 확인 후·사용자 메시지 insert 전) 삭제되면 그 insert가 던져 500이 될 수 있으나 매우 좁은 창이라 별도 처리하지 않는다. `chat/route.ts` 코드 변경 없음 `(미확정)` |
+| 정책 | 전체 삭제 API·휴지통·소프트 삭제 없음(사용자 확정은 하나씩 삭제). 삭제 로그 테이블 없음 `(미확정)` |
+
+frontend 계약: 호출 `DELETE /api/conversations/{id}` 본문 없음. 응답 204(성공·멱등), 401(세션 없음), 403 `ACCOUNT_SUSPENDED`/`CONSENT_REQUIRED`, 5xx(실패 — 낙관적 제거 복원). 5초 되돌리기는 클라이언트 지연 전송이라 서버 API에 "되돌리기"는 없다. 이탈 시 keepalive 즉시 전송이 가능하다(멱등). 삭제된 대화의 `GET .../messages`는 기존 동작 그대로(본인 것만, 없으면 빈 결과 또는 404는 기존 라우트 따름).
+
 ### 3-2. 채팅 인용 공지 스트림 계약 (신규, 제안 확인 항목 22 반영)
 
 [[anyang-frontend-screens#3. 채팅]]의 인용 카드(제목 + `/notices/[id]` 링크)가 렌더링할 수
@@ -1935,6 +1953,7 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
   안에서만 한다. 결과(정답률·조정한 문구)는 구현 보고에 적는다. 이 설계 호출에서는 실행하지 않았다.
 - **대화 히스토리**: `GET /api/conversations`가 `updated_at desc` 순으로 오는지 확인.
   새 대화 생성 시 `title`이 첫 메시지 앞부분으로 채워지는지 확인.
+- **대화 삭제(3-1-1절, 확인 항목 62)**: DB·`auth`는 목 또는 개발 DB. ① 본인 대화 DELETE 204이고 `conversations`·`messages`가 사라진다. ② 남의 대화 id로 호출해도 204이고 그 대화·메시지는 그대로다. ③ 없는 id·이미 지운 id 재호출 204. ④ UUID 아닌 id 204(쿼리 미호출). ⑤ 세션 없음 401, 정지 403 `ACCOUNT_SUSPENDED`. ⑥ 기억이 연결된 대화 삭제 후 `user_preferences` 행은 남고 `source_conversation_id`만 null(0023 적용 DB에서만, 로컬 개발 DB). 0023 전에는 FK 위반으로 실패하는지 전후 비교 1회. ⑦ `consumeAndStore`에 삭제된 conversationId를 주면 `insert messages`가 던지고 `extractAndStorePreference`를 부르지 않는지(단위, `pool` 목). ⑧ 삭제된 id로 `POST /api/chat`은 404. 운영 데이터는 삭제해 보지 않는다(운영 확인은 401과 `confdeltype`만).
 - **채팅**: DeepSeek API를 목(mock)으로 대체한 통합 테스트로 스트리밍 응답 조립 확인.
   전송 payload를 캡처해 `email`/`name`/`user_id` 문자열이 포함되지 않는지 검증(정규식 또는
   키 존재 여부 assert) — 데이터 최소화 원칙의 자동 검증. `birth_year`로 계산한 나이대
@@ -2159,6 +2178,8 @@ Q)]])에 따라 필수 포함. 목표: 전환 = DB 덤프/복원 + 환경변수 
     호출 끊김 시 함수 계속 실행 여부는 미확인.
   - 55-i 첨부 직접 링크가 세션 없이 열리는지. 확인 전까지 `source_url`을 기본 경로로 둔다.
   - `COLLECTOR_CONTACT` 실제 값은 사용자가 Vercel에 직접 넣는다(값 미정, 이 문서는 만들지 않는다).
+
+- **대화 삭제(3-1-1절, 확인 항목 62, 신규, 승인 대기)** — 세부는 모두 `(미확정)`: ① UUID 아닌 id를 204로 처리(400 `INVALID_REQUEST`로 바꿀지), ② 0023 미적용 시 FK 위반을 500으로 노출(204로 숨기지 않음), ③ 스트리밍 중 삭제는 `chat/route.ts` 변경 없이 기존 `.catch`에 맡김, ④ 항상 204 멱등. 순서 제약(질문 아님): 0023 운영 적용 → 코드 배포.
 
 ## Links
 

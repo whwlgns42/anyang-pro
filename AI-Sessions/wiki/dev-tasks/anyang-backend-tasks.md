@@ -256,6 +256,12 @@ notices.hidden_at, notify_logs.failed_device_count)이 먼저 마이그레이션
     - frontend 변경 없음. 추천 반영은 이번 범위 밖(별도 사용자 결정).
     - 의존: 7·18번 구현 완료분, database 0022. 20-1 → 20-2 → 20-3 독립 커밋 가능.
 
+21. **대화 삭제(신규, 확인 항목 62, 설계 draft)** — [[anyang-backend-api#3-1-1. 대화 삭제 `DELETE /api/conversations/:id` (신규, 2026-10-05, 확인 항목 62, 설계 draft)]] 기준. 스키마는 [[anyang-database-schema]] 0023(database 작업이 먼저, 운영 적용 포함).
+    - 21-1. `web/app/api/conversations/[id]/route.ts`(신규): `requireUser()` → id UUID 검사(불일치 204) → `delete from conversations where id=$1 and user_id=$2` → 204. 코드 값은 `(미확정)`.
+    - 21-2. 테스트(`web/test/`, 파일명 `(미확정)`): 3-1-1절 테스트 ①~⑧. `chat/route.ts`는 고치지 않고 ⑦·⑧은 기존 코드 동작 고정용 테스트만 추가한다.
+    - 21-3. 운영 순서: 0023 운영 적용(database) → 코드 배포. 배포 뒤 확인은 미인증 DELETE 401과 `confdeltype`(읽기 전용)만, 운영 대화는 삭제하지 않는다.
+    - 의존: database 0023, frontend 대화 기록 화면(frontend는 이 계약만 쓰고 병렬 구현 가능). 독립 커밋 가능.
+
 ### 순서 제안
 
 3, 9, 12 → (1, 2, 2-1 병렬 가능) → 1-4, 1-5, 2-2, 4, 15 → 6, 8, 2-3 → 7 → 13, 14 → 10, 16, 17. 5는
