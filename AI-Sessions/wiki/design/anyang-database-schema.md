@@ -141,8 +141,8 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | id | uuid, PK | |
-| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안. `test_notify`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값", `chat_request`(`(미확정)`, 확인 항목 63)는 "채팅 요청 값" |
-| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안. `user`(`(미확정)`, 확인 항목 58·63)는 아래 "테스트 알림 값"·"채팅 요청 값" |
+| attempt_type | text, not null | `login_failure` / `signup_attempt`. 값 셋은 제안. `test_notify`(`(미확정)`, 확인 항목 58)는 아래 "테스트 알림 값", `chat_request`(확인 항목 63)는 "채팅 요청 값" |
+| identifier_type | text, not null | `email` / `ip`. 값 셋은 제안. `user`(확인 항목 58은 `(미확정)`, 63은 확정)는 아래 "테스트 알림 값"·"채팅 요청 값" |
 | identifier_hash | text, not null | 판정 대상 값(이메일 또는 IP)의 해시. 아래 "원값/해시 선택" 참고. `test_notify`·`chat_request`일 때는 `sha256(user_id)` |
 | created_at | timestamptz, not null, default now() | 시도 시각 |
 
@@ -155,7 +155,7 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
   `auth_attempts_pkey` 하나뿐이고 check 제약이 없다 — 값 셋은 DB가 강제하지 않으므로 새 값에 마이그레이션·인덱스가
   필요 없다(기존 인덱스가 그대로 맞는다). 이 행도 아래 보존·정리(1일) 대상에 포함된다 — 정리 잡이 등록되면 함께 지워지고,
   1분 창 판정에는 영향이 없다(정리 잡 등록 여부는 아래 절의 승인 규칙을 따른다).
-- **채팅 요청 값 (`(미확정)`, 확인 항목 63, 2026-10-05, backend 요청)**: 채팅 하루 한도를 `attempt_type='chat_request'`,
+- **채팅 요청 값 (확인 항목 63, 2026-10-05, 사용자 확정)**: 채팅 하루 한도를 `attempt_type='chat_request'`,
   `identifier_type='user'`, `identifier_hash=sha256(user_id)`(원본 id 미저장)로 요청마다 한 행씩 기록해 24시간 창에서 센다.
   `test_notify`와 같은 이유로 DB 제약이 없어 마이그레이션·인덱스가 필요 없다. 판정·선점 방식은
   [[anyang-backend-api]] 3-4-3·3-4-5절이 원본이다. **보관 1일은 채팅 24시간 창의 하한이다 — 정리 잡 보관을 24시간 미만으로
@@ -207,7 +207,7 @@ rate-limit SaaS 등) 없이 DB 기록만으로 판정하는 것도 확정이다.
     $$ delete from auth_attempts where created_at < now() - interval '24 hours'; $$
   );
   ```
-  `'1 day'` 대신 `'24 hours'`로 쓴다(확인 항목 63 판단, `(미확정)`). `timestamptz - interval '1 day'`는 세션 시간대의 달력 하루라
+  `'1 day'` 대신 `'24 hours'`로 쓴다(확인 항목 63, 사용자 확정). `timestamptz - interval '1 day'`는 세션 시간대의 달력 하루라
   DST 전환일에 23·25시간이 될 수 있다. 운영 `cron.timezone`은 GMT(2026-10-05 읽기 조회로 확인)라 지금은 DST가 없어 둘이
   같지만, `'24 hours'`는 시간대와 무관하게 정확히 24시간이라 채팅 24시간 창 하한을 항상 지킨다. 시간대를 바꿔도 안전하다.
   이 정리 잡도 데이터 삭제이므로 되돌릴 수 없는 마이그레이션 취급이다(dev-common.md 규칙).
@@ -900,9 +900,9 @@ select count(*) from users where suspended_at is null;
   참고) — 다만 90일 로그와 보존 기간이 다르고 삭제 대상 테이블도 달라 정리 잡 등록 자체는
   별도로 다룬다.
 
-### 보관 기간 정리 잡 4종 등록 설계 (확인 항목 63 C-1·C-2, 2026-10-05, 설계 draft)
+### 보관 기간 정리 잡 4종 등록 설계 (확인 항목 63 C-1·C-2, 2026-10-05, 사용자 확정)
 
-이 절 전체가 설계 draft다. 확정 근거는 [[anyang-service-scope]]의 "로그 보존"·"탈퇴 시 동의 기록"·"대화 기록 보관 기간"(user, 2026-10-05) 행이고, 아래 이름·시각·분리 방식은 모두 `(미확정)` 제안이다. 위 "로그성 테이블 보존 기간·정리 잡"과 `consents`·`auth_attempts` 절의 정리 잡 SQL 초안을 이 절이 대체·보강한다(사실이 겹치는 곳은 그쪽을 고치지 않고 이 절을 원본으로 본다).
+확정 근거는 [[anyang-service-scope]]의 "로그 보존"·"탈퇴 시 동의 기록"·"대화 기록 보관 기간"(user, 2026-10-05) 행이고, 아래 이름·시각·분리 방식은 사용자가 에이전트 제안값을 그대로 확정했다([[anyang-youth-policy-assistant]] 63 "(a)·(b) 결정"). 이 문서는 아직 승인된 설계가 아니므로(35차 승인 전) status는 draft다. 위 "로그성 테이블 보존 기간·정리 잡"과 `consents`·`auth_attempts` 절의 정리 잡 SQL 초안을 이 절이 대체·보강한다(사실이 겹치는 곳은 그쪽을 고치지 않고 이 절을 원본으로 본다).
 
 #### 확인한 사실 (2026-10-05 운영 DB 읽기 전용)
 
@@ -928,7 +928,7 @@ select count(*) from users where suspended_at is null;
 - 대화 1년 삭제의 첫 실제 삭제 가능일은 가장 오래된 대화 기준 **2027-09-29 이후**다. 그때까지 이 잡은 0행을 지운다.
 - `auth_attempts` 5행(로그인 실패·가입 시도·테스트 알림)은 첫 실행에서 전부 지워진다. 판정 창이 15분(로그인·가입)·1분(테스트 알림, 채팅 제한 예정)이라 영향이 없다.
 
-#### 잡 구성 (제안, 모두 (미확정))
+#### 잡 구성 (확정)
 
 모두 `cron.schedule`로 등록한다. 시각은 UTC로 쓰고 괄호는 서울 시각이다. 같은 이름으로 다시 `cron.schedule`을 부르면 기존 잡을 갱신하므로 등록 SQL을 여러 번 실행해도 잡이 늘지 않는다.
 
@@ -941,12 +941,12 @@ select count(*) from users where suspended_at is null;
 
 - 시각 근거: 서울 새벽 03시대, 알림 잡의 `*/5`(분이 5의 배수)와 겹치지 않는 분(2·3·4·17)을 쓴다. 겹쳐도 `max_running_jobs` 32에 한참 못 미치고 삭제는 0.1초 안팎이라 장애 요인은 아니다(순서가 아니라 로그를 읽기 쉽게 하려는 정리). 04:00(UTC 19:00)으로 정한 `collect-full`과도 겹치지 않는다. 기존 파일의 `0 18`(03:00 정각)은 `*/5` 알림 잡과 같은 분이라 바꿨다.
 - 잡을 하나로 합치지 않는 이유: 한 트랜잭션이라 한 문장의 실패(예: 대화 삭제의 FK 오류)가 다른 보존 삭제까지 막는다. 4개로 나눠도 `cron.job` 행이 4개 늘 뿐이다.
-- 보존 기간 값(90일·1년·1일)은 확정이고 위 이름·시각·분리는 (미확정)이다.
+- 보존 기간 값(90일·1년·1일)과 위 이름·시각·분리 모두 확정이다.
 
 #### 각 delete 검토
 
 - **조건·컬럼**: 위 사실대로 실제 컬럼명과 일치한다. `now() - interval`은 서버(UTC) 기준 경과 시간이라 시간대 영향이 없다.
-- **인덱스**: 현재 규모(최대 700행)에서는 순차 스캔이 몇 ms다. 규모가 커졌을 때를 대비한 인덱스 제안(모두 (미확정), 지금 만들지 않음, 되돌릴 수 있음, 롤백 `drop index`): `messages(conversation_id)` — 앱의 대화 조회에도 쓰이고 cascade 비용을 줄이므로 **대화 삭제 첫 실제 삭제일(2027-09-29) 전이나 `messages`가 수만 행이 되기 전에** 0024로 추가하는 것을 권한다. `user_preferences(source_conversation_id)`, `conversations(updated_at)`, `consents(withdrawn_at)`, `auth_attempts(created_at)`는 행 수가 적어 불필요하다. 숫자 기준(수만 행)은 근거 없는 감이며(추정, 근거: 없음) 실측이 아니다.
+- **인덱스**: 현재 규모(최대 700행)에서는 순차 스캔이 몇 ms다. `messages(conversation_id)`는 사용자 확정으로 0024에 추가한다(아래 "마이그레이션 계획 (0024)"). `user_preferences(source_conversation_id)`, `conversations(updated_at)`, `consents(withdrawn_at)`, `auth_attempts(created_at)`는 행 수가 적어 만들지 않는다.
 - **배치 크기**: 지금은 배치를 두지 않는다(0~수백 행). 한 번에 수만 행 이상을 지우게 되면(예: 대화 삭제가 처음 크게 몰릴 때) `where id in (select id … limit N)` 반복으로 나눈다. 그때 설계한다.
 - **잠금**: 행 단위 잠금만 건다. 지워지는 대화는 1년간 아무도 쓰지 않은 것이라 같은 행을 동시에 쓰는 요청이 사실상 없다(그래도 동시 쓰기가 오면 앱 쪽 FK 위반 처리가 이미 있다: 커밋 f662915 테스트). `consents`·`auth_attempts`·로그 테이블은 쓰기 경로와 대상 행이 달라 충돌하지 않는다.
 - **트랜잭션**: 잡 한 번 = 한 트랜잭션. 중간 실패 시 해당 잡의 삭제는 모두 롤백되고 다음 주기에 다시 시도된다.
@@ -971,7 +971,7 @@ select count(*) from users where suspended_at is null;
 
 #### 운영 등록 절차 (제안)
 
-1. 파일 위치: 마이그레이션이 아니라 `web/db/jobs/`의 SQL 파일로 둔다. 근거: `cron.schedule`은 스키마 변경이 아니고 알림·수집 잡과 같은 선례(`notify-job-trigger.sql`, `collect-job-trigger.sql`)가 있으며, `schema_migrations` 단방향 번호 체계와 잡 롤백(`unschedule`)이 맞지 않는다. 4개를 한 파일 `cleanup-jobs.sql`로 합치고(`UNAPPLIED_` 세 파일은 구현 때 이 파일로 대체하며 삭제는 사용자 승인 후), 적용 뒤 파일에 등록 날짜를 주석으로 남긴다. 파일 정리 방식은 (미확정)이다.
+1. 파일 위치: 마이그레이션이 아니라 `web/db/jobs/`의 SQL 파일로 둔다. 근거: `cron.schedule`은 스키마 변경이 아니고 알림·수집 잡과 같은 선례(`notify-job-trigger.sql`, `collect-job-trigger.sql`)가 있으며, `schema_migrations` 단방향 번호 체계와 잡 롤백(`unschedule`)이 맞지 않는다. 4개를 한 파일 `cleanup-jobs.sql`로 합치고(`UNAPPLIED_` 세 파일은 구현 때 이 파일로 대체하며 삭제는 사용자 승인 후), 적용 뒤 파일에 등록 날짜를 주석으로 남긴다. UNAPPLIED 파일 정리 방식은 구현 때 확인한다.
 2. 실행: Supabase MCP `execute_sql`로 `cron.schedule` 4회. 접속 롤이 `cron` 스키마에 쓸 수 있는지는 알림 잡 등록 선례로 이미 확인됐다.
 3. 순서: 사용자 승인(아래) → 등록 직전 "대상 행 수" 표의 쿼리를 다시 읽어 숫자를 확인 → 등록 → 확인.
 4. 사용자 승인: 네 잡 모두 데이터를 주기적으로 지우는 되돌릴 수 없는 작업이다. 보존 값(90일·1년·1일·대화 1년)은 확정됐어도 **구현 지시서에 이 등록 4건에 대한 사용자 승인이 별도로 적혀 있어야** 실행한다. 없으면 등록하지 않고 멈춰서 보고한다.
@@ -979,7 +979,7 @@ select count(*) from users where suspended_at is null;
 #### 롤백
 
 - 잡 중지·해제(다음 실행부터 삭제가 멈춘다): `select cron.alter_job((select jobid from cron.job where jobname = '<이름>'), active := false);` 또는 `select cron.unschedule('<이름>');`
-- **이미 지운 행은 복구할 수 없다.** Supabase 무료 플랜의 백업·시점 복구 가능 여부는 이 세션에서 확인하지 못했다(미확인). 그래서 등록 전 대상 행 수 확인이 유일한 사전 방어선이다.
+- **이미 지운 행은 복구할 수 없다.** Supabase 백업·시점 복구(PITR) 가능 여부는 확인하지 못했다(미확인, 사용자 결정: 확인 사항으로만 기록, 확인 항목 63 ⑧). 확인 전에는 등록 전 대상 행 수 확인이 유일한 사전 방어선이다. 사용자가 대시보드(Database > Backups)에서 플랜별 백업 보존 여부를 확인해야 답이 나온다.
 - 위험이 큰 순서: `cleanup-conversations`(사용자 대화 원문)·`cleanup-consents-retention`(증빙). 이 둘은 지금 대상이 0건이라 등록 후 첫 실행은 안전하다.
 
 #### 테스트 방법 (구현 단계)
@@ -989,9 +989,33 @@ select count(*) from users where suspended_at is null;
 - 삭제 동작: 운영에 시험 행을 남기지 않는다. `begin;` 안에서 기한 지난 시험 행(예: `updated_at = now() - interval '2 years'`인 대화 1행과 그 messages 1행과 그 대화를 출처로 하는 `user_preferences` 1행)을 넣고, 잡과 같은 delete를 실행한 뒤 대화·messages가 사라지고 기억 행은 남고 `source_conversation_id`만 null인지 `select`로 보고 `rollback;`한다. `consents`·`auth_attempts`·로그 테이블도 같은 방식이다. 시험 행에는 실제 사용자 값을 쓰지 않는다.
 - 알림 잡 영향: 등록 전후로 `notify-job-trigger` 실행 이력(`status`, 소요 시간)이 달라지지 않았는지 본다.
 
-#### 미확정 목록
+#### 남은 확인 사항
 
-잡 이름 4개, 주기·시각(2·3·4분, 17분), 4개로 나눈 구성, `cleanup-jobs.sql` 통합과 UNAPPLIED 파일 정리 방식, 0024 `messages(conversation_id)` 인덱스(추가 여부와 시점), 배치 도입 기준, 처리방침에 `auth_attempts` 1일 문구를 넣을지.
+- 백업·시점 복구 가능 여부(위 롤백 절, 사용자 대시보드 확인 필요). 처리방침에 `auth_attempts` 1일 문구를 넣을지는 확인 항목 63 (b)①로 확정되어 frontend 소관이다.
+- 배치 도입 기준(수만 행 이상을 한 번에 지울 때)은 그때 설계한다.
+
+### 마이그레이션 계획 (0024, 확인 항목 63 ⑨, 설계 draft)
+
+`messages(conversation_id)` 인덱스를 추가한다(사용자 확정, 운영 적용 승인 포함: 확인 항목 63 ⑨). 이유: 대화 삭제의 cascade가 `messages`를 순차 스캔하고 앱의 대화 조회에도 쓰인다. 사실(2026-10-05 운영 읽기 전용): `public.messages` 14행, `conversations` 5행. 마지막 마이그레이션은 0023이라 0024는 비어 있다. 파일은 구현 단계에서 만든다(이번에 만들지 않았고 운영에도 적용하지 않았다).
+
+- **0024_messages_conversation_id_index** (`web/db/migrations/0024_...{up,down}.sql`)
+  - up:
+    ```sql
+    begin;
+    create index messages_conversation_id_idx on messages (conversation_id);
+    commit;
+    ```
+  - down:
+    ```sql
+    begin;
+    drop index messages_conversation_id_idx;
+    commit;
+    ```
+  - 일반 `create index`로 충분하다. `concurrently`는 트랜잭션 안에서 못 쓰고 MCP `apply_migration`은 트랜잭션으로 실행되므로 쓸 수 없다. 14행이라 인덱스 생성 중 쓰기 잠금이 밀리초 수준이다. 행이 수십만 이상이면 `concurrently`를 `execute_sql`로 따로 쓰는 것을 검토하지만 지금은 해당 없다.
+  - 되돌릴 수 없는 마이그레이션이 아니다. 데이터를 건드리지 않고 down은 `drop index`(손실 없음). 별도 승인 불필요(up 적용 승인은 확인 항목 63 ⑨에 포함).
+  - 적용 경로: 운영은 Supabase MCP `apply_migration`(로컬 파일과 같은 SQL), 로컬은 `migrate.sh up/down`.
+  - 인덱스 이름은 에이전트 제안값을 사용자가 확정했다.
+- **테스트 방법**: 적용 후 `select indexdef from pg_indexes where schemaname='public' and tablename='messages';`에 새 인덱스가 있는지 본다. `begin; set local enable_seqscan = off; explain select * from messages where conversation_id = '<임의 uuid>'; rollback;`가 새 인덱스를 쓰는지 본다(14행이라 기본 플래너는 순차 스캔을 고를 수 있어 seqscan을 끈다). 로컬은 down 후 up이 오류 없이 되는지 본다. 앱 `npm test`는 쿼리 변경이 없어 영향 없음.
 
 ### pg_cron / pg_net 잡 정의
 
