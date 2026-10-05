@@ -434,6 +434,9 @@ owner: pm
       - ⑦ 실패한 채팅 요청도 한도에 세고 429 거절은 세지 않는 것, "하루"를 롤링 24시간으로 해석하는 것.
       - ⑧ 정리 잡 첫 실행에서 auth_attempts 5행 전부 삭제(영향 없음), 백업·시점 복구 가능 여부는 모름.
       - ⑨ 권장(database): 대화 삭제가 실제로 시작되는 2027-09-29 전에 `messages(conversation_id)` 인덱스 추가(0024).
+    - **(a)·(b) 결정(2026-10-05, user, 메인 세션 전달)**: (a) (나) 재동의 없이 개정, `POLICY_VERSION` 유지 — [[anyang-service-scope]] "처리방침 개정" 행에 예외 기록(수집 항목·목적·AI 처리 대상 불변, 보관 기간 고지만 추가, 법적 판단 안 함). (b) 권장안 확정: ① 처리방침에 로그인·가입 시도와 채팅 요청 기록 1일 보관 고지, "대화 기록 화면에서 직접 지울 수 있다" 문구 추가 ② A안 — 502 직전에 이번 요청이 만든 행 삭제 ③ advisory 락 판정 ④ `max_tokens`를 선호 추출 호출에도 ⑤ `app/(tabs)/error.tsx`도 둠 ⑥ 기억 화면 `saveEdit`도 함께 고침 ⑦ 실패한 요청도 한도에 셈(429 거절은 안 셈), 하루는 롤링 24시간 ⑨ `messages(conversation_id)` 인덱스 0024 추가(운영 적용 승인). ⑧ 백업·시점 복구 여부는 확인 사항으로 기록만. 에이전트 제안값(잡 이름·시각, 코드명, max_tokens 1500, 이력 20, 추천 7일, 문구·임계값) 제안대로 확정. 진행: 설계 반영 → 35차 → database(0024 포함) → backend → frontend → test·build → code-review → 커밋 → push → deploy → 정리 잡 등록(직전 대상 행 수 재확인) → 운영 확인.
+    - **구현(2026-10-05)**: database `2439518`(0024 `messages_conversation_id_idx` **운영 적용** — MCP apply_migration+schema_migrations, pg_indexes 확인; 정리 잡 SQL `web/db/jobs/cleanup-jobs.sql` 작성만, 등록은 배포 뒤). backend `b55f503`(`claimChatSlot` — `pg_advisory_xact_lock`, 1분 5회·24시간 100회, 거절 미기록·실패 셈; 처리 순서 빈 메시지→길이→슬롯→소유→임베딩·DeepSeek; 코드 포인트 2,000자; 이력 20; `max_tokens` 채팅 1500·추출 500; 502 직전 이번 요청 행 삭제; 추천 `union all`로 청크 없는 7일 공지 맨 위; `next.config.ts` 보안 헤더 3종 `/:path*`). frontend `75643d2`(`chat-error.ts` 실패 분류, 채팅 try/catch/finally·오류 블록·재시도·서버 미생성 실패 시 질문 복원·404 `goneRef`, `LoadError` 4화면, `hasMorePages`·`page_size=20`, `saveEdit` 수정, `error-view.tsx`·`app/error.tsx`·`app/(tabs)/error.tsx`, `maxLength` 2000·1,800자부터 글자 수, 처리방침 보관 문구 2개·`POLICY_VERSION` 불변; 스킬 `design-taste-frontend` 호출 — 서비스 화면이라 청안 우선). code-review: 치명·주요 0, 경미 3(재위임 없음 — 아래). npm test 490·build·tsc 통과. 실제 DB(`claimChatSlot` 실행)·로그인 화면 확인은 못 함.
+      - (c) 경미(검수): ① 사용자 메시지 저장 뒤 공지 검색·프로필 쿼리가 던지면 500이 되고 새 대화·질문 1행이 남는다(502만 정리 대상 — 설계 3-4-6대로). frontend는 5xx를 재시도로 처리해 새 대화에서 재시도하면 대화가 하나 더 생김. 500도 정리 대상에 넣을지는 설계 변경(사용자 결정). ② `web/db/jobs/UNAPPLIED_*` 3개가 남아 있고 새 `cleanup-jobs.sql`과 잡 이름이 같은데 시각·`'1 day'`가 다름 — 누가 실행하면 확정값을 덮어씀. **삭제는 사용자 승인 대상**(승인 시 database가 삭제). ③ 기존 대화 502 후 재시도 없이 돌아오면 보관분에는 질문이 보이고 서버에는 없음(15-2 수용). 등록 직전 `claimChatSlot` 두 쿼리를 롤백 트랜잭션으로 실제 실행해 보길 권함.
     - 에이전트 제안값(`(미확정)`, 지시대로 제안대로 구현 예정): 잡 이름·시각·4개 분리·`'24 hours'`, `chat_request`·롤링 24시간·락 방식, 429 `limit` 필드·400 `MESSAGE_TOO_LONG`·`max_length`, 코드 포인트 기준·처리 순서, `max_tokens` 1500·이력 20, 추천 7일·맨 위, X-Frame-Options 선택·정적 파일 포함, frontend 실패 분류·문구·`LoadError`·`error.tsx` 한 개·글자 수 1,800 임계값 등(15-2 표 전체).
 
 ## 승인된 설계
@@ -449,6 +452,14 @@ owner: pm
 2026-10-05(34차): 확인 항목 62 사용자 결정·계획 승인(메인 세션 전달, "에이전트 세부값은 (미확정)으로 두고 제안대로 구현")으로 5종을 다시 기록한다. 승인 범위는 사용자 결정 값과 계획에 적힌 값이고, 62(a) 제안값은 `(미확정)` 그대로 범위 밖이다(20·28·33차와 같은 처리).
 
 2026-10-05(34차 이어서): 5종을 다시 뺀다 — 사유: 확인 항목 63(버그 수정·개인정보·보안, 새 요청). 반영 후 35차로 재기록한다.
+
+2026-10-05(35차): 확인 항목 63 사용자 결정(계획 승인, (a) 재동의 없음, (b) 권장안·제안값 확정)을 database(0024 설계, 정리 잡 확정)·backend(502 A안, 락, 선호 추출 max_tokens)·frontend(처리방침 문구, 탭 error.tsx, saveEdit)가 반영한 뒤 5종을 다시 기록한다. 결정 뒤 새로 나온 값(선호 추출 `max_tokens` 500, 인덱스 이름 `messages_conversation_id_idx`, `ui/error-view.tsx`)은 같은 "제안값 제안대로" 처리로 본다.
+
+- [[anyang-database-schema]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-frontend-screens]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-frontend-tasks]] — 승인일 2026-10-05, 승인자 user
 
 ## Jev 도입 제안
 
