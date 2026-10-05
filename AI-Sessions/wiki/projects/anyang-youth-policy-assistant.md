@@ -403,6 +403,14 @@ owner: pm
       - 남은 것(경미): 닫힌 시트 안 `role="status"`/`alert`는 상태가 바뀌어도 읽히지 않음(열면 읽힘). 문서 [[anyang-frontend-screens]] "9차 개정(…draft)"·[[anyang-frontend-tasks]] "설계 draft"·"설계 승인 전에는 구현하지 않는다" 문구 잔존(잠금 — 다음 설계 수정 때).
       - **push·배포(2026-10-05)**: 기록 커밋 `064bfea`, push `0f4a7a6..064bfea`(512f27b·cadcb0f 포함). `vercel deploy --prod` 첫 시도 "Not authorized" → 1회 재시도 성공(`dpl_7iSGtfsFt2DJx4fMFzP2qntndRKk`, 별칭 `web-beta-smoky-16.vercel.app`). `/login` 200, 로그인 없이 `/notices` 307 → `/login`, 15분 error 로그 없음. 로그인 후 화면은 사용자 확인.
       - **사용자 확인 순서**: ① `/notices`에서 공지 목록을 조금 내린 뒤 "관심사 보기" → 시트가 열리고 관심사 문장 목록이 보이는지(모바일은 아래에서, 1200px 이상은 가운데) ② Esc·바깥 탭·닫기 버튼으로 닫기 → 목록·스크롤 위치 그대로, 키보드 포커스가 "관심사 보기" 버튼으로 돌아오는지 ③ 시트가 열린 동안 뒷배경 목록이 스크롤되지 않는지 ④ "내 정보에서 관리" → 내 정보의 "AI가 기억하는 내 정보" 구역으로 바로 이동하는지, 뒤로가기로 공지로 돌아오는지 ⑤ 관심사가 없는 계정에서 빈 안내 문구가 보이는지.
+62. **새 요청(2026-10-05, user — 대화 기록 삭제, 계획 승인)**: 계획 원문 `C:\Users\whwlg\.claude\plans\https-www-anyang-go-kr-youth-selectbbsnt-keen-sunbeam.md`. 사용자 확정: 대화를 하나씩 삭제하고 5초 "되돌리기"(기억 화면 `memory-client.tsx`와 같은 방식 — `createDelayedDelete`, 낙관적 제거, Toast, 이탈 시 keepalive 즉시 전송, 실패 시 복원), 그 대화에서 추출된 기억(`user_preferences`)은 남김, 운영 작업(0023 운영 적용, 배포) 승인. 기록: [[anyang-service-scope]] "대화 히스토리 삭제" 행.
+    - 조사 사실(메인 세션): `user_preferences.source_conversation_id` FK(0009)가 on delete 미지정(NO ACTION)이라 기억이 있는 대화는 지금 삭제 불가 → 0023에서 `on delete set null`(운영 적용은 MCP `apply_migration`만). messages는 cascade(0008). `DELETE /api/conversations/[id]` 신설(`requireUser`, `delete … where id=$1 and user_id=$2`, 항상 204, `preferences/[id]` DELETE 패턴). `ListRow`는 공지 목록과 공용이고 행 전체가 Link라 대화 전용 행 구조로 삭제 버튼(Link 안 버튼 중첩 금지). 서버 삭제 확정 시 `chat-snapshot.ts` `removeSnapshot`으로 같은 탭 보관분 삭제(userId는 page.tsx 세션 prop). 에이전트 세부값은 `(미확정)`으로 두고 제안대로 구현.
+    - 진행: `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 승인된 설계에서 뺐다(34차 전 단계). 설계 database → backend → frontend → 34차 → 구현 → test·build → code-review → 커밋 → push → deploy → 운영 확인(FK `confdeltype = n`).
+    - **설계 draft(2026-10-05)**: database [[anyang-database-schema]] "마이그레이션 계획 (0023)"(제약 `user_preferences_source_conversation_id_fkey`, 운영 현재 `confdeltype='a'`, 컬럼 null 허용, messages `messages_conversation_id_fkey` cascade 확인; down은 원래 FK로 되돌리되 그 사이 null이 된 출처는 복원 안 됨 — 기억 행·문장은 남고 출처 추적만 잃어 되돌릴 수 없는 마이그레이션으로 보지 않음). backend [[anyang-backend-api]] 3-1-1절·[[anyang-backend-tasks]] 21(배포 순서 0023 먼저 — 그 전엔 FK 위반 23503을 500으로 둠, 스트리밍 중 삭제는 기존 `.catch`가 받고 삭제된 대화를 출처로 한 기억은 새로 안 생김). frontend [[anyang-frontend-screens]] 8-2절·[[anyang-frontend-tasks]] D1~D3(`ConversationRow` — Link와 삭제 버튼 형제, 공용 `ListRow` 불변, `deleteConversation`이 204일 때만 `removeSnapshot`).
+    - (a) 에이전트 제안값(`(미확정)`, 사용자 지시대로 제안대로 구현): 마이그레이션 파일명 `0023_user_preferences_source_conversation_set_null`; DELETE에서 id가 UUID가 아니면 쿼리 없이 204(같은 패턴의 `preferences/[id]`·`conversations/[id]/messages`는 검증이 없어 22P02로 500 — 400 `INVALID_REQUEST`로 할지 사용자 확인 가능); Toast "대화를 지웠어요" + "되돌리기", 버튼 라벨 `삭제: {제목}`(제목 12자), 확인창 없음, 연속 삭제는 기억 화면과 같고 Toast `key`로 두 번째 삭제 때 5초 새로 시작, 삭제 뒤 포커스는 다음 행 링크(마지막이면 앞 행, 비면 "새 대화 시작"), 되돌리기 뒤 되살린 행; `pagehide` keepalive 전송은 응답을 못 받아 채팅 보관분이 남을 수 있음 — 채팅 화면의 기존 404 처리로 정리; 새 파일 `conversation-row.tsx`·`restore-item.ts`·`delete-conversation.ts`.
+    - (b) 확인 필요(삭제 승인 대상): 이 변경 뒤 공용 `ListRow`를 쓰는 곳이 없어진다(frontend 확인). 지울지는 사용자 결정.
+    - **구현(2026-10-05)**: database `f74dca9`(0023 up/down 작성, **운영 적용** — MCP `apply_migration`+`schema_migrations`; 적용 전 `confdeltype='a'` → 적용 후 **`'n'`**, `user_preferences` 9행 → 9행, 0019 점검 2개 0행). backend `c261590`(`web/app/api/conversations/[id]/route.ts` DELETE — requireUser, UUID 아니면 쿼리 없이 204, `where id and user_id`, 항상 204, FK 위반은 500 그대로; 테스트 5). frontend `8232772`(`restore-item.ts`·`delete-conversation.ts`·`conversation-row.tsx`, `conversations-client.tsx` 지연 삭제·Toast·되돌리기·이탈 시 keepalive·실패 복원·포커스 이동, `page.tsx` userId prop, `ListRow` 불변; 스킬 `design-taste-frontend` 호출 — 랜딩용이라 기존 패턴 유지). code-review 치명·주요 0, 경미 3 → backend `f662915`(테스트 ⑦ — 삭제된 대화로 `consumeAndStore` 시 FK 위반·선호 추출 미호출). npm test 460·build 통과. 화면 실행은 못 함.
+      - 후속(문서, 설계 잠금이라 다음 수정 때): [[anyang-database-schema]] 1654행 "파일은 구현 단계에서 만든다(이번에 만들지 않았고 운영에도 적용하지 않았다)"는 이제 사실과 반대(운영 적용 결과는 이 항목에 기록), 1742행 0023 수동 확인(테스트 사용자 대화 삭제) 미수행; 설계 4종에 "설계 draft" 표기 잔존(backend-api 571, frontend-screens 460, backend-tasks 259, frontend-tasks 36).
 
 ## 승인된 설계
 
@@ -411,11 +419,16 @@ owner: pm
 - [[anyang-cheongan-design-adoption]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-board-collector]] — 승인일 2026-10-04, 승인자 user
 - [[anyang-board-collector-db]] — 승인일 2026-10-04, 승인자 user
+
+2026-10-05(33차 이어서): `anyang-database-schema`·`anyang-backend-api`·`anyang-backend-tasks`·`anyang-frontend-screens`·`anyang-frontend-tasks`를 뺀다 — 사유: 확인 항목 62(대화 기록 삭제, 새 요청). 반영 후 34차로 재기록한다.
+
+2026-10-05(34차): 확인 항목 62 사용자 결정·계획 승인(메인 세션 전달, "에이전트 세부값은 (미확정)으로 두고 제안대로 구현")으로 5종을 다시 기록한다. 승인 범위는 사용자 결정 값과 계획에 적힌 값이고, 62(a) 제안값은 `(미확정)` 그대로 범위 밖이다(20·28·33차와 같은 처리).
+
+- [[anyang-database-schema]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-backend-api]] — 승인일 2026-10-05, 승인자 user
+- [[anyang-backend-tasks]] — 승인일 2026-10-05, 승인자 user
 - [[anyang-frontend-screens]] — 승인일 2026-10-05, 승인자 user
 - [[anyang-frontend-tasks]] — 승인일 2026-10-05, 승인자 user
-- [[anyang-database-schema]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-api]] — 승인일 2026-10-04, 승인자 user
-- [[anyang-backend-tasks]] — 승인일 2026-10-04, 승인자 user
 
 ## Jev 도입 제안
 
