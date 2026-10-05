@@ -411,6 +411,8 @@ owner: pm
     - (b) 확인 필요(삭제 승인 대상): 이 변경 뒤 공용 `ListRow`를 쓰는 곳이 없어진다(frontend 확인). 지울지는 사용자 결정.
     - **구현(2026-10-05)**: database `f74dca9`(0023 up/down 작성, **운영 적용** — MCP `apply_migration`+`schema_migrations`; 적용 전 `confdeltype='a'` → 적용 후 **`'n'`**, `user_preferences` 9행 → 9행, 0019 점검 2개 0행). backend `c261590`(`web/app/api/conversations/[id]/route.ts` DELETE — requireUser, UUID 아니면 쿼리 없이 204, `where id and user_id`, 항상 204, FK 위반은 500 그대로; 테스트 5). frontend `8232772`(`restore-item.ts`·`delete-conversation.ts`·`conversation-row.tsx`, `conversations-client.tsx` 지연 삭제·Toast·되돌리기·이탈 시 keepalive·실패 복원·포커스 이동, `page.tsx` userId prop, `ListRow` 불변; 스킬 `design-taste-frontend` 호출 — 랜딩용이라 기존 패턴 유지). code-review 치명·주요 0, 경미 3 → backend `f662915`(테스트 ⑦ — 삭제된 대화로 `consumeAndStore` 시 FK 위반·선호 추출 미호출). npm test 460·build 통과. 화면 실행은 못 함.
       - 후속(문서, 설계 잠금이라 다음 수정 때): [[anyang-database-schema]] 1654행 "파일은 구현 단계에서 만든다(이번에 만들지 않았고 운영에도 적용하지 않았다)"는 이제 사실과 반대(운영 적용 결과는 이 항목에 기록), 1742행 0023 수동 확인(테스트 사용자 대화 삭제) 미수행; 설계 4종에 "설계 draft" 표기 잔존(backend-api 571, frontend-screens 460, backend-tasks 259, frontend-tasks 36).
+      - **push·배포(2026-10-05)**: 기록 커밋 `b185063`, push `064bfea..b185063`(7커밋 — 62 코드 4개, `85ca3ac`, 메인 세션 `b6eeeb4` "토큰 절약 구조 점검" 포함; backend가 한때 "165개 앞섬"이라 보고했으나 git-manager 확인 결과 실제 6개였음). `vercel deploy --prod` 첫 시도 성공(`dpl_4uG2cjhMbHJPwnWBPsNTP4HhsQnM`, 별칭 `web-beta-smoky-16.vercel.app`). `/login` 200, 로그인 없이 `/conversations` 307 → `/login`, 로그인 없이 `DELETE /api/conversations/{uuid}` 401, 배포 후 error 로그 없음.
+      - **사용자 확인 순서**: ① 대화 기록에서 대화 하나 옆 휴지통 → 목록에서 사라지고 "되돌리기"가 뜨는지 ② "되돌리기" → 다시 나타나는지 ③ 다시 지우고 5초 기다린 뒤 새로고침 → 사라진 상태인지 ④ 지운 대화를 채팅에서 열어 둔 적이 있으면 뒤로가기로 돌아갔을 때 그 대화가 보이지 않는지 ⑤ "내 정보 → AI가 기억하는 내 정보"의 관심사가 그대로인지.
 
 ## 승인된 설계
 
